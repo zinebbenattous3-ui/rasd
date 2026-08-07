@@ -518,7 +518,7 @@ body {
   font-size: 0.78rem;
   font-weight: 600;
   letter-spacing: 0.04em;
-  color: var(--muted);
+  color: var(--muted-foreground);
   cursor: pointer;
   transition: background 0.15s ease, color 0.15s ease;
 }
