@@ -113,12 +113,11 @@ function Landing() {
         <section className="cta-band" aria-labelledby="cta-title">
           <div className="block-inner cta-inner">
             <div>
-              <h2 id="cta-title">Vous êtes praticien ou autorité sanitaire ?</h2>
-              <p>Rejoignez le réseau ou explorez le tableau de bord en mode démonstration.</p>
+              <h2 id="cta-title">{t("cta.title")}</h2>
+              <p>{t("cta.body")}</p>
             </div>
             <div className="hero-cta">
-              <Link to="/signup" className="btn-primary btn-inline">Créer un compte</Link>
-              <Link to="/login" className="btn-ghost">Découvrir la plateforme</Link>
+              <Link to="/login" className="btn-ghost">{t("cta.action")}</Link>
             </div>
           </div>
         </section>
