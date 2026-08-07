@@ -77,12 +77,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Rased — Veille sanitaire" },
-      { name: "description", content: "Plateforme de surveillance de santé publique." },
-      { property: "og:title", content: "Rased — Veille sanitaire" },
-      { property: "og:description", content: "Plateforme de surveillance de santé publique." },
+      { title: "Rased — Veille sanitaire nationale" },
+      { name: "description", content: "Plateforme de surveillance de santé publique : alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés." },
+      { property: "og:title", content: "Rased — Veille sanitaire nationale" },
+      { property: "og:description", content: "Plateforme de surveillance de santé publique : alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "Rased — Veille sanitaire nationale" },
+      { name: "twitter:description", content: "Plateforme de surveillance de santé publique : alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/29c5a0d02b88d925efbc35b1164acdd3/id-preview-0a361ac1--3ae6583f-f1e1-4c94-a97e-31fd2ba9057b.lovable.app-1786141938933.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/29c5a0d02b88d925efbc35b1164acdd3/id-preview-0a361ac1--3ae6583f-f1e1-4c94-a97e-31fd2ba9057b.lovable.app-1786141938933.png" },
     ],
     links: [
       {

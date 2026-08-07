@@ -16,7 +16,7 @@ export const Route = createFileRoute("/")({
       {
         property: "og:description",
         content:
-          "Alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés.",
+          "Plateforme de surveillance de santé publique : alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés.",
       },
     ],
   }),
