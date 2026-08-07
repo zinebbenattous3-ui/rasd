@@ -526,3 +526,5 @@ body {
 .lang-btn.active { background: var(--navy); color: oklch(0.98 0.005 200); }
 .lang-btn:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
 [dir="rtl"] .site { text-align: right; }
+.site .auth { min-height: 0; }
+.site .auth-panel { padding-block: 3rem; }
