@@ -1,37 +1,38 @@
 import { Link } from "@tanstack/react-router";
 import logo from "@/assets/rased-logo.png.asset.json";
+import { useI18n } from "@/lib/i18n";
 
 export function Footer() {
+  const { t } = useI18n();
   return (
     <footer className="site-footer">
       <div className="site-footer-inner">
         <div className="footer-brand">
           <img src={logo.url} alt="Rased" className="footer-logo" />
-          <p>Nous surveillons aujourd'hui pour protéger demain.</p>
+          <p>{t("footer.tagline")}</p>
         </div>
 
-        <nav aria-label="Liens du pied de page" className="footer-cols">
+        <nav aria-label={t("footer.platform")} className="footer-cols">
           <div>
-            <h2>Plateforme</h2>
+            <h2>{t("footer.platform")}</h2>
             <ul>
-              <li><Link to="/" hash="roles">Rôles</Link></li>
-              <li><Link to="/" hash="fonctionnement">Fonctionnement</Link></li>
-              <li><Link to="/login">Espace professionnel</Link></li>
+              <li><Link to="/" hash="roles">{t("nav.roles")}</Link></li>
+              <li><Link to="/" hash="fonctionnement">{t("nav.how")}</Link></li>
+              <li><Link to="/login">{t("footer.workspace")}</Link></li>
             </ul>
           </div>
           <div>
-            <h2>Organisation</h2>
+            <h2>{t("footer.org")}</h2>
             <ul>
-              <li><Link to="/about">À propos</Link></li>
-              <li><Link to="/about" hash="contact">Contact</Link></li>
-              <li><Link to="/signup">Créer un compte</Link></li>
+              <li><Link to="/about">{t("nav.about")}</Link></li>
+              <li><Link to="/about" hash="contact">{t("footer.contact")}</Link></li>
+              <li><Link to="/signup">{t("nav.signup")}</Link></li>
             </ul>
           </div>
         </nav>
       </div>
       <p className="footer-legal">
-        © {new Date().getFullYear()} Rased — Réseau national de veille sanitaire. Données protégées et
-        accès contrôlé.
+        © {new Date().getFullYear()} Rased — {t("footer.legal")}
       </p>
     </footer>
   );

@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { useI18n } from "@/lib/i18n";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -51,30 +52,27 @@ const steps = [
 ];
 
 function Landing() {
+  const { t } = useI18n();
   return (
     <div className="site">
       <Navbar />
       <main className="site-main">
         <section className="hero">
           <div className="hero-inner">
-            <p className="eyebrow">Santé publique · Surveillance épidémiologique</p>
-            <h1>Détecter tôt, répondre vite, protéger durablement</h1>
-            <p className="hero-lead">
-              Rased est la plateforme qui relie les médecins, les établissements de santé et les
-              autorités sanitaires autour d'un même flux d'information : la déclaration d'un
-              événement sanitaire et son suivi jusqu'à sa clôture.
-            </p>
+            <p className="eyebrow">{t("hero.eyebrow")}</p>
+            <h1>{t("hero.title")}</h1>
+            <p className="hero-lead">{t("hero.lead")}</p>
             <div className="hero-cta">
-              <Link to="/signup" className="btn-primary btn-inline">Créer un compte</Link>
-              <Link to="/login" className="btn-ghost">Accéder à l'espace professionnel</Link>
+              <Link to="/login" className="btn-primary btn-inline">{t("hero.cta")}</Link>
             </div>
             <dl className="hero-stats">
-              <div><dt>Wilayas couvertes</dt><dd>14</dd></div>
-              <div><dt>Établissements connectés</dt><dd>68</dd></div>
-              <div><dt>Délai moyen d'alerte</dt><dd>&lt; 2 h</dd></div>
+              <div><dt>{t("hero.stat.wilayas")}</dt><dd>14</dd></div>
+              <div><dt>{t("hero.stat.facilities")}</dt><dd>68</dd></div>
+              <div><dt>{t("hero.stat.delay")}</dt><dd>&lt; 2 h</dd></div>
             </dl>
           </div>
         </section>
+
 
         <section className="section-block" id="roles" aria-labelledby="roles-title">
           <div className="block-inner">
@@ -115,12 +113,11 @@ function Landing() {
         <section className="cta-band" aria-labelledby="cta-title">
           <div className="block-inner cta-inner">
             <div>
-              <h2 id="cta-title">Vous êtes praticien ou autorité sanitaire ?</h2>
-              <p>Rejoignez le réseau ou explorez le tableau de bord en mode démonstration.</p>
+              <h2 id="cta-title">{t("cta.title")}</h2>
+              <p>{t("cta.body")}</p>
             </div>
             <div className="hero-cta">
-              <Link to="/signup" className="btn-primary btn-inline">Créer un compte</Link>
-              <Link to="/login" className="btn-ghost">Découvrir la plateforme</Link>
+              <Link to="/login" className="btn-ghost">{t("cta.action")}</Link>
             </div>
           </div>
         </section>

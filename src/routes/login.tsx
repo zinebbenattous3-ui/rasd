@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Login } from "@/components/Login";
 import { Dashboard } from "@/components/Dashboard";
+import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -26,7 +28,13 @@ function LoginPage() {
   const [session, setSession] = useState<{ role: string; demo: boolean } | null>(null);
 
   if (!session) {
-    return <Login onAuthenticated={(role, demo = false) => setSession({ role, demo })} />;
+    return (
+      <div className="site">
+        <Navbar />
+        <Login onAuthenticated={(role, demo = false) => setSession({ role, demo })} />
+        <Footer />
+      </div>
+    );
   }
 
   return (
