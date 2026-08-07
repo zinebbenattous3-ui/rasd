@@ -1,24 +1,38 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState } from "react";
+import { Login } from "@/components/Login";
+import { Dashboard } from "@/components/Dashboard";
 
-// No head() here: the home route inherits title/description/og/twitter from
-// __root.tsx, and ships no og:image so serve-time hosting can inject the
-// project's social preview (explicit og:image or latest screenshot).
 export const Route = createFileRoute("/")({
+  head: () => ({
+    meta: [
+      { title: "Rased — Veille sanitaire nationale" },
+      {
+        name: "description",
+        content:
+          "Plateforme de surveillance de santé publique : alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés.",
+      },
+      { property: "og:title", content: "Rased — Veille sanitaire nationale" },
+      {
+        property: "og:description",
+        content:
+          "Alertes en direct, couverture par wilaya et suivi des événements sanitaires déclarés.",
+      },
+    ],
+  }),
   component: Index,
 });
 
-// IMPORTANT: Replace this placeholder. See ./README.md for routing conventions.
 function Index() {
+  const [session, setSession] = useState<{ role: string; demo: boolean } | null>(null);
+
+  if (!session) {
+    return (
+      <Login onAuthenticated={(role, demo = false) => setSession({ role, demo })} />
+    );
+  }
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
-      />
-    </div>
+    <Dashboard role={session.role} demo={session.demo} onLogout={() => setSession(null)} />
   );
 }

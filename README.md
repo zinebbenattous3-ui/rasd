@@ -1,29 +1,60 @@
-# Welcome to your Lovable project
+# Rased — Veille sanitaire (frontend)
 
-This project was built with [Lovable](https://lovable.dev).
+Interface de surveillance de santé publique : écran de connexion + tableau de bord.
 
-## Build with Lovable
+## Démarrer
 
-Open your project in the [Lovable editor](https://lovable.dev) and keep building.
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: connect the project to GitHub and every change made in Lovable is committed straight to your repository.
-- **Full ownership**: this code is yours. Push to your repository and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
+```bash
+npm install
 npm run dev
 ```
 
-## Built with
+L'application se lance sur `http://localhost:8080`. L'entrée unique est
+`src/routes/index.tsx` : elle affiche `Login`, puis `Dashboard` après connexion
+(ou via « Découvrir la plateforme » en mode démonstration).
 
-- TanStack Start
-- TypeScript
-- React
-- Tailwind CSS
+## Structure
+
+| Fichier | Rôle |
+| --- | --- |
+| `src/routes/index.tsx` | Point d'entrée : Login → Dashboard |
+| `src/components/Login.tsx` | Formulaire accessible (validation inline, états de chargement) |
+| `src/components/Dashboard.tsx` | KPI, alertes en direct, couverture wilaya, table d'événements |
+| `src/components/KpiCard.tsx`, `Badge.tsx`, `FeedItem.tsx`, `EventRow.tsx` | Composants réutilisables |
+| `src/lib/mockData.ts` | Données factices calquées sur le schéma DB |
+| `src/lib/supabase.ts` | Client Supabase (placeholder / mock) |
+| `src/styles.css` | Design system (palette teal/bleu du logo) |
+
+## Brancher Supabase
+
+1. Renseigner les variables d'environnement :
+
+```
+VITE_SUPABASE_URL=https://xxxx.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_xxx
+```
+
+2. Dans `src/lib/supabase.ts`, remplacer le client mock par :
+
+```ts
+import { createClient } from "@supabase/supabase-js";
+export const supabase = createClient(url!, anonKey!);
+```
+
+3. Remplacer les données de `src/lib/mockData.ts` par des requêtes réelles, par ex. :
+
+```ts
+const { data } = await supabase
+  .from("health_events")
+  .select("id, incident_type, severity, status, patient_proof_url, created_at, facility_id, doctor_id, patient_nin, description")
+  .order("created_at", { ascending: false });
+```
+
+Les noms de champs de l'UI correspondent déjà au schéma
+(`health_events`, `facilities`, `doctors`, `patients`, `users`, `health_authorities`).
+Le backend et la base ne sont pas modifiés.
+
+## Accessibilité
+
+HTML sémantique, labels associés, `aria-invalid` / `aria-describedby` sur les
+erreurs, `role="alert"`, régions `aria-live`, focus visible, contrastes AA.
