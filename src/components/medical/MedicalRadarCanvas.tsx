@@ -124,9 +124,8 @@ export function MedicalRadarCanvas({ state }: MedicalRadarCanvasProps) {
 
       // 2. Rotating Radar Sweep (Trailing Gradient Arc)
       const sweepAngle = Math.PI / 3; // 60 degrees
-      const gradient = ctx.createConicalGradient
-        ? ctx.createConicalGradient(angle, centerX, centerY)
-        : null;
+      const createConic = (ctx as any).createConicGradient || (ctx as any).createConicalGradient;
+      const gradient = createConic ? createConic.call(ctx, angle, centerX, centerY) : null;
 
       if (gradient) {
         gradient.addColorStop(0, `${sweepColor}0.45)`);
@@ -167,10 +166,12 @@ export function MedicalRadarCanvas({ state }: MedicalRadarCanvasProps) {
       ctx.beginPath();
       for (let i = 0; i < blips.length; i++) {
         const b1 = blips[i];
+        if (!b1) continue;
         const p1X = centerX + b1.x * radius;
         const p1Y = centerY + b1.y * radius;
         for (let j = i + 1; j < blips.length; j++) {
           const b2 = blips[j];
+          if (!b2) continue;
           const p2X = centerX + b2.x * radius;
           const p2Y = centerY + b2.y * radius;
           ctx.moveTo(p1X, p1Y);
