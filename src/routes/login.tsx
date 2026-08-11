@@ -46,10 +46,14 @@ export const Route = createFileRoute("/login")({
 
 import { useEffect } from "react";
 import { validateCurrentSession, getRoleDashboardPath } from "@/lib/auth";
+import { MedicalRadarCanvas, type RadarState } from "@/components/medical/MedicalRadarCanvas";
+import { Activity, ShieldCheck, Cpu } from "lucide-react";
 
 function LoginPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<null | { role: string; demo: boolean }>(null);
+  const [radarState, setRadarState] = useState<RadarState>('idle');
+  const [loadingStepText, setLoadingStepText] = useState<string>('');
   
   // Doctor verification status state
   const [doctorState, setDoctorState] = useState<null | {
@@ -70,6 +74,11 @@ function LoginPage() {
     checkExistingAuth();
   }, []);
 
+  const handleStateChange = (state: RadarState, text?: string) => {
+    setRadarState(state);
+    if (text) setLoadingStepText(text);
+  };
+
   const handleAuthenticated = async (role: string, userDetails?: { id?: string; email?: string }, demo = false) => {
     const normRole = role.toUpperCase();
     
@@ -85,7 +94,6 @@ function LoginPage() {
 
     if (normRole === "DOCTOR" && userDetails?.id) {
       try {
-        // Fetch doctor profile with facility details
         const { data: docData } = await supabase
           .from('doctors')
           .select(`
@@ -101,7 +109,6 @@ function LoginPage() {
           .maybeSingle();
 
         if (docData) {
-          // Fetch latest decision message if exists
           let latestMessage = "";
           try {
             const { data: actionLogs } = await supabase
@@ -114,9 +121,7 @@ function LoginPage() {
             if (actionLogs && actionLogs.length > 0 && actionLogs[0]) {
               latestMessage = actionLogs[0].message || "";
             }
-          } catch (logErr) {
-            // Ignore if action log table does not exist
-          }
+          } catch (logErr) {}
 
           if (docData.status === 'ACCEPTED') {
             navigate({ to: "/doctor" });
@@ -149,7 +154,7 @@ function LoginPage() {
     setSession({ role, demo });
   };
 
-  // 1. Render Doctor Pending Verification Screen (Section 3)
+  // 1. Render Doctor Pending Verification Screen
   if (doctorState?.status === 'PENDING') {
     const doc = doctorState.doctor;
     return (
@@ -225,7 +230,7 @@ function LoginPage() {
     );
   }
 
-  // 2. Render Doctor Rejected Screen (Section 5)
+  // 2. Render Doctor Rejected Screen
   if (doctorState?.status === 'REJECTED') {
     const doc = doctorState.doctor;
     return (
@@ -334,56 +339,70 @@ function LoginPage() {
           minHeight: "calc(100vh - 140px)",
           width: "100%",
           fontFamily: "'Inter', sans-serif",
+          backgroundColor: "#F8FAFC"
         }}
       >
-        {/* Left panel with illustration */}
+        {/* Left Panel: Medical Radar Visual Identity */}
         <div
           className="hidden md:flex"
           style={{
-            flex: 1,
+            flex: "1.1",
             backgroundColor: COLORS.navy,
+            position: "relative",
             display: "flex",
             flexDirection: "column",
-            justifyContent: "center",
-            alignItems: "center",
-            padding: "2rem",
-            color: "white",
+            justifyContent: "space-between",
+            padding: "3rem",
+            overflow: "hidden",
+            borderRight: "1px solid rgba(255,255,255,0.08)"
           }}
         >
-          <img
-            src="/login.jfif"
-            alt="Healthcare Illustration"
-            style={{
-              width: "100%",
-              maxWidth: "800px",
-              height: "auto",
-              marginBottom: "2rem",
-              borderRadius: "16px",
-              boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
-            }}
-          />
-          <h2 style={{ fontSize: "1.75rem", fontWeight: 600, marginBottom: "1rem", color: "#ffffff" }}>
-            Bienvenue sur Rased
-          </h2>
-          <p style={{ fontSize: "1rem", lineHeight: 1.6, opacity: 0.9, color: COLORS.lightTeal }}>
-            Connectez-vous pour accéder aux alertes sanitaires et à la veille régionale.
-          </p>
+          {/* Top Medical Identity Badge */}
+          <div style={{ zIndex: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <div style={{ width: "36px", height: "36px", borderRadius: "10px", backgroundColor: COLORS.teal, color: "white", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Activity size={22} />
+              </div>
+              <span style={{ fontSize: "1.4rem", fontWeight: "900", color: "white", letterSpacing: "0.04em" }}>
+                RASED <span style={{ color: COLORS.teal, fontWeight: "400" }}>RADAR</span>
+              </span>
+            </div>
+            <p style={{ fontSize: "0.88rem", color: "#94A3B8", letterSpacing: "0.02em" }}>
+              Réseau National de Surveillance et de Veille Épidémiologique
+            </p>
+          </div>
+
+          {/* Center Canvas Radar Visualization */}
+          <div style={{ flex: 1, position: "relative", margin: "1rem 0", minHeight: "360px" }}>
+            <MedicalRadarCanvas state={radarState} loadingStep={loadingStepText} />
+          </div>
+
+          {/* Bottom Technical Status Bar */}
+          <div style={{ zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid rgba(255,255,255,0.1)", paddingTop: "1.2rem", fontSize: "0.78rem", color: "#94A3B8" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Cpu size={14} color={COLORS.teal} /> ALGERIA HEALTH INTELLIGENCE NETWORK
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <ShieldCheck size={14} color="#38BDF8" /> SHA-256 ENCRYPTED NODE
+            </div>
+          </div>
         </div>
-        {/* Right panel with login form */}
+
+        {/* Right Panel: Clean Interactive Login Form */}
         <div
           style={{
-            flex: 1,
+            flex: "1",
             backgroundColor: "#ffffff",
             display: "flex",
             flexDirection: "column",
             justifyContent: "center",
             alignItems: "center",
-            padding: "2rem",
+            padding: "2.5rem 1.5rem",
             position: "relative",
           }}
         >
-          <div style={{ width: "100%", maxWidth: "420px" }}>
-            <Login onAuthenticated={handleAuthenticated} />
+          <div style={{ width: "100%", maxWidth: "440px" }}>
+            <Login onAuthenticated={handleAuthenticated} onStateChange={handleStateChange} />
           </div>
         </div>
       </main>
