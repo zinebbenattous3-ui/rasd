@@ -402,7 +402,11 @@ function LoginPage() {
           }}
         >
           <div style={{ width: "100%", maxWidth: "440px" }}>
-            <Login onAuthenticated={handleAuthenticated} onStateChange={handleStateChange} />
+            <Login 
+              onAuthenticated={handleAuthenticated} 
+              onStateChange={handleStateChange} 
+              onDoctorStateChange={(docState) => setDoctorState(docState)}
+            />
           </div>
         </div>
       </main>
