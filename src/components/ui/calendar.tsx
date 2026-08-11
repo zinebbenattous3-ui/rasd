@@ -1,177 +1,209 @@
-"use client";
+import React, { useState } from "react";
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, RotateCcw } from "lucide-react";
 
-import * as React from "react";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import { DayButton, DayPicker, getDefaultClassNames } from "react-day-picker";
+export interface CustomCalendarProps {
+  value?: string | undefined; // YYYY-MM-DD
+  onChange?: ((dateStr: string) => void) | undefined;
+  minDate?: string | undefined;
+  maxDate?: string | undefined;
+  className?: string | undefined;
+  style?: React.CSSProperties | undefined;
+}
 
-import { cn } from "@/lib/utils";
-import { Button, buttonVariants } from "@/components/ui/button";
+const MONTHS_FR = [
+  "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+  "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"
+];
 
-function Calendar({
-  className,
-  classNames,
-  showOutsideDays = true,
-  captionLayout = "label",
-  buttonVariant = "ghost",
-  formatters,
-  components,
-  ...props
-}: React.ComponentProps<typeof DayPicker> & {
-  buttonVariant?: React.ComponentProps<typeof Button>["variant"];
-}) {
-  const defaultClassNames = getDefaultClassNames();
+const DAYS_FR = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
+
+export function Calendar({ value, onChange, minDate, maxDate, style }: CustomCalendarProps) {
+  const initialDate = value ? new Date(value) : new Date();
+  const [viewDate, setViewDate] = useState<Date>(isNaN(initialDate.getTime()) ? new Date() : initialDate);
+
+  const year = viewDate.getFullYear();
+  const month = viewDate.getMonth();
+
+  const handlePrevMonth = () => {
+    setViewDate(new Date(year, month - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setViewDate(new Date(year, month + 1, 1));
+  };
+
+  const handleYearChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setViewDate(new Date(parseInt(e.target.value, 10), month, 1));
+  };
+
+  const handleMonthChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setViewDate(new Date(year, parseInt(e.target.value, 10), 1));
+  };
+
+  // Generate days grid
+  const firstDayOfMonth = new Date(year, month, 1);
+  let startingDayOfWeek = firstDayOfMonth.getDay() - 1; // Monday = 0
+  if (startingDayOfWeek === -1) startingDayOfWeek = 6; // Sunday = 6
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const selectedDateStr = value || "";
+
+  // Year options (1920 to 2035)
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 115 }, (_, i) => currentYear - 100 + i);
 
   return (
-    <DayPicker
-      showOutsideDays={showOutsideDays}
-      className={cn(
-        "bg-background group/calendar p-3 [--cell-size:2rem] [[data-slot=card-content]_&]:bg-transparent [[data-slot=popover-content]_&]:bg-transparent",
-        String.raw`rtl:**:[.rdp-button\_next>svg]:rotate-180`,
-        String.raw`rtl:**:[.rdp-button\_previous>svg]:rotate-180`,
-        className,
-      )}
-      captionLayout={captionLayout}
-      formatters={{
-        formatMonthDropdown: (date) => date.toLocaleString("default", { month: "short" }),
-        ...formatters,
+    <div
+      style={{
+        backgroundColor: "white",
+        borderRadius: "16px",
+        border: "1px solid #e2e8f0",
+        boxShadow: "0 12px 30px -4px rgba(6, 44, 84, 0.12)",
+        padding: "16px",
+        width: "310px",
+        fontFamily: "'Inter', sans-serif",
+        userSelect: "none",
+        ...style
       }}
-      classNames={{
-        root: cn("w-fit", defaultClassNames.root),
-        months: cn("relative flex flex-col gap-4 md:flex-row", defaultClassNames.months),
-        month: cn("flex w-full flex-col gap-4", defaultClassNames.month),
-        nav: cn(
-          "absolute inset-x-0 top-0 flex w-full items-center justify-between gap-1",
-          defaultClassNames.nav,
-        ),
-        button_previous: cn(
-          buttonVariants({ variant: buttonVariant }),
-          "h-(--cell-size) w-(--cell-size) select-none p-0 aria-disabled:opacity-50",
-          defaultClassNames.button_previous,
-        ),
-        button_next: cn(
-          buttonVariants({ variant: buttonVariant }),
-          "h-(--cell-size) w-(--cell-size) select-none p-0 aria-disabled:opacity-50",
-          defaultClassNames.button_next,
-        ),
-        month_caption: cn(
-          "flex h-(--cell-size) w-full items-center justify-center px-(--cell-size)",
-          defaultClassNames.month_caption,
-        ),
-        dropdowns: cn(
-          "flex h-(--cell-size) w-full items-center justify-center gap-1.5 text-sm font-medium",
-          defaultClassNames.dropdowns,
-        ),
-        dropdown_root: cn(
-          "has-focus:border-ring border-input shadow-xs has-focus:ring-ring/50 has-focus:ring-[3px] relative rounded-md border",
-          defaultClassNames.dropdown_root,
-        ),
-        dropdown: cn("bg-popover absolute inset-0 opacity-0", defaultClassNames.dropdown),
-        caption_label: cn(
-          "select-none font-medium",
-          captionLayout === "label"
-            ? "text-sm"
-            : "[&>svg]:text-muted-foreground flex h-8 items-center gap-1 rounded-md pl-2 pr-1 text-sm [&>svg]:size-3.5",
-          defaultClassNames.caption_label,
-        ),
-        table: "w-full border-collapse",
-        weekdays: cn("flex", defaultClassNames.weekdays),
-        weekday: cn(
-          "text-muted-foreground flex-1 select-none rounded-md text-[0.8rem] font-normal",
-          defaultClassNames.weekday,
-        ),
-        week: cn("mt-2 flex w-full", defaultClassNames.week),
-        week_number_header: cn("w-(--cell-size) select-none", defaultClassNames.week_number_header),
-        week_number: cn(
-          "text-muted-foreground select-none text-[0.8rem]",
-          defaultClassNames.week_number,
-        ),
-        day: cn(
-          "group/day relative aspect-square h-full w-full select-none p-0 text-center [&:first-child[data-selected=true]_button]:rounded-l-md [&:last-child[data-selected=true]_button]:rounded-r-md",
-          defaultClassNames.day,
-        ),
-        range_start: cn("bg-accent rounded-l-md", defaultClassNames.range_start),
-        range_middle: cn("rounded-none", defaultClassNames.range_middle),
-        range_end: cn("bg-accent rounded-r-md", defaultClassNames.range_end),
-        today: cn(
-          "bg-accent text-accent-foreground rounded-md data-[selected=true]:rounded-none",
-          defaultClassNames.today,
-        ),
-        outside: cn(
-          "text-muted-foreground aria-selected:text-muted-foreground",
-          defaultClassNames.outside,
-        ),
-        disabled: cn("text-muted-foreground opacity-50", defaultClassNames.disabled),
-        hidden: cn("invisible", defaultClassNames.hidden),
-        ...classNames,
-      }}
-      components={{
-        Root: ({ className, rootRef, ...props }) => {
-          return <div data-slot="calendar" ref={rootRef} className={cn(className)} {...props} />;
-        },
-        Chevron: ({ className, orientation, ...props }) => {
-          if (orientation === "left") {
-            return <ChevronLeftIcon className={cn("size-4", className)} {...props} />;
-          }
+    >
+      {/* Month & Year Navigation Header */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+        <button
+          type="button"
+          onClick={handlePrevMonth}
+          style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "#062C54", display: "flex", alignItems: "center" }}
+        >
+          <ChevronLeft size={16} />
+        </button>
 
-          if (orientation === "right") {
-            return <ChevronRightIcon className={cn("size-4", className)} {...props} />;
-          }
+        <div style={{ display: "flex", gap: "6px", alignItems: "center" }}>
+          <select
+            value={month}
+            onChange={handleMonthChange}
+            style={{ fontWeight: "700", color: "#062C54", fontSize: "0.88rem", border: "none", background: "#f8fafc", padding: "4px 8px", borderRadius: "6px", cursor: "pointer", outline: "none" }}
+          >
+            {MONTHS_FR.map((m, idx) => (
+              <option key={m} value={idx}>{m}</option>
+            ))}
+          </select>
 
-          return <ChevronDownIcon className={cn("size-4", className)} {...props} />;
-        },
-        DayButton: CalendarDayButton,
-        WeekNumber: ({ children, ...props }) => {
-          return (
-            <td {...props}>
-              <div className="flex size-(--cell-size) items-center justify-center text-center">
-                {children}
-              </div>
-            </td>
+          <select
+            value={year}
+            onChange={handleYearChange}
+            style={{ fontWeight: "700", color: "#062C54", fontSize: "0.88rem", border: "none", background: "#f8fafc", padding: "4px 8px", borderRadius: "6px", cursor: "pointer", outline: "none" }}
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>{y}</option>
+            ))}
+          </select>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleNextMonth}
+          style={{ background: "none", border: "1px solid #e2e8f0", borderRadius: "8px", padding: "6px", cursor: "pointer", color: "#062C54", display: "flex", alignItems: "center" }}
+        >
+          <ChevronRight size={16} />
+        </button>
+      </div>
+
+      {/* Weekdays Header */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", textAlign: "center", marginBottom: "8px" }}>
+        {DAYS_FR.map((day) => (
+          <span key={day} style={{ fontSize: "0.75rem", fontWeight: "700", color: "#718096", textTransform: "uppercase" }}>
+            {day}
+          </span>
+        ))}
+      </div>
+
+      {/* Days Grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: "4px" }}>
+        {/* Empty cells for padding */}
+        {Array.from({ length: startingDayOfWeek }).map((_, i) => (
+          <div key={`empty-${i}`} />
+        ))}
+
+        {/* Day buttons */}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const dayNum = i + 1;
+          const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+          
+          const isSelected = selectedDateStr === dateString;
+          const isToday = todayStr === dateString;
+
+          const isDisabled = Boolean(
+            (minDate && dateString < minDate) || (maxDate && dateString > maxDate)
           );
-        },
-        ...components,
-      }}
-      {...props}
-    />
+
+          return (
+            <button
+              key={dayNum}
+              type="button"
+              disabled={isDisabled}
+              onClick={() => {
+                if (!isDisabled && onChange) onChange(dateString);
+              }}
+              style={{
+                height: "36px",
+                width: "36px",
+                borderRadius: "10px",
+                border: isToday && !isSelected ? "1px solid #0fa29b" : "none",
+                backgroundColor: isSelected ? "#0fa29b" : isToday ? "#e6f5f4" : "transparent",
+                color: isSelected ? "white" : isToday ? "#0fa29b" : isDisabled ? "#cbd5e1" : "#062C54",
+                fontWeight: isSelected || isToday ? "800" : "500",
+                fontSize: "0.85rem",
+                cursor: isDisabled ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.15s ease"
+              }}
+              onMouseEnter={(e) => {
+                if (!isSelected && !isDisabled) {
+                  e.currentTarget.style.backgroundColor = "#e6f5f4";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isSelected && !isDisabled) {
+                  e.currentTarget.style.backgroundColor = isToday ? "#e6f5f4" : "transparent";
+                }
+              }}
+            >
+              {dayNum}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Quick Footer Shortcuts */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "14px", paddingTop: "10px", borderTop: "1px solid #e2e8f0" }}>
+        <button
+          type="button"
+          onClick={() => {
+            if (onChange) onChange(todayStr);
+            setViewDate(today);
+          }}
+          style={{ background: "none", border: "none", color: "#0fa29b", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+        >
+          <CalendarIcon size={14} /> Aujourd'hui
+        </button>
+
+        {value && (
+          <button
+            type="button"
+            onClick={() => {
+              if (onChange) onChange("");
+            }}
+            style={{ background: "none", border: "none", color: "#718096", fontSize: "0.8rem", fontWeight: "600", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+          >
+            <RotateCcw size={13} /> Effacer
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
-
-function CalendarDayButton({
-  className,
-  day,
-  modifiers,
-  ...props
-}: React.ComponentProps<typeof DayButton>) {
-  const defaultClassNames = getDefaultClassNames();
-
-  const ref = React.useRef<HTMLButtonElement>(null);
-  React.useEffect(() => {
-    if (modifiers["focused"]) ref.current?.focus();
-  }, [modifiers]);
-
-  return (
-    <Button
-      ref={ref}
-      variant="ghost"
-      size="icon"
-      data-day={day.date.toLocaleDateString()}
-      data-selected-single={
-        modifiers["selected"] &&
-        !modifiers["range_start"] &&
-        !modifiers["range_end"] &&
-        !modifiers["range_middle"]
-      }
-      data-range-start={modifiers["range_start"]}
-      data-range-end={modifiers["range_end"]}
-      data-range-middle={modifiers["range_middle"]}
-      className={cn(
-        "data-[selected-single=true]:bg-primary data-[selected-single=true]:text-primary-foreground data-[range-middle=true]:bg-accent data-[range-middle=true]:text-accent-foreground data-[range-start=true]:bg-primary data-[range-start=true]:text-primary-foreground data-[range-end=true]:bg-primary data-[range-end=true]:text-primary-foreground group-data-[focused=true]/day:border-ring group-data-[focused=true]/day:ring-ring/50 flex aspect-square h-auto w-full min-w-(--cell-size) flex-col gap-1 font-normal leading-none data-[range-end=true]:rounded-md data-[range-middle=true]:rounded-none data-[range-start=true]:rounded-md group-data-[focused=true]/day:relative group-data-[focused=true]/day:z-10 group-data-[focused=true]/day:ring-[3px] [&>span]:text-xs [&>span]:opacity-70",
-        defaultClassNames.day,
-        className,
-      )}
-      {...props}
-    />
-  );
-}
-
-export { Calendar, CalendarDayButton };

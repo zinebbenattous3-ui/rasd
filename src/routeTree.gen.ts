@@ -11,8 +11,24 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AboutRouteImport } from './routes/about'
+import { Route as DoctorRouteImport } from './routes/doctor'
+import { Route as HealthAuthorityRouteImport } from './routes/health-authority'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as SignupRouteImport } from './routes/signup'
+import { Route as SuperadminRouteImport } from './routes/superadmin'
+import { Route as DoctorIndexRouteImport } from './routes/doctor/index'
+import { Route as DoctorHealthEventsRouteImport } from './routes/doctor/health-events'
+import { Route as DoctorPatientsRouteImport } from './routes/doctor/patients'
+import { Route as DoctorProfileRouteImport } from './routes/doctor/profile'
+import { Route as HealthAuthorityIndexRouteImport } from './routes/health-authority/index'
+import { Route as HealthAuthorityDoctorsRouteImport } from './routes/health-authority/doctors'
+import { Route as HealthAuthorityFacilitiesRouteImport } from './routes/health-authority/facilities'
+import { Route as HealthAuthorityProfileRouteImport } from './routes/health-authority/profile'
+import { Route as SuperadminIndexRouteImport } from './routes/superadmin/index'
+import { Route as SuperadminFacilitiesRouteImport } from './routes/superadmin/facilities'
+import { Route as SuperadminHealthAuthoritiesRouteImport } from './routes/superadmin/health-authorities'
+import { Route as SuperadminInspectorsRouteImport } from './routes/superadmin/inspectors'
+import { Route as SuperadminProfileRouteImport } from './routes/superadmin/profile'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -22,6 +38,16 @@ const IndexRoute = IndexRouteImport.update({
 const AboutRoute = AboutRouteImport.update({
   id: '/about',
   path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DoctorRoute = DoctorRouteImport.update({
+  id: '/doctor',
+  path: '/doctor',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const HealthAuthorityRoute = HealthAuthorityRouteImport.update({
+  id: '/health-authority',
+  path: '/health-authority',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -34,39 +60,217 @@ const SignupRoute = SignupRouteImport.update({
   path: '/signup',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SuperadminRoute = SuperadminRouteImport.update({
+  id: '/superadmin',
+  path: '/superadmin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DoctorIndexRoute = DoctorIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorHealthEventsRoute = DoctorHealthEventsRouteImport.update({
+  id: '/health-events',
+  path: '/health-events',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorPatientsRoute = DoctorPatientsRouteImport.update({
+  id: '/patients',
+  path: '/patients',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const DoctorProfileRoute = DoctorProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => DoctorRoute,
+} as any)
+const HealthAuthorityIndexRoute = HealthAuthorityIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => HealthAuthorityRoute,
+} as any)
+const HealthAuthorityDoctorsRoute = HealthAuthorityDoctorsRouteImport.update({
+  id: '/doctors',
+  path: '/doctors',
+  getParentRoute: () => HealthAuthorityRoute,
+} as any)
+const HealthAuthorityFacilitiesRoute =
+  HealthAuthorityFacilitiesRouteImport.update({
+    id: '/facilities',
+    path: '/facilities',
+    getParentRoute: () => HealthAuthorityRoute,
+  } as any)
+const HealthAuthorityProfileRoute = HealthAuthorityProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => HealthAuthorityRoute,
+} as any)
+const SuperadminIndexRoute = SuperadminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => SuperadminRoute,
+} as any)
+const SuperadminFacilitiesRoute = SuperadminFacilitiesRouteImport.update({
+  id: '/facilities',
+  path: '/facilities',
+  getParentRoute: () => SuperadminRoute,
+} as any)
+const SuperadminHealthAuthoritiesRoute =
+  SuperadminHealthAuthoritiesRouteImport.update({
+    id: '/health-authorities',
+    path: '/health-authorities',
+    getParentRoute: () => SuperadminRoute,
+  } as any)
+const SuperadminInspectorsRoute = SuperadminInspectorsRouteImport.update({
+  id: '/inspectors',
+  path: '/inspectors',
+  getParentRoute: () => SuperadminRoute,
+} as any)
+const SuperadminProfileRoute = SuperadminProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => SuperadminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/doctor': typeof DoctorRouteWithChildren
+  '/health-authority': typeof HealthAuthorityRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/superadmin': typeof SuperadminRouteWithChildren
+  '/doctor/health-events': typeof DoctorHealthEventsRoute
+  '/doctor/patients': typeof DoctorPatientsRoute
+  '/doctor/profile': typeof DoctorProfileRoute
+  '/health-authority/doctors': typeof HealthAuthorityDoctorsRoute
+  '/health-authority/facilities': typeof HealthAuthorityFacilitiesRoute
+  '/health-authority/profile': typeof HealthAuthorityProfileRoute
+  '/superadmin/facilities': typeof SuperadminFacilitiesRoute
+  '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
+  '/superadmin/inspectors': typeof SuperadminInspectorsRoute
+  '/superadmin/profile': typeof SuperadminProfileRoute
+  '/doctor/': typeof DoctorIndexRoute
+  '/health-authority/': typeof HealthAuthorityIndexRoute
+  '/superadmin/': typeof SuperadminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/doctor/health-events': typeof DoctorHealthEventsRoute
+  '/doctor/patients': typeof DoctorPatientsRoute
+  '/doctor/profile': typeof DoctorProfileRoute
+  '/health-authority/doctors': typeof HealthAuthorityDoctorsRoute
+  '/health-authority/facilities': typeof HealthAuthorityFacilitiesRoute
+  '/health-authority/profile': typeof HealthAuthorityProfileRoute
+  '/superadmin/facilities': typeof SuperadminFacilitiesRoute
+  '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
+  '/superadmin/inspectors': typeof SuperadminInspectorsRoute
+  '/superadmin/profile': typeof SuperadminProfileRoute
+  '/doctor': typeof DoctorIndexRoute
+  '/health-authority': typeof HealthAuthorityIndexRoute
+  '/superadmin': typeof SuperadminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
+  '/doctor': typeof DoctorRouteWithChildren
+  '/health-authority': typeof HealthAuthorityRouteWithChildren
   '/login': typeof LoginRoute
   '/signup': typeof SignupRoute
+  '/superadmin': typeof SuperadminRouteWithChildren
+  '/doctor/health-events': typeof DoctorHealthEventsRoute
+  '/doctor/patients': typeof DoctorPatientsRoute
+  '/doctor/profile': typeof DoctorProfileRoute
+  '/health-authority/doctors': typeof HealthAuthorityDoctorsRoute
+  '/health-authority/facilities': typeof HealthAuthorityFacilitiesRoute
+  '/health-authority/profile': typeof HealthAuthorityProfileRoute
+  '/superadmin/facilities': typeof SuperadminFacilitiesRoute
+  '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
+  '/superadmin/inspectors': typeof SuperadminInspectorsRoute
+  '/superadmin/profile': typeof SuperadminProfileRoute
+  '/doctor/': typeof DoctorIndexRoute
+  '/health-authority/': typeof HealthAuthorityIndexRoute
+  '/superadmin/': typeof SuperadminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/about' | '/login' | '/signup'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/doctor'
+    | '/health-authority'
+    | '/login'
+    | '/signup'
+    | '/superadmin'
+    | '/doctor/health-events'
+    | '/doctor/patients'
+    | '/doctor/profile'
+    | '/health-authority/doctors'
+    | '/health-authority/facilities'
+    | '/health-authority/profile'
+    | '/superadmin/facilities'
+    | '/superadmin/health-authorities'
+    | '/superadmin/inspectors'
+    | '/superadmin/profile'
+    | '/doctor/'
+    | '/health-authority/'
+    | '/superadmin/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/about' | '/login' | '/signup'
-  id: '__root__' | '/' | '/about' | '/login' | '/signup'
+  to:
+    | '/'
+    | '/about'
+    | '/login'
+    | '/signup'
+    | '/doctor/health-events'
+    | '/doctor/patients'
+    | '/doctor/profile'
+    | '/health-authority/doctors'
+    | '/health-authority/facilities'
+    | '/health-authority/profile'
+    | '/superadmin/facilities'
+    | '/superadmin/health-authorities'
+    | '/superadmin/inspectors'
+    | '/superadmin/profile'
+    | '/doctor'
+    | '/health-authority'
+    | '/superadmin'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/doctor'
+    | '/health-authority'
+    | '/login'
+    | '/signup'
+    | '/superadmin'
+    | '/doctor/health-events'
+    | '/doctor/patients'
+    | '/doctor/profile'
+    | '/health-authority/doctors'
+    | '/health-authority/facilities'
+    | '/health-authority/profile'
+    | '/superadmin/facilities'
+    | '/superadmin/health-authorities'
+    | '/superadmin/inspectors'
+    | '/superadmin/profile'
+    | '/doctor/'
+    | '/health-authority/'
+    | '/superadmin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
+  DoctorRoute: typeof DoctorRouteWithChildren
+  HealthAuthorityRoute: typeof HealthAuthorityRouteWithChildren
   LoginRoute: typeof LoginRoute
   SignupRoute: typeof SignupRoute
+  SuperadminRoute: typeof SuperadminRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -85,6 +289,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/doctor': {
+      id: '/doctor'
+      path: '/doctor'
+      fullPath: '/doctor'
+      preLoaderRoute: typeof DoctorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/health-authority': {
+      id: '/health-authority'
+      path: '/health-authority'
+      fullPath: '/health-authority'
+      preLoaderRoute: typeof HealthAuthorityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -99,15 +317,181 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignupRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/superadmin': {
+      id: '/superadmin'
+      path: '/superadmin'
+      fullPath: '/superadmin'
+      preLoaderRoute: typeof SuperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/doctor/': {
+      id: '/doctor/'
+      path: '/'
+      fullPath: '/doctor/'
+      preLoaderRoute: typeof DoctorIndexRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/health-events': {
+      id: '/doctor/health-events'
+      path: '/health-events'
+      fullPath: '/doctor/health-events'
+      preLoaderRoute: typeof DoctorHealthEventsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/patients': {
+      id: '/doctor/patients'
+      path: '/patients'
+      fullPath: '/doctor/patients'
+      preLoaderRoute: typeof DoctorPatientsRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/doctor/profile': {
+      id: '/doctor/profile'
+      path: '/profile'
+      fullPath: '/doctor/profile'
+      preLoaderRoute: typeof DoctorProfileRouteImport
+      parentRoute: typeof DoctorRoute
+    }
+    '/health-authority/': {
+      id: '/health-authority/'
+      path: '/'
+      fullPath: '/health-authority/'
+      preLoaderRoute: typeof HealthAuthorityIndexRouteImport
+      parentRoute: typeof HealthAuthorityRoute
+    }
+    '/health-authority/doctors': {
+      id: '/health-authority/doctors'
+      path: '/doctors'
+      fullPath: '/health-authority/doctors'
+      preLoaderRoute: typeof HealthAuthorityDoctorsRouteImport
+      parentRoute: typeof HealthAuthorityRoute
+    }
+    '/health-authority/facilities': {
+      id: '/health-authority/facilities'
+      path: '/facilities'
+      fullPath: '/health-authority/facilities'
+      preLoaderRoute: typeof HealthAuthorityFacilitiesRouteImport
+      parentRoute: typeof HealthAuthorityRoute
+    }
+    '/health-authority/profile': {
+      id: '/health-authority/profile'
+      path: '/profile'
+      fullPath: '/health-authority/profile'
+      preLoaderRoute: typeof HealthAuthorityProfileRouteImport
+      parentRoute: typeof HealthAuthorityRoute
+    }
+    '/superadmin/': {
+      id: '/superadmin/'
+      path: '/'
+      fullPath: '/superadmin/'
+      preLoaderRoute: typeof SuperadminIndexRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
+    '/superadmin/facilities': {
+      id: '/superadmin/facilities'
+      path: '/facilities'
+      fullPath: '/superadmin/facilities'
+      preLoaderRoute: typeof SuperadminFacilitiesRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
+    '/superadmin/health-authorities': {
+      id: '/superadmin/health-authorities'
+      path: '/health-authorities'
+      fullPath: '/superadmin/health-authorities'
+      preLoaderRoute: typeof SuperadminHealthAuthoritiesRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
+    '/superadmin/inspectors': {
+      id: '/superadmin/inspectors'
+      path: '/inspectors'
+      fullPath: '/superadmin/inspectors'
+      preLoaderRoute: typeof SuperadminInspectorsRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
+    '/superadmin/profile': {
+      id: '/superadmin/profile'
+      path: '/profile'
+      fullPath: '/superadmin/profile'
+      preLoaderRoute: typeof SuperadminProfileRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
   }
 }
+
+interface DoctorRouteChildren {
+  DoctorHealthEventsRoute: typeof DoctorHealthEventsRoute
+  DoctorPatientsRoute: typeof DoctorPatientsRoute
+  DoctorProfileRoute: typeof DoctorProfileRoute
+  DoctorIndexRoute: typeof DoctorIndexRoute
+}
+
+const DoctorRouteChildren: DoctorRouteChildren = {
+  DoctorHealthEventsRoute: DoctorHealthEventsRoute,
+  DoctorPatientsRoute: DoctorPatientsRoute,
+  DoctorProfileRoute: DoctorProfileRoute,
+  DoctorIndexRoute: DoctorIndexRoute,
+}
+
+const DoctorRouteWithChildren =
+  DoctorRoute._addFileChildren(DoctorRouteChildren)
+
+interface HealthAuthorityRouteChildren {
+  HealthAuthorityDoctorsRoute: typeof HealthAuthorityDoctorsRoute
+  HealthAuthorityFacilitiesRoute: typeof HealthAuthorityFacilitiesRoute
+  HealthAuthorityProfileRoute: typeof HealthAuthorityProfileRoute
+  HealthAuthorityIndexRoute: typeof HealthAuthorityIndexRoute
+}
+
+const HealthAuthorityRouteChildren: HealthAuthorityRouteChildren = {
+  HealthAuthorityDoctorsRoute: HealthAuthorityDoctorsRoute,
+  HealthAuthorityFacilitiesRoute: HealthAuthorityFacilitiesRoute,
+  HealthAuthorityProfileRoute: HealthAuthorityProfileRoute,
+  HealthAuthorityIndexRoute: HealthAuthorityIndexRoute,
+}
+
+const HealthAuthorityRouteWithChildren = HealthAuthorityRoute._addFileChildren(
+  HealthAuthorityRouteChildren,
+)
+
+interface SuperadminRouteChildren {
+  SuperadminFacilitiesRoute: typeof SuperadminFacilitiesRoute
+  SuperadminHealthAuthoritiesRoute: typeof SuperadminHealthAuthoritiesRoute
+  SuperadminInspectorsRoute: typeof SuperadminInspectorsRoute
+  SuperadminProfileRoute: typeof SuperadminProfileRoute
+  SuperadminIndexRoute: typeof SuperadminIndexRoute
+}
+
+const SuperadminRouteChildren: SuperadminRouteChildren = {
+  SuperadminFacilitiesRoute: SuperadminFacilitiesRoute,
+  SuperadminHealthAuthoritiesRoute: SuperadminHealthAuthoritiesRoute,
+  SuperadminInspectorsRoute: SuperadminInspectorsRoute,
+  SuperadminProfileRoute: SuperadminProfileRoute,
+  SuperadminIndexRoute: SuperadminIndexRoute,
+}
+
+const SuperadminRouteWithChildren = SuperadminRoute._addFileChildren(
+  SuperadminRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
+  DoctorRoute: DoctorRouteWithChildren,
+  HealthAuthorityRoute: HealthAuthorityRouteWithChildren,
   LoginRoute: LoginRoute,
   SignupRoute: SignupRoute,
+  SuperadminRoute: SuperadminRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+import type { getRouter } from './router.tsx'
+import type { startInstance } from './start.ts'
+declare module '@tanstack/react-start' {
+  interface Register {
+    ssr: true
+    router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
+  }
+}

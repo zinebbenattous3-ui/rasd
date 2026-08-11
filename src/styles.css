@@ -1,5 +1,4 @@
-@import "tailwindcss" source(none);
-@source "../src";
+@import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
@@ -95,6 +94,33 @@
   --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
   --sidebar-border: oklch(0.929 0.013 255.508);
   --sidebar-ring: oklch(0.704 0.04 256.788);
+}
+
+/* Global Custom Medical Design System Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(15, 162, 155, 0.25);
+  border-radius: 999px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(15, 162, 155, 0.55);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 162, 155, 0.3) transparent;
 }
 
 .dark {
@@ -196,11 +222,40 @@ body {
 .btn-primary:disabled { opacity: 0.6; cursor: progress; }
 .btn-inline { width: auto; padding: 0.55rem 1rem; }
 
+.btn-shiny {
+  position: relative;
+  overflow: hidden;
+  background: var(--navy);
+  color: oklch(0.99 0 0);
+  border: 1px solid var(--navy-deep);
+  border-radius: 8px;
+  padding: 0.55rem 1rem;
+  font-weight: 600; font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 140ms ease;
+  z-index: 1;
+}
+.btn-shiny::before {
+  content: "";
+  position: absolute;
+  top: 0; left: -100%; width: 50%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+  transform: skewX(-20deg);
+  z-index: -1;
+  transition: none;
+}
+.btn-shiny:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(6,44,84,0.25); }
+.btn-shiny:hover::before { animation: shine 0.75s; }
+
+@keyframes shine {
+  100% { left: 200%; }
+}
+
 .btn-ghost {
   background: transparent;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 0.4rem 0.7rem;
+  padding: 0.55rem 1rem;
   font-size: 0.85rem; font-weight: 500;
   color: var(--ink); cursor: pointer;
   transition: background 140ms ease, border-color 140ms ease;
@@ -286,7 +341,7 @@ body {
   border-bottom: 1px solid var(--line);
   position: sticky; top: 0; z-index: 10;
 }
-.brand-logo { height: 40px; width: auto; }
+.brand-logo { height: 60px; width: auto; }
 .header-right { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
 .role-chip, .demo-chip {
   font-size: 0.78rem; font-weight: 600; padding: 0.3rem 0.6rem; border-radius: 999px;
@@ -473,7 +528,7 @@ body {
 /* Footer */
 .site-footer { background: oklch(1 0 0); border-top: 1px solid var(--line); padding: 2.5rem 0 1.5rem; }
 .site-footer-inner { max-width: 1180px; margin: 0 auto; padding: 0 1rem; display: grid; gap: 2rem; }
-.footer-logo { height: 40px; width: auto; }
+.footer-logo { height: 60px; width: auto; }
 .footer-brand p { margin-top: 0.6rem; font-size: 0.9rem; color: var(--ink-soft); max-width: 32ch; }
 .footer-cols { display: grid; gap: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .footer-cols h2 { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--navy-deep); font-weight: 700; }

@@ -1,6 +1,5 @@
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
-import logo from "@/assets/rased-logo.png.asset.json";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/lib/i18n";
 
@@ -11,7 +10,7 @@ export function Navbar() {
     <header className="site-header">
       <div className="site-header-inner">
         <Link to="/" className="brand" aria-label="Rased">
-          <img src={logo.url} alt="Rased" className="brand-logo" />
+          <img src="/rased-logo.png" alt="Rased" className="brand-logo" />
         </Link>
 
         <button
@@ -50,10 +49,10 @@ export function Navbar() {
           </ul>
           <div className="nav-actions">
             <LanguageSwitcher />
-            <Link to="/login" className="btn-ghost" onClick={() => setOpen(false)}>
+            <Link to="/login" className="btn-shiny" onClick={() => setOpen(false)} style={{ minWidth: '130px', textAlign: 'center', display: 'inline-block' }}>
               {t("nav.login")}
             </Link>
-            <Link to="/signup" className="btn-primary btn-inline" onClick={() => setOpen(false)}>
+            <Link to="/signup" className="btn-shiny" onClick={() => setOpen(false)} style={{ minWidth: '130px', textAlign: 'center', display: 'inline-block' }}>
               {t("nav.signup")}
             </Link>
           </div>

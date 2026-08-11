@@ -1,11 +1,4 @@
 {
-  "version": 1,
-  "asset_id": "c803770e-e205-45fb-aec7-b44f8bdbe0a2",
-  "project_id": "3ae6583f-f1e1-4c94-a97e-31fd2ba9057b",
-  "url": "/__l5e/assets-v1/c803770e-e205-45fb-aec7-b44f8bdbe0a2/rased-logo.png",
-  "r2_key": "a/v1/3ae6583f-f1e1-4c94-a97e-31fd2ba9057b/c803770e-e205-45fb-aec7-b44f8bdbe0a2/rased-logo.png",
-  "original_filename": "rased-logo.png",
-  "size": 356247,
-  "content_type": "image/png",
-  "created_at": "2026-08-07T22:28:31Z"
+  "id": "29c5a0d02b88d925efbc35b1164acdd3",
+  "url": "/rased-logo.png"
 }

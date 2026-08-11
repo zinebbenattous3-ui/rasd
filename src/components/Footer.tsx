@@ -1,5 +1,4 @@
 import { Link } from "@tanstack/react-router";
-import logo from "@/assets/rased-logo.png.asset.json";
 import { useI18n } from "@/lib/i18n";
 
 export function Footer() {
@@ -8,7 +7,7 @@ export function Footer() {
     <footer className="site-footer">
       <div className="site-footer-inner">
         <div className="footer-brand">
-          <img src={logo.url} alt="Rased" className="footer-logo" />
+          <img src="/rased-logo.png" alt="Rased" className="footer-logo" />
           <p>{t("footer.tagline")}</p>
         </div>
 
