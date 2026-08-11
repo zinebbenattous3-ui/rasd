@@ -15,7 +15,8 @@ import {
   CheckCircle2, 
   AlertCircle,
   FileText,
-  UserPlus
+  UserPlus,
+  Edit
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { GenderSelector } from "@/components/ui/gender-selector";
@@ -165,6 +166,8 @@ function DoctorPatientsPage() {
   const [patientEvents, setPatientEvents] = useState<any[]>([]);
   const [showDrawer, setShowDrawer] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingPatient, setEditingPatient] = useState<any>(null);
 
   // Form State
   const [form, setForm] = useState({
@@ -193,12 +196,13 @@ function DoctorPatientsPage() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape" || e.key === "Esc") {
         if (showAddModal) setShowAddModal(false);
+        if (showEditModal) setShowEditModal(false);
         if (showDrawer) setShowDrawer(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [showAddModal, showDrawer]);
+  }, [showAddModal, showEditModal, showDrawer]);
 
   // Load patients from DB
   const loadPatients = async () => {
@@ -349,6 +353,106 @@ function DoctorPatientsPage() {
       loadPatients();
     } catch (err: any) {
       setFormError(err.message || "Erreur lors de l'enregistrement du patient.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Open Edit Patient Modal
+  const handleOpenEdit = (p: any) => {
+    const userObj = Array.isArray(p?.users) ? p.users[0] : p?.users;
+    setEditingPatient(p);
+    setForm({
+      first_name: userObj?.first_name || "",
+      last_name: userObj?.last_name || "",
+      nin: p.nin || "",
+      date_of_birth: p.date_of_birth || "",
+      gender: p.gender || "M",
+      blood_type: p.blood_type || "A+",
+      email: userObj?.email || ""
+    });
+    setFormError(null);
+    setShowEditModal(true);
+  };
+
+  // Handle Edit Patient Submission
+  const handleEditPatientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPatient) return;
+    setFormError(null);
+
+    if (!form.first_name.trim() || !form.last_name.trim() || !form.nin.trim() || !form.date_of_birth) {
+      setFormError("Veuillez remplir tous les champs obligatoires (*).");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      if (form.nin.trim() !== editingPatient.nin) {
+        const { data: existingNin } = await supabase
+          .from('patients')
+          .select('id')
+          .eq('nin', form.nin.trim())
+          .neq('id', editingPatient.id)
+          .maybeSingle();
+
+        if (existingNin) {
+          setFormError("Un autre patient avec ce NIN existe déjà.");
+          setSubmitting(false);
+          return;
+        }
+      }
+
+      const userId = editingPatient.user_id;
+      if (userId) {
+        const { error: userErr } = await supabase
+          .from('users')
+          .update({
+            first_name: form.first_name.trim(),
+            last_name: form.last_name.trim(),
+            ...(form.email.trim() ? { email: form.email.trim().toLowerCase() } : {})
+          })
+          .eq('id', userId);
+
+        if (userErr) throw new Error(userErr.message);
+      }
+
+      const { error: patientErr } = await supabase
+        .from('patients')
+        .update({
+          nin: form.nin.trim(),
+          date_of_birth: form.date_of_birth,
+          gender: form.gender,
+          blood_type: form.blood_type || null
+        })
+        .eq('id', editingPatient.id);
+
+      if (patientErr) throw new Error(patientErr.message);
+
+      setShowEditModal(false);
+      setEditingPatient(null);
+      setToast({ message: "✓ Informations du patient mises à jour avec succès", type: 'success' });
+      loadPatients();
+
+      if (selectedPatient && selectedPatient.id === editingPatient.id) {
+        const userObj = Array.isArray(selectedPatient.users) ? selectedPatient.users[0] : selectedPatient.users;
+        setSelectedPatient({
+          ...selectedPatient,
+          nin: form.nin.trim(),
+          date_of_birth: form.date_of_birth,
+          gender: form.gender,
+          blood_type: form.blood_type,
+          users: {
+            ...userObj,
+            first_name: form.first_name.trim(),
+            last_name: form.last_name.trim(),
+            email: form.email.trim() || userObj?.email
+          }
+        });
+      }
+    } catch (err: any) {
+      setFormError(err.message || "Erreur lors de la modification des informations.");
     } finally {
       setSubmitting(false);
     }
@@ -602,12 +706,20 @@ function DoctorPatientsPage() {
                     </td>
 
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <button
-                        onClick={() => handleOpenPatient(p)}
-                        style={{ padding: '6px 12px', border: `1px solid ${COLORS.border}`, borderRadius: '8px', background: 'white', color: COLORS.navy, fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                      >
-                        <Eye size={15} color={COLORS.teal} /> Fiche patient
-                      </button>
+                      <div style={{ display: 'inline-flex', gap: '8px' }}>
+                        <button
+                          onClick={() => handleOpenPatient(p)}
+                          style={{ padding: '6px 12px', border: `1px solid ${COLORS.border}`, borderRadius: '8px', background: 'white', color: COLORS.navy, fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Eye size={15} color={COLORS.teal} /> Fiche patient
+                        </button>
+                        <button
+                          onClick={() => handleOpenEdit(p)}
+                          style={{ padding: '6px 12px', border: `1px solid ${COLORS.border}`, borderRadius: '8px', background: 'white', color: COLORS.navy, fontWeight: '600', fontSize: '0.85rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                        >
+                          <Edit size={15} color={COLORS.teal} /> Modifier
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -636,9 +748,29 @@ function DoctorPatientsPage() {
                   {getPatientFullName(selectedPatient)}
                 </h3>
               </div>
-              <button onClick={() => setShowDrawer(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
-                <X size={24} />
-              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <button
+                  onClick={() => handleOpenEdit(selectedPatient)}
+                  style={{
+                    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    color: 'white',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    fontSize: '0.82rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  <Edit size={14} color="#38BDF8" /> Modifier
+                </button>
+                <button onClick={() => setShowDrawer(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+                  <X size={24} />
+                </button>
+              </div>
             </div>
 
             <div style={{ padding: '24px', flex: 1, display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -840,6 +972,142 @@ function DoctorPatientsPage() {
                 </button>
                 <button type="submit" disabled={submitting} style={{ padding: '11px 24px', borderRadius: '10px', border: 'none', background: COLORS.teal, color: 'white', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(15, 162, 155, 0.3)' }}>
                   {submitting ? "Enregistrement..." : "Enregistrer le patient →"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Patient Modal */}
+      {showEditModal && editingPatient && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.5)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '820px', position: 'relative', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
+            <div style={{ padding: '20px 24px', backgroundColor: COLORS.navy, color: 'white', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontWeight: '800', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Edit size={20} color={COLORS.teal} /> Modifier les informations du patient
+              </div>
+              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleEditPatientSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              {formError && (
+                <div style={{ padding: '12px', borderRadius: '10px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: '0.85rem', fontWeight: '600' }}>
+                  {formError}
+                </div>
+              )}
+
+              {/* 2-Column Horizontal Layout Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                {/* Left Column: Identité & Personal Info */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  {/* Section 1: Identité */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      1. Identité du Patient
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Prénom *</label>
+                        <input
+                          type="text"
+                          required
+                          value={form.first_name}
+                          onChange={(e) => setForm({ ...form, first_name: e.target.value })}
+                          placeholder="Prénom"
+                          style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Nom *</label>
+                        <input
+                          type="text"
+                          required
+                          value={form.last_name}
+                          onChange={(e) => setForm({ ...form, last_name: e.target.value })}
+                          placeholder="Nom"
+                          style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>NIN (Numéro d'Identification National) *</label>
+                      <input
+                        type="text"
+                        required
+                        value={form.nin}
+                        onChange={(e) => setForm({ ...form, nin: e.target.value.replace(/\D/g, "") })}
+                        placeholder="ex: 100040000000000000"
+                        maxLength={18}
+                        style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section 2: Informations Personnelles */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      2. Informations Personnelles
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Date de Naissance *</label>
+                      <DatePicker
+                        value={form.date_of_birth}
+                        onChange={(val) => setForm({ ...form, date_of_birth: val })}
+                        placeholder="Date de naissance..."
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Sexe *</label>
+                      <GenderSelector
+                        value={form.gender}
+                        onChange={(val) => setForm({ ...form, gender: val })}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Profil Médical & Contact */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      3. Profil Médical & Contact
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '8px' }}>Groupe Sanguin *</label>
+                      <BloodTypeSelector
+                        value={form.blood_type}
+                        onChange={(val) => setForm({ ...form, blood_type: val })}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Adresse Email (optionnel)</label>
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => setForm({ ...form, email: e.target.value })}
+                        placeholder="patient@email.dz"
+                        style={{ width: '100%', padding: '11px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px', borderTop: `1px solid ${COLORS.border}`, paddingTop: '16px' }}>
+                <button type="button" onClick={() => setShowEditModal(false)} style={{ padding: '11px 20px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer' }}>
+                  Annuler (ESC)
+                </button>
+                <button type="submit" disabled={submitting} style={{ padding: '11px 24px', borderRadius: '10px', border: 'none', background: COLORS.teal, color: 'white', fontWeight: '700', cursor: 'pointer', boxShadow: '0 4px 14px rgba(15, 162, 155, 0.3)' }}>
+                  {submitting ? "Mise à jour..." : "Enregistrer les modifications →"}
                 </button>
               </div>
             </form>
