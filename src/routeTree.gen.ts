@@ -14,8 +14,11 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as DoctorRouteImport } from './routes/doctor'
 import { Route as HealthAuthorityRouteImport } from './routes/health-authority'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SuperadminRouteImport } from './routes/superadmin'
+import { Route as TermsRouteImport } from './routes/terms'
 import { Route as DoctorIndexRouteImport } from './routes/doctor/index'
 import { Route as DoctorHealthEventsRouteImport } from './routes/doctor/health-events'
 import { Route as DoctorPatientsRouteImport } from './routes/doctor/patients'
@@ -56,6 +59,16 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SecurityRoute = SecurityRouteImport.update({
+  id: '/security',
+  path: '/security',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
   path: '/signup',
@@ -64,6 +77,11 @@ const SignupRoute = SignupRouteImport.update({
 const SuperadminRoute = SuperadminRouteImport.update({
   id: '/superadmin',
   path: '/superadmin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DoctorIndexRoute = DoctorIndexRouteImport.update({
@@ -146,8 +164,11 @@ export interface FileRoutesByFullPath {
   '/doctor': typeof DoctorRouteWithChildren
   '/health-authority': typeof HealthAuthorityRouteWithChildren
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
+  '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/superadmin': typeof SuperadminRouteWithChildren
+  '/terms': typeof TermsRoute
   '/doctor/health-events': typeof DoctorHealthEventsRoute
   '/doctor/patients': typeof DoctorPatientsRoute
   '/doctor/profile': typeof DoctorProfileRoute
@@ -167,7 +188,10 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
+  '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
+  '/terms': typeof TermsRoute
   '/doctor/health-events': typeof DoctorHealthEventsRoute
   '/doctor/patients': typeof DoctorPatientsRoute
   '/doctor/profile': typeof DoctorProfileRoute
@@ -190,8 +214,11 @@ export interface FileRoutesById {
   '/doctor': typeof DoctorRouteWithChildren
   '/health-authority': typeof HealthAuthorityRouteWithChildren
   '/login': typeof LoginRoute
+  '/privacy': typeof PrivacyRoute
+  '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/superadmin': typeof SuperadminRouteWithChildren
+  '/terms': typeof TermsRoute
   '/doctor/health-events': typeof DoctorHealthEventsRoute
   '/doctor/patients': typeof DoctorPatientsRoute
   '/doctor/profile': typeof DoctorProfileRoute
@@ -215,8 +242,11 @@ export interface FileRouteTypes {
     | '/doctor'
     | '/health-authority'
     | '/login'
+    | '/privacy'
+    | '/security'
     | '/signup'
     | '/superadmin'
+    | '/terms'
     | '/doctor/health-events'
     | '/doctor/patients'
     | '/doctor/profile'
@@ -236,7 +266,10 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/login'
+    | '/privacy'
+    | '/security'
     | '/signup'
+    | '/terms'
     | '/doctor/health-events'
     | '/doctor/patients'
     | '/doctor/profile'
@@ -258,8 +291,11 @@ export interface FileRouteTypes {
     | '/doctor'
     | '/health-authority'
     | '/login'
+    | '/privacy'
+    | '/security'
     | '/signup'
     | '/superadmin'
+    | '/terms'
     | '/doctor/health-events'
     | '/doctor/patients'
     | '/doctor/profile'
@@ -282,8 +318,11 @@ export interface RootRouteChildren {
   DoctorRoute: typeof DoctorRouteWithChildren
   HealthAuthorityRoute: typeof HealthAuthorityRouteWithChildren
   LoginRoute: typeof LoginRoute
+  PrivacyRoute: typeof PrivacyRoute
+  SecurityRoute: typeof SecurityRoute
   SignupRoute: typeof SignupRoute
   SuperadminRoute: typeof SuperadminRouteWithChildren
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -323,6 +362,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/security': {
+      id: '/security'
+      path: '/security'
+      fullPath: '/security'
+      preLoaderRoute: typeof SecurityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/signup': {
       id: '/signup'
       path: '/signup'
@@ -335,6 +388,13 @@ declare module '@tanstack/react-router' {
       path: '/superadmin'
       fullPath: '/superadmin'
       preLoaderRoute: typeof SuperadminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/doctor/': {
@@ -501,8 +561,11 @@ const rootRouteChildren: RootRouteChildren = {
   DoctorRoute: DoctorRouteWithChildren,
   HealthAuthorityRoute: HealthAuthorityRouteWithChildren,
   LoginRoute: LoginRoute,
+  PrivacyRoute: PrivacyRoute,
+  SecurityRoute: SecurityRoute,
   SignupRoute: SignupRoute,
   SuperadminRoute: SuperadminRouteWithChildren,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

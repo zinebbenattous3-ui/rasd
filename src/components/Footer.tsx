@@ -105,24 +105,24 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Column 2: Informations */}
+          {/* Column 2: Informations & Légal */}
           <div>
             <h3 style={{ fontSize: "0.82rem", fontWeight: "800", textTransform: "uppercase", letterSpacing: "0.08em", color: "white", marginBottom: "1.2rem" }}>
-              Informations
+              Légal & Securité
             </h3>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.75rem" }}>
               <li>
-                <Link to="/about" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
-                  {t("nav.about")}
+                <Link to="/terms" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
+                  Conditions d'utilisation
                 </Link>
               </li>
               <li>
-                <Link to="/about" hash="contact" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
-                  {t("footer.contact")}
+                <Link to="/privacy" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
+                  Politique de confidentialité
                 </Link>
               </li>
               <li>
-                <Link to="/about" hash="securite" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
+                <Link to="/security" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
                   Sécurité & Protocoles
                 </Link>
               </li>
@@ -203,11 +203,14 @@ export function Footer() {
           </div>
 
           <div style={{ display: "flex", gap: "1.25rem" }}>
-            <Link to="/about" style={{ color: "#64748B", textDecoration: "none" }}>
+            <Link to="/terms" style={{ color: "#64748B", textDecoration: "none" }}>
+              Conditions
+            </Link>
+            <Link to="/privacy" style={{ color: "#64748B", textDecoration: "none" }}>
               Confidentialité
             </Link>
-            <Link to="/about" style={{ color: "#64748B", textDecoration: "none" }}>
-              Conditions d'utilisation
+            <Link to="/security" style={{ color: "#64748B", textDecoration: "none" }}>
+              Sécurité
             </Link>
           </div>
         </div>

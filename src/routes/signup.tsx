@@ -1,74 +1,115 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, type FormEvent } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { MedicalNetworkCanvas, type NetworkState } from "@/components/medical/MedicalNetworkCanvas";
 import { validateNIN } from "dz-nin-checker";
-import authImage from "@/assets/auth-illustration.png";
-import { Eye, EyeOff, AlertCircle, CheckCircle2 } from "lucide-react";
+import {
+  Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck,
+  Stethoscope, User, Search, Building2, Lock, ChevronRight, Edit2
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
-
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
     meta: [
-      { title: "Créer un compte Médecin — Rased" },
+      { title: "Créer un compte — Rased Network" },
       {
         name: "description",
-        content: "Demandez un accès professionnel à Rased en tant que médecin déclarant.",
+        content: "Rejoignez le réseau national de surveillance et de veille épidémiologique.",
       },
     ],
   }),
   component: SignupPage,
 });
 
-type Errors = Partial<Record<"first_name" | "last_name" | "email" | "nin" | "password" | "specialty" | "phone" | "form", string>>;
+type RoleType = 'DOCTOR' | 'PATIENT' | 'INSPECTOR' | 'HEALTH_AUTHORITY';
 
-// Colors based on the Rased logo
-const COLORS = {
-  navy: "#062C54",
-  teal: "#0fa29b",
-  lightTeal: "#e6f5f4",
-  text: "#2d3748",
-  muted: "#718096",
-  border: "#e2e8f0"
-};
+interface FormErrors {
+  email?: string;
+  password?: string;
+  confirm_password?: string;
+  first_name?: string;
+  last_name?: string;
+  nin?: string;
+  specialty?: string;
+  facility?: string;
+  phone?: string;
+  function_title?: string;
+  wilaya?: string;
+  authority_position?: string;
+  form?: string;
+}
 
 const SPECIALTIES = [
-  "Médecine interne", "Cardiologie", "Pneumologie", "Gastro-entérologie", "Néphrologie", 
-  "Endocrinologie et maladies métaboliques", "Neurologie", "Rhumatologie", "Hématologie", 
-  "Oncologie médicale", "Maladies infectieuses", "Dermatologie", "Pédiatrie", "Psychiatrie", 
-  "Gériatrie", "Médecine physique et réadaptation", "Médecine nucléaire", "Médecine légale", 
-  "Médecine du travail", "Médecine d’urgence", "Médecine générale / médecine de famille", 
-  "Médecine de réanimation", "Chirurgie générale", "Chirurgie viscérale et digestive", 
-  "Chirurgie thoracique", "Chirurgie cardiovasculaire", "Chirurgie vasculaire", "Neurochirurgie", 
-  "Chirurgie orthopédique et traumatologique", "Urologie", "Chirurgie pédiatrique", 
-  "Chirurgie plastique, reconstructrice et esthétique", "Chirurgie maxillo-faciale", 
-  "Chirurgie gynécologique", "Ophtalmologie", "Oto-rhino-laryngologie (ORL)", "Gynécologie-obstétrique", 
-  "Stomatologie / chirurgie orale", "Radiologie", "Imagerie médicale", 
-  "Anatomie et cytologie pathologiques", "Biologie médicale", "Biochimie", "Microbiologie", 
-  "Immunologie", "Hématologie biologique", "Génétique médicale", "Parasitologie", 
+  "Médecine interne", "Cardiologie", "Pneumologie", "Gastro-entérologie", "Néphrologie",
+  "Endocrinologie et maladies métaboliques", "Neurologie", "Rhumatologie", "Hématologie",
+  "Oncologie médicale", "Maladies infectieuses", "Dermatologie", "Pédiatrie", "Psychiatrie",
+  "Gériatrie", "Médecine physique et réadaptation", "Médecine nucléaire", "Médecine légale",
+  "Médecine du travail", "Médecine d’urgence", "Médecine générale / médecine de famille",
+  "Médecine de réanimation", "Chirurgie générale", "Chirurgie viscérale et digestive",
+  "Chirurgie thoracique", "Chirurgie cardiovasculaire", "Chirurgie vasculaire", "Neurochirurgie",
+  "Chirurgie orthopédique et traumatologique", "Urologie", "Chirurgie pédiatrique",
+  "Chirurgie plastique, reconstructrice et esthétique", "Chirurgie maxillo-faciale",
+  "Chirurgie gynécologique", "Ophtalmologie", "Oto-rhino-laryngologie (ORL)", "Gynécologie-obstétrique",
+  "Stomatologie / chirurgie orale", "Radiologie", "Imagerie médicale",
+  "Anatomie et cytologie pathologiques", "Biologie médicale", "Biochimie", "Microbiologie",
+  "Immunologie", "Hématologie biologique", "Génétique médicale", "Parasitologie",
   "Anesthésiologie", "Réanimation médicale", "Réanimation chirurgicale"
 ];
 
-const normalizeString = (str: string) => 
-  str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const BLOOD_TYPES = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
+const normalizeString = (str: string) =>
+  str ? str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase() : "";
+
+function getPasswordStrength(password: string): { score: number; label: string; color: string } {
+  if (!password) return { score: 0, label: "", color: "#e2e8f0" };
+  let score = 0;
+  if (password.length >= 8) score += 1;
+  if (/[A-Z]/.test(password)) score += 1;
+  if (/[a-z]/.test(password)) score += 1;
+  if (/[0-9]/.test(password)) score += 1;
+  if (/[^A-Za-z0-9]/.test(password)) score += 1;
+
+  if (score <= 2) return { score: 25, label: "Faible", color: "#ef4444" };
+  if (score === 3) return { score: 60, label: "Moyen", color: "#f59e0b" };
+  if (score === 4) return { score: 85, label: "Fort", color: "#0fa29b" };
+  return { score: 100, label: "Excellent", color: "#10b981" };
+}
 
 function SignupPage() {
+  const navigate = useNavigate();
   const [step, setStep] = useState(1);
+  const [networkState, setNetworkState] = useState<NetworkState>('initial');
+  const [agreeTerms, setAgreeTerms] = useState(false);
+  const [agreeSecurity, setAgreeSecurity] = useState(false);
+
   const [form, setForm] = useState({
-    professional_email: "",
+    email: "",
     password: "",
+    confirm_password: "",
     first_name: "",
     last_name: "",
     nin: "",
+    role: "DOCTOR" as RoleType,
+    // Doctor specific
     specialty: "",
     facility: "",
     facility_id: "",
     phone: "",
+    // Patient specific
+    birth_date: "",
+    gender: "M",
+    blood_type: "A+",
+    // Inspector & Health Authority specific
+    function_title: "",
+    wilaya: "",
+    authority_position: ""
   });
-  // Hold parsed NIN details for a quick preview
+
   const [ninDetails, setNinDetails] = useState<null | { nationality: string; sex: string; year: string }>(null);
-  const [errors, setErrors] = useState<Errors>({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -84,56 +125,101 @@ function SignupPage() {
     loadFacilities();
   }, []);
 
-  const filteredSpecialties = SPECIALTIES.filter(s => 
+  const filteredSpecialties = SPECIALTIES.filter(s =>
     normalizeString(s).includes(normalizeString(form.specialty))
   );
 
-  const filteredFacilities = facilitiesList.filter(f => 
+  const filteredFacilities = facilitiesList.filter(f =>
     normalizeString(f.name).includes(normalizeString(form.facility)) ||
     (f.wilaya && normalizeString(f.wilaya).includes(normalizeString(form.facility)))
   );
 
-  function update(key: keyof typeof form, value: string) {
+  function update(key: keyof typeof form, value: any) {
     setForm((f) => ({ ...f, [key]: value }));
-    // Clear any existing error for this field
-    if (errors[key as keyof Errors]) {
-      setErrors((e) => ({ ...e, [key]: undefined }));
+    if (errors[key as keyof FormErrors]) {
+      setErrors((e) => {
+        const copy = { ...e };
+        delete copy[key as keyof FormErrors];
+        return copy;
+      });
     }
-    // Reset NIN preview when NIN changes
-    if (key === "nin") {
+
+    if (key === 'email' && typeof value === 'string' && value.includes('@')) {
+      setNetworkState('email-entered');
+    }
+    if (key === 'role') {
+      setNetworkState('role-selected');
+    }
+    if (key === 'nin') {
       setNinDetails(null);
     }
   }
-  
 
-  function nextStep() {
-    const next: Errors = {};
-    if (step === 1) {
-      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.professional_email)) next.email = "Email invalide.";
-      if (form.password.length < 8) next.password = "Au moins 8 caractères.";
-    } else if (step === 2) {
-      if (!form.first_name.trim()) next.first_name = "Prénom requis.";
-      if (!form.last_name.trim()) next.last_name = "Nom requis.";
-      if (!form.nin.trim()) {
-        next.nin = "NIN requis.";
-      } else if (!/^\d{8,18}$/.test(form.nin)) {
-        next.nin = "Entre 8 et 18 chiffres.";
-      } else {
-        const ninResult = validateNIN(form.nin);
-        if (!ninResult.isValid) {
-          next.nin = ninResult.error || "NIN invalide.";
+  const pwdStrength = getPasswordStrength(form.password);
+
+  function validateStep(currentStep: number): boolean {
+    const nextErrors: FormErrors = {};
+
+    if (currentStep === 1) {
+      if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email)) {
+        nextErrors.email = "Veuillez saisir une adresse e-mail valide.";
+      }
+      if (form.password.length < 8) {
+        nextErrors.password = "Le mot de passe doit contenir au moins 8 caractères.";
+      }
+      if (form.password !== form.confirm_password) {
+        nextErrors.confirm_password = "Les mots de passe ne correspondent pas.";
+      }
+    } else if (currentStep === 2) {
+      if (!form.first_name.trim()) nextErrors.first_name = "Prénom requis.";
+      if (!form.last_name.trim()) nextErrors.last_name = "Nom requis.";
+
+      if (form.role === 'DOCTOR' || form.role === 'PATIENT') {
+        if (!form.nin.trim()) {
+          nextErrors.nin = "NIN requis.";
+        } else if (!/^\d{8,18}$/.test(form.nin)) {
+          nextErrors.nin = "Le NIN doit contenir entre 8 et 18 chiffres.";
         } else {
-          setNinDetails({
-            nationality: ninResult.nationality,
-            sex: ninResult.sex,
-            year: ninResult.year,
-          });
+          const ninResult = validateNIN(form.nin);
+          if (!ninResult.isValid) {
+            nextErrors.nin = ninResult.error || "NIN invalide.";
+          } else {
+            setNinDetails({
+              nationality: ninResult.nationality,
+              sex: ninResult.sex,
+              year: ninResult.year,
+            });
+          }
         }
+      }
+    } else if (currentStep === 3) {
+      if (form.role === 'DOCTOR') {
+        if (!form.specialty.trim()) nextErrors.specialty = "Spécialité requise.";
+        if (!form.phone.trim()) nextErrors.phone = "Numéro de téléphone requis.";
+        else if (!/^\d{10}$/.test(form.phone.trim())) nextErrors.phone = "Le téléphone doit comporter 10 chiffres (ex: 0550123456).";
+      } else if (form.role === 'INSPECTOR') {
+        if (!form.function_title.trim()) nextErrors.function_title = "Fonction requise.";
+        if (!form.wilaya.trim()) nextErrors.wilaya = "Wilaya requise.";
+      } else if (form.role === 'HEALTH_AUTHORITY') {
+        if (!form.authority_position.trim()) nextErrors.authority_position = "Position requise.";
+      }
+    } else if (currentStep === 4) {
+      if (!agreeTerms) {
+        nextErrors.form = "Veuillez accepter les conditions d'utilisation et la politique de confidentialité pour continuer.";
       }
     }
 
-    setErrors(next);
-    if (Object.keys(next).length === 0) {
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) {
+      setNetworkState('error');
+      return false;
+    }
+    setNetworkState('validated');
+    return true;
+  }
+
+  function nextStep() {
+    if (validateStep(step)) {
       setStep((s) => s + 1);
     }
   }
@@ -144,51 +230,46 @@ function SignupPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    const next: Errors = {};
-    if (!form.specialty.trim()) next.specialty = "Spécialité requise.";
-    if (!form.phone.trim()) {
-      next.phone = "Téléphone requis.";
-    } else if (!/^\d{10}$/.test(form.phone)) {
-      next.phone = "Téléphone doit contenir 10 chiffres.";
-    }
+    if (!validateStep(step)) return;
 
-    setErrors(next);
-    if (Object.keys(next).length > 0) return;
     setLoading(true);
+    setNetworkState('done');
 
     try {
-      // 1. Try RPC registration procedure
-      const { data, error } = await supabase.rpc('register_doctor', {
-        email_input: form.professional_email.trim(),
-        password_input: form.password,
-        nin_input: form.nin.trim(),
-        first_name_input: form.first_name.trim(),
-        last_name_input: form.last_name.trim(),
-        specialty_input: form.specialty.trim(),
-        phone_input: form.phone.trim()
-      });
+      if (form.role === 'DOCTOR') {
+        // 1. Try RPC registration procedure for Doctors
+        const { data, error } = await supabase.rpc('register_doctor', {
+          email_input: form.email.trim(),
+          password_input: form.password,
+          nin_input: form.nin.trim(),
+          first_name_input: form.first_name.trim(),
+          last_name_input: form.last_name.trim(),
+          specialty_input: form.specialty.trim(),
+          phone_input: form.phone.trim()
+        });
 
-      if (!error && data && data.success !== false) {
-        if (form.facility_id) {
-          await supabase
-            .from('doctors')
-            .update({ facility_id: form.facility_id, status: 'PENDING' })
-            .eq('nin', form.nin.trim());
+        if (!error && data && data.success !== false) {
+          if (form.facility_id) {
+            await supabase
+              .from('doctors')
+              .update({ facility_id: form.facility_id, status: 'PENDING' })
+              .eq('nin', form.nin.trim());
+          }
+          setLoading(false);
+          setDone(true);
+          return;
         }
-        setLoading(false);
-        setDone(true);
-        return;
       }
 
-      // 2. Fallback to direct table insertion (users as single source of truth for identity)
+      // 2. Direct table insertion (users table as single source of identity)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .insert([{
-          email: form.professional_email.trim().toLowerCase(),
+          email: form.email.trim().toLowerCase(),
           password_hash: form.password,
           first_name: form.first_name.trim(),
           last_name: form.last_name.trim(),
-          role: 'DOCTOR',
+          role: form.role,
           is_active: true
         }])
         .select('id')
@@ -196,18 +277,18 @@ function SignupPage() {
 
       if (userError || !userData) {
         setLoading(false);
+        setNetworkState('error');
         if (userError?.code === '23505') {
           setErrors({ form: "Cet email est déjà utilisé par un autre compte." });
         } else {
-          setErrors({ form: userError?.message || error?.message || "Erreur lors de la création du compte." });
+          setErrors({ form: userError?.message || "Erreur lors de la création du compte." });
         }
         return;
       }
 
-      // Create doctor record linked via user_id
-      const { error: doctorError } = await supabase
-        .from('doctors')
-        .insert([{
+      // Role specific table creation
+      if (form.role === 'DOCTOR') {
+        const { error: doctorError } = await supabase.from('doctors').insert([{
           user_id: userData.id,
           nin: form.nin.trim(),
           specialty: form.specialty.trim(),
@@ -216,325 +297,378 @@ function SignupPage() {
           status: 'PENDING'
         }]);
 
-      setLoading(false);
-
-      if (doctorError) {
-        // Rollback user if doctor insert fails
-        await supabase.from('users').delete().eq('id', userData.id);
-        setErrors({ form: doctorError.message || "Erreur lors de l'enregistrement du profil médecin." });
-      } else {
-        setDone(true);
+        if (doctorError) {
+          await supabase.from('users').delete().eq('id', userData.id);
+          setLoading(false);
+          setNetworkState('error');
+          setErrors({ form: doctorError.message || "Erreur enregistrement profil médecin." });
+          return;
+        }
+      } else if (form.role === 'PATIENT') {
+        await supabase.from('patients').insert([{
+          user_id: userData.id,
+          nin: form.nin.trim(),
+          birth_date: form.birth_date || null,
+          gender: form.gender,
+          blood_type: form.blood_type
+        }]);
       }
+
+      setLoading(false);
+      setDone(true);
     } catch (err: any) {
       setLoading(false);
-      setErrors({ form: err.message || "Erreur de connexion" });
+      setNetworkState('error');
+      setErrors({ form: err.message || "Erreur de connexion." });
     }
   }
 
   return (
-    <div className="site">
+    <div className="site" style={{ minHeight: "100vh", backgroundColor: "#062C54" }}>
       <Navbar />
 
-      <main style={{ display: 'flex', minHeight: 'calc(100vh - 140px)', width: '100%', fontFamily: "'Inter', sans-serif", margin: 0, padding: 0 }}>
-        {/* Left Panel - Branding / Illustration */}
-        <div style={{
-          flex: 1,
-          backgroundColor: COLORS.navy,
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem',
-          color: 'white'
-        }} className="hidden md:flex auth-left-panel">
-          <div style={{ maxWidth: '400px', textAlign: 'center' }}>
-            {/* The generated illustration */}
-            <img
-              src={authImage}
-              alt="Healthcare Illustration"
-              style={{ width: '100%', height: 'auto', marginBottom: '2rem', borderRadius: '16px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}
-            />
-            <h2 style={{ fontSize: '1.75rem', fontWeight: '600', marginBottom: '1rem', color: '#ffffff' }}>
-              Rejoignez le Réseau Rased
-            </h2>
-            <p style={{ fontSize: '1rem', lineHeight: '1.6', opacity: 0.9, color: COLORS.lightTeal }}>
-              Contribuez à la veille sanitaire nationale. Déclarez les événements de santé de manière sécurisée et rapide.
-            </p>
-            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '2rem' }}>
-              <div style={{ width: '24px', height: '6px', borderRadius: '4px', backgroundColor: COLORS.teal }} />
-              <div style={{ width: '8px', height: '6px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
-              <div style={{ width: '8px', height: '6px', borderRadius: '4px', backgroundColor: 'rgba(255,255,255,0.2)' }} />
+      <main style={{ display: "flex", minHeight: "calc(100vh - 140px)", width: "100%", backgroundColor: "#ffffff" }}>
+        {/* Left Side — "JOIN THE HEALTH NETWORK" Canvas Visual */}
+        <div
+          className="hidden md:flex"
+          style={{
+            flex: "1 1 50%",
+            backgroundColor: "#062C54",
+            color: "white",
+            flexDirection: "column",
+            justifyContent: "space-between",
+            padding: "2.5rem",
+            position: "relative",
+            overflow: "hidden"
+          }}
+        >
+          {/* Header Branding */}
+          <div style={{ position: "relative", zIndex: 10 }}>
+            <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", backgroundColor: "rgba(15, 162, 155, 0.15)", border: "1px solid rgba(15, 162, 155, 0.3)", borderRadius: "999px", padding: "4px 14px", fontSize: "0.75rem", color: "#38BDF8", fontWeight: "700", letterSpacing: "0.05em", marginBottom: "1rem" }}>
+              <ShieldCheck size={14} color="#0fa29b" />
+              <span>RÉSEAU NATIONAL DE SANTE</span>
             </div>
+            <h2 style={{ fontSize: "1.85rem", fontWeight: "800", color: "#ffffff", letterSpacing: "-0.01em", lineHeight: "1.2" }}>
+              Rejoignez l'Écosystème National de Veille Épidémiologique
+            </h2>
+            <p style={{ color: "#94A3B8", fontSize: "0.95rem", lineHeight: "1.6", marginTop: "0.5rem", maxWidth: "440px" }}>
+              Raccordez votre établissement ou votre profil au réseau RASED pour contribuer à la surveillance sanitaire en temps réel.
+            </p>
+          </div>
+
+          {/* Interactive Living Network Canvas */}
+          <div style={{ flex: 1, minHeight: "340px", position: "relative", margin: "1rem 0" }}>
+            <MedicalNetworkCanvas state={networkState} selectedRole={form.role} />
+          </div>
+
+          {/* Footer Technical Note */}
+          <div style={{ position: "relative", zIndex: 10, display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.75rem", color: "#64748B", borderTop: "1px solid rgba(255, 255, 255, 0.1)", paddingTop: "1rem" }}>
+            <span>ALGERIA HEALTH INTELLIGENCE NETWORK</span>
+            <span>CONNEXION CHIFFRÉE</span>
           </div>
         </div>
 
-        {/* Right Panel - Form */}
-        <div style={{
-          flex: 1,
-          backgroundColor: '#ffffff',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: '2rem',
-          position: 'relative'
-        }}>
-
-          <div style={{ width: '100%', maxWidth: '420px' }}>
+        {/* Right Side — Multi-Step Signup Form */}
+        <div
+          style={{
+            flex: "1 1 50%",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            alignItems: "center",
+            padding: "2.5rem 1.5rem",
+            backgroundColor: "#ffffff"
+          }}
+        >
+          <div style={{ width: "100%", maxWidth: "460px" }}>
             {done ? (
-              <div style={{ textAlign: 'center', animation: 'fadeIn 0.5s ease-out' }}>
-                <div style={{ fontSize: '3rem', marginBottom: '1.5rem', color: COLORS.teal }}>✓</div>
-                <h2 style={{ fontSize: '1.75rem', color: COLORS.navy, marginBottom: '1rem', fontWeight: '600' }}>
-                  Demande en attente
+              /* Success Screen */
+              <div style={{ textAlign: "center", animation: "fadeIn 0.4s ease-out" }}>
+                <div style={{ width: "64px", height: "64px", borderRadius: "50%", backgroundColor: "#e6f5f4", color: "#0fa29b", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "2rem", marginBottom: "1.25rem", boxShadow: "0 0 20px rgba(15, 162, 155, 0.2)" }}>
+                  ✓
+                </div>
+                <h2 style={{ fontSize: "1.75rem", color: "#062C54", fontWeight: "800", marginBottom: "0.75rem" }}>
+                  {form.role === 'DOCTOR' ? 'Demande enregistrée !' : 'Compte créé avec succès !'}
                 </h2>
-                <p style={{ color: COLORS.muted, marginBottom: '2rem', lineHeight: '1.6', fontSize: '1rem' }}>
-                  Votre compte médecin a été créé avec succès. Son statut est actuellement <strong>En attente</strong>.
-                  Il doit être vérifié par votre établissement avant l'activation. Un email sera envoyé à <strong>{form.professional_email}</strong>.
+                <p style={{ color: "#4a5568", lineHeight: "1.6", fontSize: "0.95rem", marginBottom: "2rem" }}>
+                  {form.role === 'DOCTOR' ? (
+                    <>
+                      Votre compte médecin a été créé avec le statut <strong>En attente (PENDING)</strong>. Votre établissement validera votre raccordement sous peu. Un e-mail d'information vous a été transmis sur <strong>{form.email}</strong>.
+                    </>
+                  ) : (
+                    <>
+                      Bienvenue sur le réseau RASED. Votre compte a été initialisé. Vous pouvez désormais accéder à votre espace sécurisé.
+                    </>
+                  )}
                 </p>
-                <Link to="/" style={{
-                  display: 'inline-block',
-                  backgroundColor: COLORS.navy,
-                  color: 'white',
-                  padding: '0.875rem 2rem',
-                  borderRadius: '30px',
-                  textDecoration: 'none',
-                  fontWeight: '500',
-                  transition: 'all 0.2s'
-                }}>
-                  Retour à l'accueil
+                <Link
+                  to="/login"
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    backgroundColor: "#062C54",
+                    color: "white",
+                    padding: "0.85rem 2rem",
+                    borderRadius: "10px",
+                    textDecoration: "none",
+                    fontWeight: "700",
+                    boxShadow: "0 4px 14px rgba(6, 44, 84, 0.2)"
+                  }}
+                >
+                  <span>Accéder à la connexion</span>
+                  <ArrowRight size={16} />
                 </Link>
               </div>
             ) : (
               <>
-                <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-                  <h2 style={{ fontSize: '1.75rem', fontWeight: '700', color: COLORS.navy, marginBottom: '0.5rem' }}>
-                    Inscription Médecin
-                  </h2>
-                  <p style={{ color: COLORS.muted, fontSize: '0.95rem' }}>
-                    Veuillez remplir vos informations
+                {/* Form Heading & Progress Bar */}
+                <div style={{ marginBottom: "2rem" }}>
+                  <h1 style={{ fontSize: "1.75rem", fontWeight: "800", color: "#062C54", letterSpacing: "-0.01em" }}>
+                    Inscription Médecin Praticien
+                  </h1>
+                  <p style={{ color: "#718096", fontSize: "0.92rem", marginTop: "0.25rem" }}>
+                    Rejoignez le réseau national de surveillance sanitaire RASED. Votre compte sera soumis à vérification par votre établissement.
                   </p>
 
-                  {/* Step Indicator */}
-                  <div style={{ marginTop: '1.5rem' }}>
-                    <p style={{ fontSize: '0.85rem', fontWeight: '600', color: COLORS.teal, marginBottom: '0.5rem' }}>
-                      Étape {step} sur 3
-                    </p>
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                      {[1, 2, 3].map((i) => (
-                        <div key={i} style={{
-                          height: '4px', width: '40px', borderRadius: '2px',
-                          background: i <= step ? COLORS.teal : COLORS.lightTeal,
-                          transition: 'background 0.3s'
-                        }} />
+                  {/* Modern 4-Step Progress Indicator */}
+                  <div style={{ marginTop: "1.5rem" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.6rem", fontSize: "0.8rem", fontWeight: "700" }}>
+                      <span style={{ color: step >= 1 ? "#0fa29b" : "#a0aec0" }}>① Compte</span>
+                      <span style={{ color: step >= 2 ? "#0fa29b" : "#a0aec0" }}>② Identité</span>
+                      <span style={{ color: step >= 3 ? "#0fa29b" : "#a0aec0" }}>③ Profil</span>
+                      <span style={{ color: step >= 4 ? "#0fa29b" : "#a0aec0" }}>④ Confirmation</span>
+                    </div>
+
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      {[1, 2, 3, 4].map((i) => (
+                        <div
+                          key={i}
+                          style={{
+                            flex: 1,
+                            height: "5px",
+                            borderRadius: "999px",
+                            backgroundColor: i <= step ? "#0fa29b" : "#edf2f7",
+                            transition: "all 0.3s ease"
+                          }}
+                        />
                       ))}
                     </div>
                   </div>
                 </div>
 
-                <form onSubmit={step === 3 ? handleSubmit : (e) => e.preventDefault()} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                  {errors.form && (
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.85rem', backgroundColor: '#FEF2F2', border: '1px solid #F87171', color: '#B91C1C', borderRadius: '8px', fontSize: '0.9rem', animation: 'fadeIn 0.3s' }}>
-                      <AlertCircle size={18} style={{ marginTop: '0.1rem', flexShrink: 0 }} />
-                      <span>{errors.form}</span>
-                    </div>
-                  )}
+                {errors.form && (
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "0.6rem", padding: "0.85rem", backgroundColor: "#fef2f2", border: "1px solid #f87171", color: "#991b1b", borderRadius: "10px", fontSize: "0.88rem", marginBottom: "1.5rem" }}>
+                    <AlertCircle size={18} style={{ marginTop: "2px", flexShrink: 0 }} />
+                    <span>{errors.form}</span>
+                  </div>
+                )}
 
+                <form onSubmit={step === 4 ? handleSubmit : (e) => { e.preventDefault(); nextStep(); }} noValidate>
+                  {/* STEP 1: COMPTE */}
                   {step === 1 && (
-                    <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-                      <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Email</label>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", animation: "fadeIn 0.3s ease-out" }}>
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>
+                          Adresse e-mail professionnelle *
+                        </label>
                         <input
                           type="email"
-                          value={form.professional_email}
-                          onChange={(e) => update("professional_email", e.target.value)}
-                          placeholder="Dr. Exemple"
+                          value={form.email}
+                          onChange={(e) => update("email", e.target.value)}
+                          placeholder="exemple@sante.gov.dz"
                           style={{
-                            width: '100%',
-                            padding: '0.5rem 0',
-                            border: 'none',
-                            borderBottom: `2px solid ${COLORS.border}`,
-                            outline: 'none',
-                            fontSize: '1rem',
-                            color: COLORS.text,
-                            transition: 'border-color 0.2s'
+                            width: "100%",
+                            padding: "0.75rem 1rem",
+                            borderRadius: "10px",
+                            border: errors.email ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                            fontSize: "0.95rem",
+                            outline: "none",
+                            transition: "all 0.2s"
                           }}
-                          onFocus={(e) => e.target.style.borderBottom = `2px solid ${COLORS.teal}`}
-                          onBlur={(e) => e.target.style.borderBottom = `2px solid ${COLORS.border}`}
                         />
-                        {errors.email && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.email}</span>}
+                        {errors.email && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.email}</span>}
+                        {form.email && !errors.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email) && (
+                          <span style={{ color: "#10b981", fontSize: "0.8rem", marginTop: "0.3rem", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <CheckCircle2 size={13} /> Adresse e-mail valide
+                          </span>
+                        )}
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Mot de passe</label>
-                        <div style={{ position: 'relative' }}>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>
+                          Mot de passe *
+                        </label>
+                        <div style={{ position: "relative" }}>
                           <input
                             type={showPassword ? "text" : "password"}
                             value={form.password}
                             onChange={(e) => update("password", e.target.value)}
                             placeholder="••••••••"
                             style={{
-                              width: '100%',
-                              padding: '0.5rem 2.5rem 0.5rem 0',
-                              border: 'none',
-                              borderBottom: `2px solid ${COLORS.border}`,
-                              outline: 'none',
-                              fontSize: '1rem',
-                              color: COLORS.text,
-                              transition: 'border-color 0.2s'
+                              width: "100%",
+                              padding: "0.75rem 2.75rem 0.75rem 1rem",
+                              borderRadius: "10px",
+                              border: errors.password ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                              fontSize: "0.95rem",
+                              outline: "none"
                             }}
-                            onFocus={(e) => e.target.style.borderBottom = `2px solid ${COLORS.teal}`}
-                            onBlur={(e) => e.target.style.borderBottom = `2px solid ${COLORS.border}`}
                           />
                           <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
-                            style={{
-                              position: 'absolute',
-                              right: '0',
-                              top: '50%',
-                              transform: 'translateY(-50%)',
-                              background: 'none',
-                              border: 'none',
-                              color: COLORS.muted,
-                              cursor: 'pointer',
-                              padding: '0.25rem'
-                            }}
+                            style={{ position: "absolute", right: "12px", top: "50%", transform: "translateY(-50%)", background: "none", border: "none", color: "#718096", cursor: "pointer" }}
                           >
                             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                           </button>
                         </div>
-                        {errors.password && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.password}</span>}
+
+                        {/* Password Strength Indicator */}
+                        {form.password && (
+                          <div style={{ marginTop: "0.5rem" }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", marginBottom: "3px", color: "#718096" }}>
+                              <span>Sécurité du mot de passe</span>
+                              <span style={{ fontWeight: "700", color: pwdStrength.color }}>{pwdStrength.label}</span>
+                            </div>
+                            <div style={{ height: "4px", width: "100%", backgroundColor: "#e2e8f0", borderRadius: "999px", overflow: "hidden" }}>
+                              <div style={{ width: `${pwdStrength.score}%`, height: "100%", backgroundColor: pwdStrength.color, transition: "width 0.3s ease" }} />
+                            </div>
+                          </div>
+                        )}
+                        {errors.password && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.password}</span>}
                       </div>
+
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>
+                          Confirmer le mot de passe *
+                        </label>
+                        <input
+                          type="password"
+                          value={form.confirm_password}
+                          onChange={(e) => update("confirm_password", e.target.value)}
+                          placeholder="••••••••"
+                          style={{
+                            width: "100%",
+                            padding: "0.75rem 1rem",
+                            borderRadius: "10px",
+                            border: errors.confirm_password ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                            fontSize: "0.95rem",
+                            outline: "none"
+                          }}
+                        />
+                        {errors.confirm_password && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.confirm_password}</span>}
+                        {form.confirm_password && form.password === form.confirm_password && (
+                          <span style={{ color: "#10b981", fontSize: "0.8rem", marginTop: "0.3rem", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <CheckCircle2 size={13} /> Les mots de passe correspondent ✓
+                          </span>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={nextStep}
+                        style={{
+                          marginTop: "1rem",
+                          width: "100%",
+                          backgroundColor: "#062C54",
+                          color: "white",
+                          padding: "0.85rem",
+                          borderRadius: "10px",
+                          fontWeight: "700",
+                          fontSize: "0.95rem",
+                          border: "none",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "8px",
+                          boxShadow: "0 4px 14px rgba(6, 44, 84, 0.2)"
+                        }}
+                      >
+                        <span>Continuer vers Identité</span>
+                        <ArrowRight size={16} />
+                      </button>
                     </div>
                   )}
 
+                  {/* STEP 2: IDENTITÉ */}
                   {step === 2 && (
-                    <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-                      <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", animation: "fadeIn 0.3s ease-out" }}>
+                      <div style={{ display: "flex", gap: "1rem" }}>
                         <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Prénom</label>
+                          <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Prénom *</label>
                           <input
                             type="text"
                             value={form.first_name}
                             onChange={(e) => update("first_name", e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem 0', border: 'none', borderBottom: `2px solid ${COLORS.border}`, outline: 'none', fontSize: '1rem', color: COLORS.text }}
-                            onFocus={(e) => e.target.style.borderBottom = `2px solid ${COLORS.teal}`}
-                            onBlur={(e) => e.target.style.borderBottom = `2px solid ${COLORS.border}`}
+                            placeholder="Zineb"
+                            style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.first_name ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
                           />
-                          {errors.first_name && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.first_name}</span>}
+                          {errors.first_name && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.first_name}</span>}
                         </div>
                         <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Nom</label>
+                          <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Nom *</label>
                           <input
                             type="text"
                             value={form.last_name}
                             onChange={(e) => update("last_name", e.target.value)}
-                            style={{ width: '100%', padding: '0.5rem 0', border: 'none', borderBottom: `2px solid ${COLORS.border}`, outline: 'none', fontSize: '1rem', color: COLORS.text }}
-                            onFocus={(e) => e.target.style.borderBottom = `2px solid ${COLORS.teal}`}
-                            onBlur={(e) => e.target.style.borderBottom = `2px solid ${COLORS.border}`}
+                            placeholder="Ben Attous"
+                            style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.last_name ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
                           />
-                          {errors.last_name && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.last_name}</span>}
+                          {errors.last_name && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.last_name}</span>}
                         </div>
                       </div>
 
-                      <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>NIN </label>
-                        <input
-                          type="text"
-                          value={form.nin}
-                          onChange={(e) => update("nin", e.target.value)}
-                          placeholder="1000400000000000XX"
-                          maxLength={18}
-                          style={{ width: '100%', padding: '0.5rem 0', border: 'none', borderBottom: `2px solid ${COLORS.border}`, outline: 'none', fontSize: '1rem', color: COLORS.text }}
-                          onFocus={(e) => e.target.style.borderBottom = `2px solid ${COLORS.teal}`}
-                          onBlur={(e) => e.target.style.borderBottom = `2px solid ${COLORS.border}`}
-                        />
-                        {errors.nin && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.nin}</span>}
-                        {ninDetails && (
-                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', marginTop: '0.75rem', padding: '0.85rem', backgroundColor: '#F0FDF4', border: '1px solid #86EFAC', color: '#166534', borderRadius: '8px', fontSize: '0.85rem', animation: 'fadeIn 0.3s' }}>
-                            <CheckCircle2 size={18} style={{ marginTop: '0.1rem', flexShrink: 0, color: '#22C55E' }} />
-                            <span>
-                              NIN valide – <strong>{ninDetails.nationality}</strong>, {ninDetails.sex}, enregistré en <strong>{ninDetails.year}</strong>
-                            </span>
-                          </div>
-                        )}
+                      {(form.role === 'DOCTOR' || form.role === 'PATIENT') && (
+                        <div>
+                          <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>
+                            Numéro d'Identification Nationale (NIN) *
+                          </label>
+                          <input
+                            type="text"
+                            value={form.nin}
+                            onChange={(e) => update("nin", e.target.value.replace(/\D/g, ""))}
+                            placeholder="1000400000000000XX"
+                            maxLength={18}
+                            style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.nin ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
+                          />
+                          {errors.nin && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.nin}</span>}
+
+                          {ninDetails && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "0.75rem", padding: "0.75rem 1rem", backgroundColor: "#f0fdf4", border: "1px solid #86efac", borderRadius: "10px", fontSize: "0.85rem", color: "#166534" }}>
+                              <CheckCircle2 size={16} color="#22c55e" />
+                              <span>NIN Valide — <strong>{ninDetails.nationality}</strong>, {ninDetails.sex}, né(e) en <strong>{ninDetails.year}</strong></span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
+                        <button type="button" onClick={prevStep} style={{ flex: 1, padding: "0.85rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", backgroundColor: "transparent", color: "#062C54", fontWeight: "600", cursor: "pointer" }}>
+                          Retour
+                        </button>
+                        <button type="button" onClick={nextStep} style={{ flex: 2, padding: "0.85rem", borderRadius: "10px", border: "none", backgroundColor: "#062C54", color: "white", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                          <span>Continuer vers Profil</span>
+                          <ArrowRight size={16} />
+                        </button>
                       </div>
                     </div>
                   )}
 
+                  {/* STEP 3: PROFIL MÉDICAL */}
                   {step === 3 && (
-                    <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-                      {/* Facility Combobox */}
-                      <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Établissement de santé</label>
-                        <input
-                          type="text"
-                          value={form.facility}
-                          onChange={(e) => {
-                            update("facility", e.target.value);
-                            update("facility_id", "");
-                            setShowFacilityDropdown(true);
-                          }}
-                          placeholder="Rechercher votre établissement (ex: CHU, EPH)..."
-                          style={{ width: '100%', padding: '0.5rem 0', border: 'none', borderBottom: `2px solid ${COLORS.border}`, outline: 'none', fontSize: '1rem', color: COLORS.text }}
-                          onFocus={(e) => {
-                            e.target.style.borderBottom = `2px solid ${COLORS.teal}`;
-                            setShowFacilityDropdown(true);
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderBottom = `2px solid ${COLORS.border}`;
-                            setTimeout(() => setShowFacilityDropdown(false), 200);
-                          }}
-                        />
-                        
-                        {showFacilityDropdown && filteredFacilities.length > 0 && (
-                          <ul style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            right: 0,
-                            maxHeight: '220px',
-                            overflowY: 'auto',
-                            backgroundColor: 'white',
-                            border: `1px solid ${COLORS.border}`,
-                            borderRadius: '8px',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                            listStyle: 'none',
-                            padding: '0.5rem 0',
-                            margin: '0.25rem 0 0 0',
-                            zIndex: 25
-                          }}>
-                            {filteredFacilities.map(fac => (
-                              <li
-                                key={fac.id}
-                                onClick={() => {
-                                  update("facility", fac.name);
-                                  update("facility_id", fac.id);
-                                  setShowFacilityDropdown(false);
-                                }}
-                                style={{
-                                  padding: '0.6rem 1rem',
-                                  cursor: 'pointer',
-                                  fontSize: '0.95rem',
-                                  color: COLORS.text,
-                                  borderBottom: `1px solid ${COLORS.border}`,
-                                  transition: 'background-color 0.1s'
-                                }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.lightTeal}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                <div style={{ fontWeight: '600', color: COLORS.navy }}>{fac.name}</div>
-                                {fac.wilaya && (
-                                  <div style={{ fontSize: '0.75rem', color: COLORS.muted }}>{fac.wilaya} • {fac.facility_type || 'Établissement'}</div>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", animation: "fadeIn 0.3s ease-out" }}>
+                      <div style={{ backgroundColor: "#f0fdfa", border: "1px solid rgba(15, 162, 155, 0.3)", borderRadius: "10px", padding: "0.85rem 1rem", display: "flex", alignItems: "center", gap: "10px" }}>
+                        <Stethoscope size={20} color="#0fa29b" />
+                        <div>
+                          <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "#062C54" }}>Profil Médecin Praticien</div>
+                          <div style={{ fontSize: "0.75rem", color: "#4a5568" }}>Rattachement médical et déclarations épidémiologiques</div>
+                        </div>
                       </div>
 
-                      <div style={{ marginBottom: '1.5rem', position: 'relative' }}>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Spécialité</label>
+                      {/* Doctor Specific Fields */}
+                      <div style={{ position: "relative" }}>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Spécialité Médicale *</label>
                         <input
                           type="text"
                           value={form.specialty}
@@ -542,56 +676,40 @@ function SignupPage() {
                             update("specialty", e.target.value);
                             setShowSpecialtyDropdown(true);
                           }}
-                          placeholder="Rechercher une spécialité..."
-                          style={{ width: '100%', padding: '0.5rem 0', border: 'none', borderBottom: `2px solid ${COLORS.border}`, outline: 'none', fontSize: '1rem', color: COLORS.text }}
-                          onFocus={(e) => {
-                            e.target.style.borderBottom = `2px solid ${COLORS.teal}`;
-                            setShowSpecialtyDropdown(true);
-                          }}
-                          onBlur={(e) => {
-                            e.target.style.borderBottom = `2px solid ${COLORS.border}`;
-                            // Delay to allow click on dropdown items
-                            setTimeout(() => setShowSpecialtyDropdown(false), 200);
-                          }}
+                          placeholder="ex: Cardiologie, Médecine générale..."
+                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.specialty ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
+                          onFocus={() => setShowSpecialtyDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowSpecialtyDropdown(false), 200)}
                         />
-                        {errors.specialty && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.specialty}</span>}
-                        
                         {showSpecialtyDropdown && filteredSpecialties.length > 0 && (
-                          <ul style={{
-                            position: 'absolute',
-                            top: '100%',
-                            left: 0,
-                            right: 0,
-                            maxHeight: '220px',
-                            overflowY: 'auto',
-                            backgroundColor: 'white',
-                            border: `1px solid ${COLORS.border}`,
-                            borderRadius: '8px',
-                            boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
-                            listStyle: 'none',
-                            padding: '0.5rem 0',
-                            margin: '0.25rem 0 0 0',
-                            zIndex: 25
-                          }}>
-                            {filteredSpecialties.map(spec => (
-                              <li
-                                key={spec}
-                                onClick={() => {
-                                  update("specialty", spec);
-                                  setShowSpecialtyDropdown(false);
-                                }}
-                                style={{
-                                  padding: '0.6rem 1rem',
-                                  cursor: 'pointer',
-                                  fontSize: '0.95rem',
-                                  color: COLORS.text,
-                                  borderBottom: `1px solid ${COLORS.border}`,
-                                  transition: 'background-color 0.1s'
-                                }}
-                                onMouseOver={(e) => e.currentTarget.style.backgroundColor = COLORS.lightTeal}
-                                onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                <div style={{ fontWeight: '600', color: COLORS.navy }}>{spec}</div>
+                          <ul style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "180px", overflowY: "auto", backgroundColor: "white", border: "1px solid #cbd5e1", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)", listStyle: "none", padding: "4px 0", margin: "4px 0 0 0", zIndex: 30 }}>
+                            {filteredSpecialties.map((spec) => (
+                              <li key={spec} onClick={() => { update("specialty", spec); setShowSpecialtyDropdown(false); }} style={{ padding: "0.6rem 1rem", fontSize: "0.9rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}>
+                                {spec}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {errors.specialty && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.specialty}</span>}
+                      </div>
+
+                      <div style={{ position: "relative" }}>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Établissement rattaché</label>
+                        <input
+                          type="text"
+                          value={form.facility}
+                          onChange={(e) => { update("facility", e.target.value); update("facility_id", ""); setShowFacilityDropdown(true); }}
+                          placeholder="Rechercher CHU, EPH, Clinique..."
+                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
+                          onFocus={() => setShowFacilityDropdown(true)}
+                          onBlur={() => setTimeout(() => setShowFacilityDropdown(false), 200)}
+                        />
+                        {showFacilityDropdown && filteredFacilities.length > 0 && (
+                          <ul style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "180px", overflowY: "auto", backgroundColor: "white", border: "1px solid #cbd5e1", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)", listStyle: "none", padding: "4px 0", margin: "4px 0 0 0", zIndex: 30 }}>
+                            {filteredFacilities.map((fac) => (
+                              <li key={fac.id} onClick={() => { update("facility", fac.name); update("facility_id", fac.id); setShowFacilityDropdown(false); }} style={{ padding: "0.6rem 1rem", fontSize: "0.9rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}>
+                                <div style={{ fontWeight: "700", color: "#062C54" }}>{fac.name}</div>
+                                <div style={{ fontSize: "0.75rem", color: "#718096" }}>{fac.wilaya} • {fac.facility_type || 'Établissement'}</div>
                               </li>
                             ))}
                           </ul>
@@ -599,88 +717,176 @@ function SignupPage() {
                       </div>
 
                       <div>
-                        <label style={{ display: 'block', fontSize: '0.85rem', color: COLORS.muted, marginBottom: '0.5rem', fontWeight: '500' }}>Téléphone</label>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Téléphone professionnel *</label>
                         <input
                           type="tel"
                           value={form.phone}
-                          onChange={(e) => update("phone", e.target.value)}
-                          placeholder="05..."
+                          onChange={(e) => update("phone", e.target.value.replace(/\D/g, ""))}
+                          placeholder="0550123456"
                           maxLength={10}
-                          style={{ width: '100%', padding: '0.5rem 0', border: 'none', borderBottom: `2px solid ${COLORS.border}`, outline: 'none', fontSize: '1rem', color: COLORS.text }}
-                          onFocus={(e) => e.target.style.borderBottom = `2px solid ${COLORS.teal}`}
-                          onBlur={(e) => e.target.style.borderBottom = `2px solid ${COLORS.border}`}
+                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.phone ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
                         />
-                        {errors.phone && <span style={{ color: '#e53e3e', fontSize: '0.8rem', marginTop: '0.25rem', display: 'block' }}>{errors.phone}</span>}
+                        {errors.phone && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.phone}</span>}
+                      </div>
+
+                      <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
+                        <button type="button" onClick={prevStep} style={{ flex: 1, padding: "0.85rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", backgroundColor: "transparent", color: "#062C54", fontWeight: "600", cursor: "pointer" }}>
+                          Retour
+                        </button>
+                        <button type="button" onClick={nextStep} style={{ flex: 2, padding: "0.85rem", borderRadius: "10px", border: "none", backgroundColor: "#062C54", color: "white", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                          <span>Revoir mes informations</span>
+                          <ArrowRight size={16} />
+                        </button>
                       </div>
                     </div>
                   )}
 
-                  <div style={{ display: 'flex', gap: '1rem', marginTop: '2rem', justifyContent: 'center' }}>
-                    {step > 1 && (
-                      <button type="button" onClick={prevStep} style={{
-                        flex: 1,
-                        backgroundColor: 'transparent',
-                        color: COLORS.navy,
-                        border: `1px solid ${COLORS.navy}`,
-                        padding: '0.875rem',
-                        borderRadius: '30px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        transition: 'background 0.2s'
-                      }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(6, 44, 84, 0.05)'}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                      >
-                        Retour
-                      </button>
-                    )}
-                    {step < 3 ? (
-                      <button type="button" onClick={nextStep} style={{
-                        flex: step === 1 ? 'none' : 2,
-                        width: step === 1 ? '100%' : 'auto',
-                        backgroundColor: COLORS.navy,
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.875rem',
-                        borderRadius: '30px',
-                        fontWeight: '600',
-                        cursor: 'pointer',
-                        boxShadow: '0 4px 14px rgba(6,44,84,0.3)',
-                        transition: 'transform 0.1s'
-                      }}
-                        onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
-                        onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        Suivant
-                      </button>
-                    ) : (
-                      <button type="submit" disabled={loading} style={{
-                        flex: 2,
-                        backgroundColor: COLORS.teal,
-                        color: 'white',
-                        border: 'none',
-                        padding: '0.875rem',
-                        borderRadius: '30px',
-                        fontWeight: '600',
-                        cursor: loading ? 'not-allowed' : 'pointer',
-                        opacity: loading ? 0.7 : 1,
-                        boxShadow: '0 4px 14px rgba(15,162,155,0.3)',
-                        transition: 'transform 0.1s'
-                      }}
-                        onMouseDown={(e) => e.currentTarget.style.transform = 'scale(0.98)'}
-                        onMouseUp={(e) => e.currentTarget.style.transform = 'scale(1)'}
-                      >
-                        {loading ? "Vérification..." : "S'inscrire"}
-                      </button>
-                    )}
-                  </div>
+                  {/* STEP 4: CONFIRMATION & REVIEW */}
+                  {step === 4 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", animation: "fadeIn 0.3s ease-out" }}>
+                      <div style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", padding: "1.25rem" }}>
+                        <h3 style={{ fontSize: "1rem", fontWeight: "700", color: "#062C54", marginBottom: "1rem" }}>
+                          Vérifiez vos informations
+                        </h3>
+
+                        {/* Compte Summary */}
+                        <div style={{ paddingBottom: "0.85rem", borderBottom: "1px solid #e2e8f0", marginBottom: "0.85rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#718096", textTransform: "uppercase" }}>Compte</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: "600", color: "#2d3748", marginTop: "2px" }}>{form.email}</div>
+                          </div>
+                          <button type="button" onClick={() => setStep(1)} style={{ background: "none", border: "none", color: "#0fa29b", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <Edit2 size={12} /> Modifier
+                          </button>
+                        </div>
+
+                        {/* Identité Summary */}
+                        <div style={{ paddingBottom: "0.85rem", borderBottom: "1px solid #e2e8f0", marginBottom: "0.85rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#718096", textTransform: "uppercase" }}>Identité</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: "600", color: "#2d3748", marginTop: "2px" }}>{form.first_name} {form.last_name}</div>
+                            {form.nin && <div style={{ fontSize: "0.78rem", color: "#718096" }}>NIN: {form.nin}</div>}
+                          </div>
+                          <button type="button" onClick={() => setStep(2)} style={{ background: "none", border: "none", color: "#0fa29b", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <Edit2 size={12} /> Modifier
+                          </button>
+                        </div>
+
+                        {/* Profil Summary */}
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <div>
+                            <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#718096", textTransform: "uppercase" }}>Profil</div>
+                            <div style={{ fontSize: "0.92rem", fontWeight: "600", color: "#0fa29b", marginTop: "2px" }}>
+                              {form.role === 'DOCTOR' && `Médecin ${form.specialty ? `• ${form.specialty}` : ''}`}
+                              {form.role === 'PATIENT' && `Patient • Groupe ${form.blood_type}`}
+                              {form.role === 'INSPECTOR' && `Inspecteur • ${form.wilaya}`}
+                              {form.role === 'HEALTH_AUTHORITY' && `Autorité Sanitaire • ${form.authority_position}`}
+                            </div>
+                            {form.facility && <div style={{ fontSize: "0.78rem", color: "#718096" }}>{form.facility}</div>}
+                          </div>
+                          <button type="button" onClick={() => setStep(3)} style={{ background: "none", border: "none", color: "#0fa29b", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
+                            <Edit2 size={12} /> Modifier
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Documents & Legal Consent Section */}
+                      <div style={{ padding: "1rem", backgroundColor: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "12px", display: "flex", flexDirection: "column", gap: "0.85rem" }}>
+                        <div style={{ fontSize: "0.8rem", fontWeight: "700", color: "#062C54", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                          Documents & Consentement
+                        </div>
+
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "0.85rem", color: "#2d3748", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={agreeTerms}
+                            onChange={(e) => {
+                              setAgreeTerms(e.target.checked);
+                              if (errors.form) {
+                                setErrors((err) => {
+                                  const copy = { ...err };
+                                  delete copy.form;
+                                  return copy;
+                                });
+                              }
+                            }}
+                            style={{ marginTop: "3px", width: "16px", height: "16px", accentColor: "#0fa29b" }}
+                          />
+                          <span>
+                            J'accepte les{" "}
+                            <Link to="/terms" target="_blank" style={{ color: "#0fa29b", fontWeight: "700", textDecoration: "underline" }}>
+                              Conditions d'utilisation
+                            </Link>{" "}
+                            et la{" "}
+                            <Link to="/privacy" target="_blank" style={{ color: "#0fa29b", fontWeight: "700", textDecoration: "underline" }}>
+                              Politique de confidentialité
+                            </Link>
+                            . *
+                          </span>
+                        </label>
+
+                        <label style={{ display: "flex", alignItems: "flex-start", gap: "10px", fontSize: "0.85rem", color: "#2d3748", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={agreeSecurity}
+                            onChange={(e) => setAgreeSecurity(e.target.checked)}
+                            style={{ marginTop: "3px", width: "16px", height: "16px", accentColor: "#0fa29b" }}
+                          />
+                          <span>
+                            J'ai pris connaissance des informations relatives à la{" "}
+                            <Link to="/security" target="_blank" style={{ color: "#0fa29b", fontWeight: "700", textDecoration: "underline" }}>
+                              Sécurité
+                            </Link>{" "}
+                            de la plateforme.
+                          </span>
+                        </label>
+                      </div>
+
+                      {/* Security Trust Note */}
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.78rem", color: "#64748b", padding: "0.25rem 0" }}>
+                        <Lock size={14} color="#0fa29b" />
+                        <span>Vos informations sont transmises via un canal chiffré et sécurisé.</span>
+                      </div>
+
+                      <div style={{ display: "flex", gap: "1rem" }}>
+                        <button type="button" onClick={prevStep} style={{ flex: 1, padding: "0.85rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", backgroundColor: "transparent", color: "#062C54", fontWeight: "600", cursor: "pointer" }}>
+                          Retour
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={loading}
+                          style={{
+                            flex: 2,
+                            padding: "0.85rem",
+                            borderRadius: "10px",
+                            border: "none",
+                            backgroundColor: "#0fa29b",
+                            color: "white",
+                            fontWeight: "700",
+                            fontSize: "0.95rem",
+                            cursor: loading ? "wait" : "pointer",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "8px",
+                            boxShadow: "0 4px 14px rgba(15, 162, 155, 0.3)",
+                            opacity: loading ? 0.75 : 1
+                          }}
+                        >
+                          <span>{loading ? "Création en cours..." : "Créer mon compte"}</span>
+                          <ArrowRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </form>
 
-                <div style={{ marginTop: '2.5rem', textAlign: 'center' }}>
-                  <p style={{ color: COLORS.muted, fontSize: '0.9rem' }}>
-                    Vous avez déjà un compte ?{' '}
-                    <Link to="/login" style={{ color: COLORS.teal, textDecoration: 'none', fontWeight: '600' }}>
-                      Connectez-vous
+                {/* Login Link */}
+                <div style={{ marginTop: "2rem", textAlign: "center" }}>
+                  <p style={{ color: "#718096", fontSize: "0.9rem" }}>
+                    Vous avez déjà un compte ?{" "}
+                    <Link to="/login" style={{ color: "#0fa29b", textDecoration: "none", fontWeight: "700" }}>
+                      Se connecter →
                     </Link>
                   </p>
                 </div>
@@ -692,10 +898,9 @@ function SignupPage() {
 
       <Footer />
 
-      {/* Inline styles for basic animations */}
       <style>{`
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
+          from { opacity: 0; transform: translateY(8px); }
           to { opacity: 1; transform: translateY(0); }
         }
         .hidden { display: none !important; }
