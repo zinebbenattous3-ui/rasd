@@ -52,7 +52,7 @@ export function Dashboard({ role, demo, onLogout }: DashboardProps) {
     const to = nextStatus[event.status];
     setEvents((prev) => prev.map((e) => (e.id === event.id ? { ...e, status: to } : e)));
     setAudit((prev) => [
-      `${new Date().toLocaleTimeString("fr-FR")} — ${event.incident_type} : ${event.status} → ${to}`,
+      `${new Date().toLocaleTimeString("fr-FR")} — ${event.reportable_disease?.name || "Maladie"} : ${event.status} → ${to}`,
       ...prev,
     ]);
   }
@@ -142,7 +142,7 @@ export function Dashboard({ role, demo, onLogout }: DashboardProps) {
               </caption>
               <thead>
                 <tr>
-                  <th scope="col">Type d'incident</th>
+                  <th scope="col">Maladie</th>
                   <th scope="col">Établissement</th>
                   <th scope="col">Statut</th>
                   <th scope="col">Déclaré le</th>
@@ -164,7 +164,7 @@ export function Dashboard({ role, demo, onLogout }: DashboardProps) {
         {current ? (
           <section aria-labelledby="detail-title" className="panel detail">
             <div className="panel-head">
-              <h2 id="detail-title">{current.incident_type}</h2>
+              <h2 id="detail-title">{current.reportable_disease?.name || "Maladie"}</h2>
               <button type="button" className="btn-ghost" onClick={() => setSelected(null)}>
                 Fermer
               </button>

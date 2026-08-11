@@ -188,6 +188,18 @@ function DoctorPatientsPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // ESC key listener to close active drawer & modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        if (showAddModal) setShowAddModal(false);
+        if (showDrawer) setShowDrawer(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showAddModal, showDrawer]);
+
   // Load patients from DB
   const loadPatients = async () => {
     setLoading(true);
@@ -226,6 +238,10 @@ function DoctorPatientsPage() {
         .from('health_events')
         .select(`
           *,
+          reportable_disease:reportable_disease_id (
+            id,
+            name
+          ),
           facility:facility_id (
             name,
             wilaya
@@ -556,7 +572,10 @@ function DoctorPatientsPage() {
                     </td>
 
                     <td style={{ padding: '16px 20px', color: COLORS.text, fontSize: '0.88rem' }}>
-                      {new Date(p.date_of_birth).toLocaleDateString('fr-FR')}
+                      <div style={{ fontWeight: '600' }}>{new Date(p.date_of_birth).toLocaleDateString('fr-FR')}</div>
+                      <div style={{ fontSize: '0.78rem', color: COLORS.muted, fontWeight: '600' }}>
+                        {new Date().getFullYear() - new Date(p.date_of_birth).getFullYear()} ans
+                      </div>
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>
@@ -661,25 +680,30 @@ function DoctorPatientsPage() {
                   </div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {patientEvents.map((evt) => (
-                      <div key={evt.id} style={{ padding: '12px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: `1px solid ${COLORS.border}` }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem' }}>{evt.incident_type}</div>
-                          <span style={{
-                            fontSize: '0.75rem',
-                            fontWeight: '800',
-                            color: evt.severity === 'CRITICAL' ? '#DC2626' : evt.severity === 'HIGH' ? '#EA580C' : '#2563EB'
-                          }}>
-                            {evt.severity}
-                          </span>
+                    {patientEvents.map((evt) => {
+                      const diseaseObj = Array.isArray(evt.reportable_disease) ? evt.reportable_disease[0] : evt.reportable_disease;
+                      const diseaseName = diseaseObj?.name || "Maladie non spécifiée";
+
+                      return (
+                        <div key={evt.id} style={{ padding: '12px', borderRadius: '10px', backgroundColor: '#F8FAFC', border: `1px solid ${COLORS.border}` }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem' }}>{diseaseName}</div>
+                            <span style={{
+                              fontSize: '0.75rem',
+                              fontWeight: '800',
+                              color: evt.severity === 'CRITICAL' ? '#DC2626' : evt.severity === 'HIGH' ? '#EA580C' : '#2563EB'
+                            }}>
+                              {evt.severity}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: '0.82rem', color: COLORS.text, marginTop: '4px' }}>{evt.description}</div>
+                          <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Structure : {evt.facility?.name || '—'}</span>
+                            <span>{new Date(evt.created_at).toLocaleDateString('fr-FR')}</span>
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.82rem', color: COLORS.text, marginTop: '4px' }}>{evt.description}</div>
-                        <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>Structure : {evt.facility?.name || '—'}</span>
-                          <span>{new Date(evt.created_at).toLocaleDateString('fr-FR')}</span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

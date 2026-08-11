@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff, AlertCircle } from "lucide-react";
+import { storeSession } from "@/lib/auth";
 
 const COLORS = {
   navy: "#062C54",
@@ -43,6 +44,12 @@ export function Login({ onAuthenticated }: LoginProps) {
     });
 
     if (!userError && userData) {
+      if (userData.is_active === false) {
+        setLoading(false);
+        setErrors({ form: "Votre compte est désactivé. Veuillez contacter un administrateur." });
+        return;
+      }
+      storeSession(userData.id, userData.role);
       setLoading(false);
       onAuthenticated(userData.role, { id: userData.id, email: email.trim() });
       return;
@@ -68,6 +75,7 @@ export function Login({ onAuthenticated }: LoginProps) {
       return;
     }
 
+    storeSession(directUser.id, directUser.role);
     onAuthenticated(directUser.role, { id: directUser.id, email: email.trim() });
   }
 

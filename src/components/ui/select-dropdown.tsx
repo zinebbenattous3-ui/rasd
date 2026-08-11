@@ -4,7 +4,7 @@ import { ChevronDown, Check, Search, LucideIcon } from "lucide-react";
 export interface SelectOption {
   value: string;
   label: string;
-  sublabel?: string;
+  sublabel?: React.ReactNode;
   icon?: LucideIcon;
 }
 
@@ -66,7 +66,7 @@ export function SelectDropdown({
   const filteredOptions = searchable && searchQuery
     ? options.filter((o) =>
         o.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (o.sublabel && o.sublabel.toLowerCase().includes(searchQuery.toLowerCase()))
+        (typeof o.sublabel === 'string' && o.sublabel.toLowerCase().includes(searchQuery.toLowerCase()))
       )
     : options;
 

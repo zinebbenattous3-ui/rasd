@@ -28,18 +28,41 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
+import { validateCurrentSession, clearSession } from "@/lib/auth";
+
 function DoctorLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentDoctor, setCurrentDoctor] = useState<any>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
 
   useEffect(() => {
-    // Load logged in doctor identity and facility scope
+    // 1. Guard check: Validate DOCTOR role and active user session in database
+    const verifyAuth = async () => {
+      const authResult = await validateCurrentSession(["DOCTOR"]);
+      if (!authResult.authorized) {
+        navigate({ to: authResult.redirectTo || "/login" as any });
+        return;
+      }
+      setAuthChecking(false);
+    };
+
+    verifyAuth();
+
+    // 2. Listen to storage changes for single active session per browser sync
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "rased_auth_session" && !e.newValue) {
+        navigate({ to: "/login" });
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
+    // 3. Load logged in doctor identity and facility scope
     const loadDoctorProfile = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('doctors')
           .select(`
             *,
@@ -85,9 +108,12 @@ function DoctorLayout() {
     };
 
     loadDoctorProfile();
-  }, []);
 
-  const handleLogout = () => {
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [location.pathname]);
+
+  const handleLogout = async () => {
+    await clearSession();
     navigate({ to: "/login" });
   };
 

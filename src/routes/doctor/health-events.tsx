@@ -19,12 +19,27 @@ import {
   Building2,
   Stethoscope,
   Link as LinkIcon,
-  UserPlus
+  UserPlus,
+  Paperclip,
+  Trash2,
+  ExternalLink,
+  Image as ImageIcon,
+  Sparkles
 } from "lucide-react";
 import { DatePicker } from "@/components/ui/date-picker";
 import { SeveritySelector } from "@/components/ui/severity-selector";
 import { SelectDropdown } from "@/components/ui/select-dropdown";
 import { User } from "lucide-react";
+import { ProofUploader } from "@/components/ui/proof-uploader";
+import { 
+  getProofSignedUrl, 
+  uploadProofDocument, 
+  deleteProofDocument, 
+  extractFileName, 
+  isPdfFile 
+} from "@/lib/proof-storage";
+import { enhanceMedicalObservation, type StructuredObservation } from "@/lib/ai-enhance";
+import { PatientProofViewer } from "@/components/medical/PatientProofViewer";
 
 export const Route = createFileRoute("/doctor/health-events")({
   component: DoctorHealthEventsPage,
@@ -39,6 +54,16 @@ const COLORS = {
   border: "#e2e8f0",
   bgLight: "#f8fafc"
 };
+
+function calculateAge(dateOfBirth?: string): number | null {
+  if (!dateOfBirth) return null;
+  const dob = new Date(dateOfBirth);
+  if (isNaN(dob.getTime())) return null;
+  const currentYear = new Date().getFullYear();
+  const birthYear = dob.getFullYear();
+  const age = currentYear - birthYear;
+  return age >= 0 ? age : null;
+}
 
 const COMMON_INCIDENTS = [
   "Intoxication alimentaire collective",
@@ -181,10 +206,11 @@ function DoctorHealthEventsPage() {
   const [currentDoctor, setCurrentDoctor] = useState<any>(null);
   const [events, setEvents] = useState<any[]>([]);
   const [patientsList, setPatientsList] = useState<any[]>([]);
+  const [diseasesList, setDiseasesList] = useState<{ id: string; name: string }[]>([]);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [diseaseFilter, setDiseaseFilter] = useState("ALL");
   const [severityFilter, setSeverityFilter] = useState("ALL");
 
   // Drawer & Modals State
@@ -193,11 +219,33 @@ function DoctorHealthEventsPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showInlineAddPatient, setShowInlineAddPatient] = useState(false);
 
+  // Proof Document Storage State
+  const [selectedProofFile, setSelectedProofFile] = useState<File | null>(null);
+  const [uploadingProof, setUploadingProof] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+
+  // View-Only Proof Viewer & Delete Confirmation State
+  const [viewerModal, setViewerModal] = useState<{
+    open: boolean;
+    storagePath: string | null;
+    healthEventId?: string;
+    documentTitle?: string;
+  }>({ open: false, storagePath: null });
+  const [deleteConfirmModal, setDeleteConfirmModal] = useState<{ open: boolean; eventId: string; path: string } | null>(null);
+
+  // AI Medical Observation Enhancement State
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiProposal, setAiProposal] = useState<{
+    original: string;
+    structured: StructuredObservation;
+    formattedPlainText: string;
+  } | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+
   // Form State
   const [form, setForm] = useState({
     patient_id: "",
-    incident_type: COMMON_INCIDENTS[0] || "",
-    custom_incident: "",
+    reportable_disease_id: "",
     description: "",
     severity: "MEDIUM",
     patient_proof_url: ""
@@ -224,11 +272,36 @@ function DoctorHealthEventsPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
+  // ESC key listener to close active modals & drawers
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        if (showCreateModal) setShowCreateModal(false);
+        if (showDrawer) setShowDrawer(false);
+        if (deleteConfirmModal?.open) setDeleteConfirmModal(null);
+        if (viewerModal?.open) setViewerModal({ open: false, storagePath: null });
+        if (showInlineAddPatient) setShowInlineAddPatient(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showCreateModal, showDrawer, deleteConfirmModal?.open, viewerModal?.open, showInlineAddPatient]);
+
   // Load Data
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Get logged in doctor
+      // 1. Fetch Reportable Diseases from reportable_diseases table
+      const { data: disData } = await supabase
+        .from('reportable_diseases')
+        .select('id, name')
+        .order('name');
+
+      if (disData && disData.length > 0) {
+        setDiseasesList(disData);
+      }
+
+      // 2. Get logged in doctor
       const { data: docData } = await supabase
         .from('doctors')
         .select(`
@@ -267,16 +340,21 @@ function DoctorHealthEventsPage() {
         if (e.key === 'Escape' || e.key === 'Esc') {
           setShowCreateModal(false);
           setSelectedEvent(null);
+          setViewerModal({ open: false, storagePath: null });
+          setDeleteConfirmModal(null);
         }
       };
       window.addEventListener('keydown', handleKeyDown);
 
-      // 2. Fetch Patients for selection
+      // 3. Fetch Patients for selection
       const { data: pts } = await supabase
         .from('patients')
         .select(`
           id,
           nin,
+          date_of_birth,
+          gender,
+          blood_type,
           users:user_id (
             first_name,
             last_name
@@ -285,7 +363,7 @@ function DoctorHealthEventsPage() {
 
       if (pts) setPatientsList(pts);
 
-      // 3. Fetch Health Events for this Doctor
+      // 4. Fetch Health Events for this Doctor with joined reportable_diseases
       const { data: evtsData, error: evtsErr } = await supabase
         .from('health_events')
         .select(`
@@ -301,6 +379,10 @@ function DoctorHealthEventsPage() {
               last_name,
               email
             )
+          ),
+          reportable_disease:reportable_disease_id (
+            id,
+            name
           ),
           facility:facility_id (
             name,
@@ -329,64 +411,49 @@ function DoctorHealthEventsPage() {
     e.preventDefault();
     setFormError(null);
 
-    if (!patientForm.first_name.trim() || !patientForm.last_name.trim() || !patientForm.nin.trim() || !patientForm.date_of_birth) {
-      setFormError("Veuillez remplir tous les champs du patient (*).");
+    if (!patientForm.first_name.trim() || !patientForm.last_name.trim() || !patientForm.nin.trim()) {
+      setFormError("Nom, prénom et NIN sont obligatoires pour créer un patient.");
       return;
     }
 
     try {
-      // Check NIN
-      const { data: existingNin } = await supabase
-        .from('patients')
-        .select('id')
-        .eq('nin', patientForm.nin.trim())
-        .maybeSingle();
-
-      if (existingNin) {
-        setFormError("Un patient avec ce NIN existe déjà.");
-        return;
-      }
-
-      // Create User
-      const { data: newUser, error: userErr } = await supabase
+      // Create user auth / user profile for patient
+      const { data: userData, error: userErr } = await supabase
         .from('users')
         .insert([{
-          email: `${patientForm.nin.trim()}@patient.rasd.local`,
-          password_hash: "PATIENT_NO_LOGIN_HASH",
           first_name: patientForm.first_name.trim(),
           last_name: patientForm.last_name.trim(),
-          role: 'PATIENT',
-          is_active: true
+          email: `patient.${patientForm.nin.trim()}@rased.dz`,
+          role: 'PATIENT'
         }])
         .select()
         .single();
 
       if (userErr) throw new Error(userErr.message);
 
-      // Create Patient
-      const { data: newPatient, error: ptErr } = await supabase
+      // Create patient entry
+      const { data: ptData, error: ptErr } = await supabase
         .from('patients')
         .insert([{
-          user_id: newUser.id,
+          user_id: userData.id,
           nin: patientForm.nin.trim(),
-          date_of_birth: patientForm.date_of_birth,
+          date_of_birth: patientForm.date_of_birth || '1990-01-01',
           gender: patientForm.gender,
           blood_type: patientForm.blood_type
         }])
-        .select(`
-          id,
-          nin,
-          users:user_id (
-            first_name,
-            last_name
-          )
-        `)
+        .select()
         .single();
 
       if (ptErr) throw new Error(ptErr.message);
 
-      setPatientsList([newPatient, ...patientsList]);
-      setForm({ ...form, patient_id: newPatient.id });
+      // Update patient list and select new patient automatically
+      const newPatientObj = {
+        ...ptData,
+        users: userData
+      };
+
+      setPatientsList(prev => [newPatientObj, ...prev]);
+      setForm(prev => ({ ...prev, patient_id: ptData.id }));
       setShowInlineAddPatient(false);
       setToast({ message: "✓ Patient créé et sélectionné automatiquement", type: 'success' });
     } catch (err: any) {
@@ -400,16 +467,22 @@ function DoctorHealthEventsPage() {
     setFormError(null);
 
     if (!form.patient_id) {
-      setFormError("Veuillez sélectionner ou créer un patient.");
+      setFormError("Veuillez sélectionner un patient.");
       return;
     }
 
-    const finalIncidentType = form.incident_type === "Autre événement de santé publique"
-      ? (form.custom_incident.trim() || "Événement de santé publique")
-      : form.incident_type;
+    if (!form.reportable_disease_id) {
+      setFormError("Veuillez sélectionner une maladie / événement déclarable.");
+      return;
+    }
 
     if (!form.description.trim()) {
       setFormError("Veuillez fournir une description détaillée des observations médicales.");
+      return;
+    }
+
+    if (!selectedProofFile) {
+      setFormError("Veuillez joindre obligatoirement un document de preuve.");
       return;
     }
 
@@ -421,37 +494,159 @@ function DoctorHealthEventsPage() {
     setSubmitting(true);
 
     try {
-      const { error: insertErr } = await supabase
+      // 1. Insert Health Event Record First
+      const { data: newEvt, error: insertErr } = await supabase
         .from('health_events')
         .insert([{
           doctor_id: currentDoctor.id, // Strictly scoped to authenticated doctor
           facility_id: currentDoctor.facilityId, // Strictly scoped to doctor's facility
           patient_id: form.patient_id,
-          incident_type: finalIncidentType,
+          reportable_disease_id: form.reportable_disease_id,
           description: form.description.trim(),
           severity: form.severity,
-          status: 'PENDING',
-          patient_proof_url: form.patient_proof_url.trim() || null
-        }]);
+          patient_proof_url: null
+        }])
+        .select()
+        .single();
 
-      if (insertErr) throw new Error(insertErr.message);
+      if (insertErr || !newEvt) throw new Error(insertErr?.message || "Erreur lors de la création de l'événement.");
+
+      // 2. Upload Proof Document if selected
+      if (selectedProofFile) {
+        setUploadingProof(true);
+        setUploadProgress(35);
+
+        let proofPath = "";
+        try {
+          proofPath = await uploadProofDocument(newEvt.id, selectedProofFile);
+          setUploadProgress(85);
+        } catch (uploadErr: any) {
+          console.error("Proof file upload failed:", uploadErr);
+          // Rollback: Delete newly created event so incomplete record is not saved
+          await supabase.from('health_events').delete().eq('id', newEvt.id);
+          setFormError(uploadErr.message || "Impossible d'ajouter le document de preuve. Veuillez réessayer.");
+          return;
+        }
+
+        // 3. Update database record with proof path
+        const { error: updateErr } = await supabase
+          .from('health_events')
+          .update({ patient_proof_url: proofPath })
+          .eq('id', newEvt.id);
+
+        if (updateErr) {
+          // Cleanup uploaded storage file & rollback event creation
+          await deleteProofDocument(proofPath);
+          await supabase.from('health_events').delete().eq('id', newEvt.id);
+          throw new Error("Impossible d'associer le document de preuve à la déclaration.");
+        }
+        setUploadProgress(100);
+      }
 
       setShowCreateModal(false);
       setForm({
         patient_id: "",
-        incident_type: COMMON_INCIDENTS[0] || "",
-        custom_incident: "",
+        reportable_disease_id: "",
         description: "",
         severity: "MEDIUM",
         patient_proof_url: ""
       });
+      setSelectedProofFile(null);
       setToast({ message: "✓ Événement de santé déclaré avec succès", type: 'success' });
       loadData();
     } catch (err: any) {
       setFormError(err.message || "Erreur lors de la déclaration de l'événement.");
     } finally {
       setSubmitting(false);
+      setUploadingProof(false);
+      setUploadProgress(0);
     }
+  };
+
+  // Helper to View Proof Document with View-Only PatientProofViewer
+  const handleViewProofDocument = (proofPathOrUrl: string, eventId?: string) => {
+    setViewerModal({
+      open: true,
+      storagePath: proofPathOrUrl,
+      healthEventId: eventId || selectedEvent?.id,
+      documentTitle: extractFileName(proofPathOrUrl)
+    });
+  };
+
+  // Helper to Confirm & Delete Proof Document
+  const handleConfirmDeleteProof = async () => {
+    if (!deleteConfirmModal?.eventId || !deleteConfirmModal?.path) return;
+
+    setSubmitting(true);
+    try {
+      const { eventId, path } = deleteConfirmModal;
+
+      // 1. Delete file object from private storage bucket
+      await deleteProofDocument(path);
+
+      // 2. Set patient_proof_url to null in DB
+      const { error } = await supabase
+        .from('health_events')
+        .update({ patient_proof_url: null })
+        .eq('id', eventId);
+
+      if (error) throw error;
+
+      // 3. Update drawer state if open
+      if (selectedEvent && selectedEvent.id === eventId) {
+        setSelectedEvent((prev: any) => prev ? { ...prev, patient_proof_url: null } : null);
+      }
+
+      setDeleteConfirmModal(null);
+      setToast({ message: "✓ Document de preuve supprimé avec succès", type: 'success' });
+      loadData();
+    } catch (err: any) {
+      console.error("Error deleting proof document:", err);
+      setToast({ message: "Impossible de supprimer le document. Veuillez réessayer.", type: 'error' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Helper to Trigger AI Observation Enhancement
+  const handleEnhanceObservations = async () => {
+    if (!form.description.trim()) {
+      setAiError("Veuillez rédiger vos observations initiales avant de demander l'amélioration par l'IA.");
+      return;
+    }
+
+    setAiError(null);
+    setAiLoading(true);
+    const originalText = form.description.trim();
+
+    const result = await enhanceMedicalObservation(originalText);
+    setAiLoading(false);
+
+    if (result.success && result.structuredObservation && result.formattedPlainText) {
+      setAiProposal({
+        original: originalText,
+        structured: result.structuredObservation,
+        formattedPlainText: result.formattedPlainText
+      });
+    } else {
+      setAiError(result.error || "⚠️ Impossible d'améliorer le texte. Réessayer.");
+    }
+  };
+
+  // Helper to Accept AI Proposal and insert clean plain text into editable textarea
+  const handleAcceptAIProposal = () => {
+    if (aiProposal?.formattedPlainText) {
+      setForm((prev) => ({ ...prev, description: aiProposal.formattedPlainText }));
+      setAiProposal(null);
+      setAiError(null);
+      setToast({ message: "✓ Reformulation IA appliquée à vos observations", type: 'success' });
+    }
+  };
+
+  // Helper to Reject AI Proposal and retain doctor's original version
+  const handleRejectAIProposal = () => {
+    setAiProposal(null);
+    setAiError(null);
   };
 
   // Open Event Details Drawer
@@ -466,17 +661,19 @@ function DoctorHealthEventsPage() {
     const patientObj = Array.isArray(evt.patient) ? evt.patient[0] : evt.patient;
     const userObj = Array.isArray(patientObj?.users) ? patientObj.users[0] : patientObj?.users;
     const patientName = `${userObj?.first_name || ''} ${userObj?.last_name || ''}`.toLowerCase();
-    const incident = (evt.incident_type || '').toLowerCase();
+    
+    const diseaseObj = Array.isArray(evt.reportable_disease) ? evt.reportable_disease[0] : evt.reportable_disease;
+    const diseaseName = (diseaseObj?.name || '').toLowerCase();
     const nin = (patientObj?.nin || '').toLowerCase();
 
-    const matchesQuery = patientName.includes(q) || incident.includes(q) || nin.includes(q);
-    const matchesStatus = statusFilter === "ALL" || evt.status === statusFilter;
+    const matchesSearch = patientName.includes(q) || diseaseName.includes(q) || nin.includes(q);
+    const matchesDisease = diseaseFilter === "ALL" || evt.reportable_disease_id === diseaseFilter;
     const matchesSeverity = severityFilter === "ALL" || evt.severity === severityFilter;
 
-    return matchesQuery && matchesStatus && matchesSeverity;
+    return matchesSearch && matchesDisease && matchesSeverity;
   });
 
-  const isFilterActive = searchQuery.trim() !== "" || statusFilter !== "ALL" || severityFilter !== "ALL";
+  const isFilterActive = searchQuery.trim() !== "" || diseaseFilter !== "ALL" || severityFilter !== "ALL";
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -545,13 +742,13 @@ function DoctorHealthEventsPage() {
 
       {/* Modern Filter Toolbar */}
       <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, padding: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', alignItems: 'center' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '14px', alignItems: 'center' }}>
           {/* Integrated Search Input */}
           <div style={{ position: 'relative' }}>
             <Search size={18} color={COLORS.muted} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
             <input
               type="text"
-              placeholder="Rechercher un incident, patient..."
+              placeholder="Rechercher une maladie, patient..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -567,18 +764,17 @@ function DoctorHealthEventsPage() {
             />
           </div>
 
-          {/* Custom Status Dropdown */}
-          <CustomDropdown
+          {/* Disease Filter */}
+          <SelectDropdown
+            value={diseaseFilter}
+            onChange={setDiseaseFilter}
+            placeholder="Toutes les maladies"
+            icon={Activity}
+            searchable={true}
             options={[
-              { value: 'ALL', label: 'Tous les statuts' },
-              { value: 'PENDING', label: 'En attente', dotColor: '#D97706' },
-              { value: 'VALIDATED', label: 'Validé', dotColor: '#15803D' },
-              { value: 'REJECTED', label: 'Refusé', dotColor: '#DC2626' },
-              { value: 'ARCHIVED', label: 'Archivé', dotColor: '#6B7280' },
+              { value: 'ALL', label: 'Toutes les maladies' },
+              ...diseasesList.map((d) => ({ value: d.id, label: d.name }))
             ]}
-            value={statusFilter}
-            onChange={setStatusFilter}
-            placeholder="Statut..."
           />
 
           {/* Custom Severity Dropdown */}
@@ -601,10 +797,10 @@ function DoctorHealthEventsPage() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `1px solid ${COLORS.border}`, paddingTop: '12px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '600' }}>Filtres actifs :</span>
-              {statusFilter !== 'ALL' && (
+              {diseaseFilter !== 'ALL' && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '700' }}>
-                  Statut : {statusFilter === 'PENDING' ? 'En attente' : statusFilter === 'VALIDATED' ? 'Validé' : statusFilter === 'REJECTED' ? 'Refusé' : 'Archivé'}
-                  <X size={14} style={{ cursor: 'pointer' }} onClick={() => setStatusFilter('ALL')} />
+                  Maladie : {diseasesList.find(d => d.id === diseaseFilter)?.name || 'Spécifique'}
+                  <X size={14} style={{ cursor: 'pointer' }} onClick={() => setDiseaseFilter('ALL')} />
                 </span>
               )}
               {severityFilter !== 'ALL' && (
@@ -624,7 +820,7 @@ function DoctorHealthEventsPage() {
             <button
               onClick={() => {
                 setSearchQuery('');
-                setStatusFilter('ALL');
+                setDiseaseFilter('ALL');
                 setSeverityFilter('ALL');
               }}
               style={{ background: 'none', border: 'none', color: COLORS.teal, cursor: 'pointer', fontWeight: '700', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -643,11 +839,10 @@ function DoctorHealthEventsPage() {
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ backgroundColor: '#f8fafc', borderBottom: `1px solid ${COLORS.border}` }}>
               <tr>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Incident</th>
+                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maladie</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Patient</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Établissement</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gravité</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Statut</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Actions</th>
               </tr>
@@ -657,11 +852,13 @@ function DoctorHealthEventsPage() {
                 const patientObj = Array.isArray(evt.patient) ? evt.patient[0] : evt.patient;
                 const userObj = Array.isArray(patientObj?.users) ? patientObj.users[0] : patientObj?.users;
                 const pName = userObj ? `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() : "Patient";
+                const diseaseObj = Array.isArray(evt.reportable_disease) ? evt.reportable_disease[0] : evt.reportable_disease;
+                const diseaseName = diseaseObj?.name || "Maladie non spécifiée";
 
                 return (
                   <tr key={evt.id} style={{ borderBottom: idx !== filteredEvents.length - 1 ? `1px solid ${COLORS.border}` : 'none' }}>
                     <td style={{ padding: '16px 20px' }}>
-                      <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.95rem' }}>{evt.incident_type}</div>
+                      <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.95rem' }}>{diseaseName}</div>
                     </td>
 
                     <td style={{ padding: '16px 20px' }}>
@@ -697,32 +894,13 @@ function DoctorHealthEventsPage() {
                       )}
                     </td>
 
-                    {/* Status Badge */}
-                    <td style={{ padding: '16px 20px' }}>
-                      {evt.status === 'PENDING' && (
-                        <span style={{ backgroundColor: '#FEF3C7', color: '#B45309', padding: '3px 10px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700' }}>
-                          En attente
-                        </span>
-                      )}
-                      {evt.status === 'VALIDATED' && (
-                        <span style={{ backgroundColor: '#DCFCE7', color: '#15803D', padding: '3px 10px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700' }}>
-                          Validé
-                        </span>
-                      )}
-                      {evt.status === 'REJECTED' && (
-                        <span style={{ backgroundColor: '#FEE2E2', color: '#DC2626', padding: '3px 10px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700' }}>
-                          Refusé
-                        </span>
-                      )}
-                      {evt.status === 'ARCHIVED' && (
-                        <span style={{ backgroundColor: '#F3F4F6', color: '#4B5563', padding: '3px 10px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700' }}>
-                          Archivé
-                        </span>
-                      )}
-                    </td>
-
-                    <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                      {new Date(evt.created_at).toLocaleDateString('fr-FR')}
+                    <td style={{ padding: '16px 20px', color: COLORS.navy, fontSize: '0.85rem' }}>
+                      <div style={{ fontWeight: '700' }}>
+                        {new Date(evt.created_at).toLocaleDateString('fr-FR')}
+                      </div>
+                      <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '2px' }}>
+                        {new Date(evt.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </div>
                     </td>
 
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
@@ -739,7 +917,7 @@ function DoctorHealthEventsPage() {
 
               {filteredEvents.length === 0 && (
                 <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3.5rem', color: COLORS.muted }}>
+                  <td colSpan={6} style={{ textAlign: 'center', padding: '3.5rem', color: COLORS.muted }}>
                     Aucun événement de santé ne correspond à vos filtres.
                   </td>
                 </tr>
@@ -757,7 +935,7 @@ function DoctorHealthEventsPage() {
               <div>
                 <div style={{ fontSize: '0.78rem', color: COLORS.teal, textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.05em' }}>Fiche Événement</div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: '800', margin: '4px 0 0 0' }}>
-                  {selectedEvent.incident_type}
+                  {(Array.isArray(selectedEvent.reportable_disease) ? selectedEvent.reportable_disease[0] : selectedEvent.reportable_disease)?.name || "Événement de Santé"}
                 </h3>
               </div>
               <button onClick={() => setShowDrawer(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
@@ -774,21 +952,15 @@ function DoctorHealthEventsPage() {
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Statut</div>
-                  <div style={{ fontWeight: '700', color: COLORS.teal, fontSize: '0.9rem', marginTop: '2px' }}>
-                    {selectedEvent.status}
-                  </div>
-                </div>
-                <div>
                   <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Structure</div>
                   <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem', marginTop: '2px' }}>
                     {selectedEvent.facility?.name}
                   </div>
                 </div>
                 <div>
-                  <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Date de création</div>
+                  <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Date & Heure de création</div>
                   <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem', marginTop: '2px' }}>
-                    {new Date(selectedEvent.created_at).toLocaleDateString('fr-FR')}
+                    {new Date(selectedEvent.created_at).toLocaleDateString('fr-FR')} à {new Date(selectedEvent.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
                   </div>
                 </div>
               </div>
@@ -803,15 +975,53 @@ function DoctorHealthEventsPage() {
                 </div>
               </div>
 
-              {/* Patient Proof URL if available */}
-              {selectedEvent.patient_proof_url && (
-                <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: '14px', padding: '16px', backgroundColor: COLORS.lightTeal }}>
-                  <div style={{ fontSize: '0.8rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <LinkIcon size={16} /> Pièce Justificative / Preuve
+              {/* Patient Proof Document Card in Drawer */}
+              {selectedEvent.patient_proof_url ? (
+                <div style={{ border: `1px solid ${COLORS.teal}`, borderRadius: '14px', padding: '16px', backgroundColor: COLORS.lightTeal }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Paperclip size={16} /> Document de Preuve
                   </div>
-                  <a href={selectedEvent.patient_proof_url} target="_blank" rel="noreferrer" style={{ fontSize: '0.85rem', color: COLORS.navy, fontWeight: '700', textDecoration: 'underline' }}>
-                    Consulter le document joint
-                  </a>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: 'white', color: COLORS.teal }}>
+                        {isPdfFile(selectedEvent.patient_proof_url) ? <FileText size={22} /> : <ImageIcon size={22} />}
+                      </div>
+                      <div>
+                        <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem' }}>
+                          {extractFileName(selectedEvent.patient_proof_url)}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: COLORS.muted }}>
+                          Stockage sécurisé (Accès restreint)
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <button
+                        type="button"
+                        onClick={() => handleViewProofDocument(selectedEvent.patient_proof_url)}
+                        style={{ padding: '6px 14px', borderRadius: '8px', border: `1px solid ${COLORS.teal}`, background: 'white', color: COLORS.teal, fontWeight: '700', fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Eye size={15} /> Voir
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setDeleteConfirmModal({
+                          open: true,
+                          eventId: selectedEvent.id,
+                          path: selectedEvent.patient_proof_url
+                        })}
+                        style={{ padding: '6px 12px', borderRadius: '8px', border: '1px solid #FECACA', background: '#FEF2F2', color: '#DC2626', fontWeight: '600', fontSize: '0.82rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <Trash2 size={15} /> Supprimer
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div style={{ border: `1px dashed ${COLORS.border}`, borderRadius: '14px', padding: '14px', backgroundColor: '#F8FAFC', color: COLORS.muted, fontSize: '0.85rem', textAlign: 'center' }}>
+                  Aucun document joint
                 </div>
               )}
             </div>
@@ -841,7 +1051,7 @@ function DoctorHealthEventsPage() {
 
               {/* Wide 2-Column Horizontal Grid */}
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                {/* Left Column: Patient & Incident Type */}
+                {/* Left Column: Patient & Reportable Disease */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {/* Patient Selection */}
                   <div>
@@ -855,38 +1065,63 @@ function DoctorHealthEventsPage() {
                       options={patientsList.map((p) => {
                         const userObj = Array.isArray(p.users) ? p.users[0] : p.users;
                         const name = userObj ? `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() : 'Patient';
+                        const age = calculateAge(p.date_of_birth);
+
                         return {
                           value: p.id,
                           label: name,
-                          sublabel: `NIN: ${p.nin}`
+                          sublabel: (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '3px', flexWrap: 'wrap' }}>
+                              <span style={{ color: '#64748B', fontWeight: '500', fontSize: '0.75rem' }}>NIN: {p.nin}</span>
+                              {age !== null && (
+                                <span style={{ backgroundColor: '#F1F5F9', color: '#062C54', padding: '1px 6px', borderRadius: '4px', fontWeight: '700', fontSize: '0.72rem' }}>
+                                  {age} ans
+                                </span>
+                              )}
+                              {p.gender && (
+                                <span style={{
+                                  backgroundColor: p.gender === 'F' ? '#FCE7F3' : '#DBEAFE',
+                                  color: p.gender === 'F' ? '#DB2777' : '#1D4ED8',
+                                  padding: '1px 6px',
+                                  borderRadius: '4px',
+                                  fontWeight: '700',
+                                  fontSize: '0.72rem'
+                                }}>
+                                  {p.gender === 'F' ? '♀ Femme' : '♂ Homme'}
+                                </span>
+                              )}
+                              {p.blood_type && (
+                                <span style={{ backgroundColor: '#FEF2F2', color: '#DC2626', padding: '1px 6px', borderRadius: '4px', fontWeight: '800', fontSize: '0.72rem' }}>
+                                  🩸 {p.blood_type}
+                                </span>
+                              )}
+                            </div>
+                          )
                         };
                       })}
                     />
                   </div>
 
-                  {/* Incident Type */}
+                  {/* Reportable Disease Selection */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Type d'Incident / Événement Sanitaire *</label>
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                      Maladie / Événement déclarable *
+                    </label>
                     <SelectDropdown
-                      value={form.incident_type || ""}
-                      onChange={(val) => setForm({ ...form, incident_type: val })}
-                      placeholder="Sélectionner le type d'incident..."
+                      value={form.reportable_disease_id}
+                      onChange={(val) => setForm({ ...form, reportable_disease_id: val })}
+                      placeholder="🔍 Rechercher une maladie..."
                       icon={Activity}
                       searchable={true}
-                      options={COMMON_INCIDENTS.map((inc) => ({
-                        value: inc,
-                        label: inc
+                      options={diseasesList.map((dis) => ({
+                        value: dis.id,
+                        label: dis.name
                       }))}
                     />
-
-                    {form.incident_type === "Autre événement de santé publique" && (
-                      <input
-                        type="text"
-                        placeholder="Spécifiez le type d'incident..."
-                        value={form.custom_incident}
-                        onChange={(e) => setForm({ ...form, custom_incident: e.target.value })}
-                        style={{ width: '100%', padding: '10px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', marginTop: '8px' }}
-                      />
+                    {diseasesList.length === 0 && (
+                      <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>
+                        Chargement des maladies déclarables...
+                      </div>
                     )}
                   </div>
                 </div>
@@ -902,45 +1137,274 @@ function DoctorHealthEventsPage() {
                     />
                   </div>
 
-                  {/* Proof URL (Optional) */}
+                  {/* Proof File Uploader */}
                   <div>
-                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Lien de Preuve / Document Joint (optionnel)</label>
-                    <input
-                      type="url"
-                      value={form.patient_proof_url}
-                      onChange={(e) => setForm({ ...form, patient_proof_url: e.target.value })}
-                      placeholder="https://..."
-                      style={{ width: '100%', padding: '10px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
+                    <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                      Document de preuve *
+                    </label>
+                    <ProofUploader
+                      selectedFile={selectedProofFile}
+                      onFileSelect={setSelectedProofFile}
+                      uploading={uploadingProof}
+                      uploadProgress={uploadProgress}
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Description (Full Width Below Grid) */}
-              <div>
-                <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>Observations Médicales & Circonstances *</label>
+              {/* Description & AI Enhancement (Full Width Below Grid) */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: '700', color: COLORS.navy }}>
+                    Observations Médicales & Circonstances *
+                  </label>
+                  {aiLoading && (
+                    <span style={{ fontSize: '0.78rem', color: COLORS.teal, fontWeight: '700', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Sparkles size={14} className="animate-spin" /> Analyse en cours... L'IA structure vos observations.
+                    </span>
+                  )}
+                </div>
+
                 <textarea
-                  rows={3}
+                  rows={4}
                   required
                   value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Décrivez l'événement, les symptômes observés et les circonstances particulières..."
-                  style={{ width: '100%', padding: '11px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', resize: 'vertical' }}
+                  onChange={(e) => {
+                    setForm({ ...form, description: e.target.value });
+                    if (aiError) setAiError(null);
+                  }}
+                  placeholder="Décrivez les observations cliniques, les circonstances de l'événement et les informations pertinentes..."
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '12px',
+                    border: `1px solid ${COLORS.border}`,
+                    fontSize: '0.9rem',
+                    outline: 'none',
+                    resize: 'vertical',
+                    backgroundColor: 'white',
+                    color: COLORS.navy,
+                    lineHeight: '1.5'
+                  }}
                 />
+
+                {/* AI Enhancement Trigger Button */}
+                {!aiProposal && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '10px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <button
+                        type="button"
+                        disabled={aiLoading || submitting || !form.description.trim()}
+                        onClick={handleEnhanceObservations}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '7px',
+                          padding: '7px 15px',
+                          borderRadius: '999px',
+                          border: `1px solid ${COLORS.teal}`,
+                          backgroundColor: aiLoading ? COLORS.lightTeal : 'white',
+                          color: COLORS.teal,
+                          fontWeight: '700',
+                          fontSize: '0.82rem',
+                          cursor: (aiLoading || !form.description.trim()) ? 'not-allowed' : 'pointer',
+                          boxShadow: '0 2px 6px rgba(15, 162, 155, 0.12)',
+                          opacity: (!form.description.trim()) ? 0.6 : 1,
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <Sparkles size={15} />
+                        {aiLoading ? "Amélioration..." : "✨ Améliorer avec l'IA"}
+                      </button>
+                      <span style={{ fontSize: '0.76rem', color: COLORS.muted, fontWeight: '500' }}>
+                        Reformule et structure vos observations sans modifier les faits.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* AI Error Alert Banner */}
+                {aiError && (
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    borderRadius: '10px',
+                    backgroundColor: '#FEF2F2',
+                    border: '1px solid #FECACA',
+                    color: '#DC2626',
+                    fontSize: '0.82rem',
+                    fontWeight: '600'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <AlertTriangle size={16} />
+                      <span>{aiError}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleEnhanceObservations}
+                      style={{ background: 'none', border: 'none', color: '#DC2626', fontWeight: '700', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.78rem' }}
+                    >
+                      Réessayer
+                    </button>
+                  </div>
+                )}
+
+                {/* Side-by-Side Proposal Review UI */}
+                {aiProposal && (
+                  <div style={{
+                    border: `1px solid ${COLORS.teal}`,
+                    borderRadius: '14px',
+                    backgroundColor: COLORS.lightTeal,
+                    padding: '18px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '14px',
+                    boxShadow: '0 4px 16px rgba(15, 162, 155, 0.1)'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: COLORS.teal, fontWeight: '800', fontSize: '0.88rem' }}>
+                        <Sparkles size={18} /> ✨ Proposition améliorée par l'IA
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '600' }}>
+                        Examinez les deux versions avant de choisir
+                      </span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                      {/* Original Doctor Version */}
+                      <div style={{ backgroundColor: 'white', border: `1px solid ${COLORS.border}`, borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <div style={{ fontSize: '0.75rem', fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase' }}>
+                          Votre version originale
+                        </div>
+                        <div style={{ fontSize: '0.86rem', color: COLORS.navy, lineHeight: '1.5', whiteSpace: 'pre-wrap', flex: 1 }}>
+                          {aiProposal.original}
+                        </div>
+                      </div>
+
+                      {/* AI Enhanced Proposal Version - Non-Repetitive Presentation */}
+                      <div style={{ backgroundColor: 'white', border: `2px solid ${COLORS.teal}`, borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <Sparkles size={14} /> {aiProposal.structured.title || "Observations cliniques"}
+                        </div>
+
+                        {aiProposal.structured.paragraph ? (
+                          <div style={{ fontSize: '0.86rem', color: COLORS.navy, lineHeight: '1.5', whiteSpace: 'pre-wrap', flex: 1, fontWeight: '500' }}>
+                            {aiProposal.structured.paragraph}
+                          </div>
+                        ) : aiProposal.structured.items && aiProposal.structured.items.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, marginTop: '4px' }}>
+                            {aiProposal.structured.items.map((item, idx) => (
+                              <div key={idx} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '0.84rem', color: COLORS.navy, lineHeight: '1.45' }}>
+                                <span style={{ color: COLORS.teal, fontWeight: '800', fontSize: '0.9rem', lineHeight: '1.2' }}>•</span>
+                                <div style={{ flex: 1 }}>
+                                  <strong style={{ color: COLORS.navy, fontWeight: '700' }}>{item.label}</strong>
+                                  {item.content ? <span style={{ color: COLORS.text }}> — {item.content}</span> : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {/* Review Actions */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', borderTop: '1px solid rgba(15, 162, 155, 0.2)', paddingTop: '12px' }}>
+                      <button
+                        type="button"
+                        onClick={handleRejectAIProposal}
+                        style={{
+                          padding: '8px 16px',
+                          borderRadius: '8px',
+                          border: `1px solid ${COLORS.border}`,
+                          backgroundColor: 'white',
+                          color: COLORS.text,
+                          fontWeight: '600',
+                          fontSize: '0.84rem',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        Garder ma version
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={handleAcceptAIProposal}
+                        style={{
+                          padding: '8px 20px',
+                          borderRadius: '8px',
+                          border: 'none',
+                          backgroundColor: COLORS.teal,
+                          color: 'white',
+                          fontWeight: '700',
+                          fontSize: '0.84rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          boxShadow: '0 2px 8px rgba(15, 162, 155, 0.25)'
+                        }}
+                      >
+                        <Check size={16} /> Utiliser cette version
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '4px', borderTop: `1px solid ${COLORS.border}`, paddingTop: '16px' }}>
                 <button type="button" onClick={() => setShowCreateModal(false)} style={{ padding: '10px 18px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer' }}>
                   Annuler (ESC)
                 </button>
-                <button type="submit" disabled={submitting} style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: COLORS.navy, color: 'white', fontWeight: '700', cursor: 'pointer' }}>
-                  {submitting ? "Transmission..." : "Transmettre la déclaration →"}
+                <button type="submit" disabled={submitting || uploadingProof || aiLoading} style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: COLORS.navy, color: 'white', fontWeight: '700', cursor: 'pointer' }}>
+                  {submitting || uploadingProof ? "Transmission..." : "Transmettre la déclaration →"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {/* Delete Proof Confirmation Modal */}
+      {deleteConfirmModal && deleteConfirmModal.open && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.6)', zIndex: 130, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '24px', maxWidth: '420px', width: '100%', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: '800', color: COLORS.navy, margin: '0 0 8px 0' }}>
+              Supprimer le document ?
+            </h3>
+            <p style={{ fontSize: '0.88rem', color: COLORS.muted, margin: '0 0 20px 0', lineHeight: '1.5' }}>
+              Ce document sera définitivement supprimé de ce dossier.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmModal(null)}
+                style={{ padding: '8px 16px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                Annuler
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteProof}
+                disabled={submitting}
+                style={{ padding: '8px 18px', borderRadius: '8px', border: 'none', background: '#DC2626', color: 'white', fontWeight: '700', cursor: 'pointer', fontSize: '0.85rem' }}
+              >
+                {submitting ? "Suppression..." : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View-Only Patient Proof Document Viewer */}
+      <PatientProofViewer
+        open={viewerModal.open}
+        onClose={() => setViewerModal({ open: false, storagePath: null })}
+        storagePath={viewerModal.storagePath}
+        healthEventId={viewerModal.healthEventId}
+        documentTitle={viewerModal.documentTitle}
+      />
     </div>
   );
 }

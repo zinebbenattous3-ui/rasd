@@ -29,6 +29,7 @@ import { Route as SuperadminFacilitiesRouteImport } from './routes/superadmin/fa
 import { Route as SuperadminHealthAuthoritiesRouteImport } from './routes/superadmin/health-authorities'
 import { Route as SuperadminInspectorsRouteImport } from './routes/superadmin/inspectors'
 import { Route as SuperadminProfileRouteImport } from './routes/superadmin/profile'
+import { Route as SuperadminReportableDiseasesRouteImport } from './routes/superadmin/reportable-diseases'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -132,6 +133,12 @@ const SuperadminProfileRoute = SuperadminProfileRouteImport.update({
   path: '/profile',
   getParentRoute: () => SuperadminRoute,
 } as any)
+const SuperadminReportableDiseasesRoute =
+  SuperadminReportableDiseasesRouteImport.update({
+    id: '/reportable-diseases',
+    path: '/reportable-diseases',
+    getParentRoute: () => SuperadminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -151,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
   '/superadmin/inspectors': typeof SuperadminInspectorsRoute
   '/superadmin/profile': typeof SuperadminProfileRoute
+  '/superadmin/reportable-diseases': typeof SuperadminReportableDiseasesRoute
   '/doctor/': typeof DoctorIndexRoute
   '/health-authority/': typeof HealthAuthorityIndexRoute
   '/superadmin/': typeof SuperadminIndexRoute
@@ -170,6 +178,7 @@ export interface FileRoutesByTo {
   '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
   '/superadmin/inspectors': typeof SuperadminInspectorsRoute
   '/superadmin/profile': typeof SuperadminProfileRoute
+  '/superadmin/reportable-diseases': typeof SuperadminReportableDiseasesRoute
   '/doctor': typeof DoctorIndexRoute
   '/health-authority': typeof HealthAuthorityIndexRoute
   '/superadmin': typeof SuperadminIndexRoute
@@ -193,6 +202,7 @@ export interface FileRoutesById {
   '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
   '/superadmin/inspectors': typeof SuperadminInspectorsRoute
   '/superadmin/profile': typeof SuperadminProfileRoute
+  '/superadmin/reportable-diseases': typeof SuperadminReportableDiseasesRoute
   '/doctor/': typeof DoctorIndexRoute
   '/health-authority/': typeof HealthAuthorityIndexRoute
   '/superadmin/': typeof SuperadminIndexRoute
@@ -217,6 +227,7 @@ export interface FileRouteTypes {
     | '/superadmin/health-authorities'
     | '/superadmin/inspectors'
     | '/superadmin/profile'
+    | '/superadmin/reportable-diseases'
     | '/doctor/'
     | '/health-authority/'
     | '/superadmin/'
@@ -236,6 +247,7 @@ export interface FileRouteTypes {
     | '/superadmin/health-authorities'
     | '/superadmin/inspectors'
     | '/superadmin/profile'
+    | '/superadmin/reportable-diseases'
     | '/doctor'
     | '/health-authority'
     | '/superadmin'
@@ -258,6 +270,7 @@ export interface FileRouteTypes {
     | '/superadmin/health-authorities'
     | '/superadmin/inspectors'
     | '/superadmin/profile'
+    | '/superadmin/reportable-diseases'
     | '/doctor/'
     | '/health-authority/'
     | '/superadmin/'
@@ -415,6 +428,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SuperadminProfileRouteImport
       parentRoute: typeof SuperadminRoute
     }
+    '/superadmin/reportable-diseases': {
+      id: '/superadmin/reportable-diseases'
+      path: '/reportable-diseases'
+      fullPath: '/superadmin/reportable-diseases'
+      preLoaderRoute: typeof SuperadminReportableDiseasesRouteImport
+      parentRoute: typeof SuperadminRoute
+    }
   }
 }
 
@@ -458,6 +478,7 @@ interface SuperadminRouteChildren {
   SuperadminHealthAuthoritiesRoute: typeof SuperadminHealthAuthoritiesRoute
   SuperadminInspectorsRoute: typeof SuperadminInspectorsRoute
   SuperadminProfileRoute: typeof SuperadminProfileRoute
+  SuperadminReportableDiseasesRoute: typeof SuperadminReportableDiseasesRoute
   SuperadminIndexRoute: typeof SuperadminIndexRoute
 }
 
@@ -466,6 +487,7 @@ const SuperadminRouteChildren: SuperadminRouteChildren = {
   SuperadminHealthAuthoritiesRoute: SuperadminHealthAuthoritiesRoute,
   SuperadminInspectorsRoute: SuperadminInspectorsRoute,
   SuperadminProfileRoute: SuperadminProfileRoute,
+  SuperadminReportableDiseasesRoute: SuperadminReportableDiseasesRoute,
   SuperadminIndexRoute: SuperadminIndexRoute,
 }
 

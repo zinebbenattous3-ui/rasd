@@ -15,7 +15,7 @@ export function FeedItem({ event }: { event: HealthEvent }) {
   return (
     <li className="feed-item">
       <div className="feed-item-top">
-        <p className="feed-title">{event.incident_type}</p>
+        <p className="feed-title">{event.reportable_disease?.name || "Maladie"}</p>
         <SeverityBadge severity={event.severity} />
       </div>
       <p className="feed-desc">{event.description}</p>

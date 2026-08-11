@@ -1,10 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { 
   Users, 
   Activity, 
-  Clock, 
   CheckCircle2, 
   Plus, 
   ChevronRight, 
@@ -12,7 +11,16 @@ import {
   Stethoscope,
   Calendar,
   AlertTriangle,
-  UserPlus
+  UserPlus,
+  Building2,
+  TrendingUp,
+  HeartPulse,
+  ShieldAlert,
+  Droplet,
+  BarChart2,
+  ArrowUpRight,
+  Sparkles,
+  PieChart as PieChartIcon
 } from "lucide-react";
 
 export const Route = createFileRoute("/doctor/")({
@@ -29,27 +37,60 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
+type TimeRange = "7D" | "30D" | "6M" | "12M";
+
+interface PatientDemographics {
+  femaleCount: number;
+  maleCount: number;
+  femalePct: number;
+  malePct: number;
+  totalUniquePatients: number;
+}
+
+interface BloodTypeDistribution {
+  [key: string]: number;
+}
+
+interface DiseaseStat {
+  id: string;
+  name: string;
+  count: number;
+  pct: number;
+}
+
+interface SeverityDistribution {
+  LOW: number;
+  MEDIUM: number;
+  HIGH: number;
+  CRITICAL: number;
+}
+
 function DoctorDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [currentDoctor, setCurrentDoctor] = useState<any>(null);
-  
-  // Real Statistics
-  const [stats, setStats] = useState({
-    patientsCount: 0,
-    totalEvents: 0,
-    pendingEvents: 0,
-    validatedEvents: 0
-  });
+  const [timeRange, setTimeRange] = useState<TimeRange>("6M");
 
-  // Recent Activity
-  const [recentPatients, setRecentPatients] = useState<any[]>([]);
-  const [recentEvents, setRecentEvents] = useState<any[]>([]);
+  // Raw fetched datasets for current doctor
+  const [doctorEvents, setDoctorEvents] = useState<any[]>([]);
+  const [doctorPatientsMap, setDoctorPatientsMap] = useState<Map<string, any>>(new Map());
 
+  // Today's formatted date string in French
+  const todayFormatted = useMemo(() => {
+    const d = new Date();
+    return d.toLocaleDateString("fr-FR", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric"
+    });
+  }, []);
+
+  // Fetch all Doctor scoped statistics
   const loadDashboardData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch current Doctor identity & scope
-      const { data: docData } = await supabase
+      // 1. Fetch current Doctor identity & facility scope
+      const { data: docData, error: docErr } = await supabase
         .from('doctors')
         .select(`
           *,
@@ -69,79 +110,68 @@ function DoctorDashboardPage() {
         .limit(1)
         .maybeSingle();
 
-      if (!docData?.user_id) {
-        setLoading(false);
-        return;
-      }
+      if (docErr) throw docErr;
 
-      const userObj = Array.isArray(docData.users) ? docData.users[0] : docData.users;
-      const facObj = Array.isArray(docData.facility) ? docData.facility[0] : docData.facility;
+      if (docData && docData.users) {
+        const userObj = Array.isArray(docData.users) ? docData.users[0] : docData.users;
+        const facObj = Array.isArray(docData.facility) ? docData.facility[0] : docData.facility;
 
-      setCurrentDoctor({
-        id: docData.id,
-        userId: userObj?.id,
-        firstName: userObj?.first_name || '',
-        lastName: userObj?.last_name || '',
-        specialty: docData.specialty,
-        facilityId: docData.facility_id,
-        facilityName: facObj?.name,
-        facilityWilaya: facObj?.wilaya
-      });
+        const doctorObj = {
+          id: docData.id,
+          userId: docData.user_id,
+          firstName: userObj?.first_name || '',
+          lastName: userObj?.last_name || '',
+          specialty: docData.specialty,
+          facilityId: docData.facility_id,
+          facilityName: facObj?.name || 'Établissement non spécifié',
+          facilityWilaya: facObj?.wilaya || 'Algérie'
+        };
+        setCurrentDoctor(doctorObj);
 
-      // 2. Fetch real count of total patients
-      const { data: patientsData, count: patientsCount } = await supabase
-        .from('patients')
-        .select(`
-          *,
-          users:user_id (
-            first_name,
-            last_name,
-            email
-          )
-        `, { count: 'exact' })
-        .order('created_at', { ascending: false });
-
-      if (patientsData) {
-        setRecentPatients(patientsData.slice(0, 4));
-      }
-
-      // 3. Fetch real health events declared by this doctor
-      const { data: eventsData } = await supabase
-        .from('health_events')
-        .select(`
-          *,
-          patient:patient_id (
-            id,
-            nin,
-            users:user_id (
-              first_name,
-              last_name
+        // 2. Fetch all health events declared by THIS doctor
+        const { data: eventsData, error: eventsErr } = await supabase
+          .from('health_events')
+          .select(`
+            *,
+            patient:patient_id (
+              id,
+              nin,
+              gender,
+              blood_type,
+              date_of_birth,
+              users:user_id (
+                first_name,
+                last_name
+              )
+            ),
+            reportable_disease:reportable_disease_id (
+              id,
+              name
             )
-          ),
-          facility:facility_id (
-            name,
-            wilaya
-          )
-        `)
-        .eq('doctor_id', docData.id)
-        .order('created_at', { ascending: false });
+          `)
+          .eq('doctor_id', docData.id)
+          .order('created_at', { ascending: false });
 
-      if (eventsData) {
-        const totalEvents = eventsData.length;
-        const pendingEvents = eventsData.filter(e => e.status === 'PENDING').length;
-        const validatedEvents = eventsData.filter(e => e.status === 'VALIDATED').length;
+        if (eventsErr) throw eventsErr;
 
-        setStats({
-          patientsCount: patientsCount || patientsData?.length || 0,
-          totalEvents,
-          pendingEvents,
-          validatedEvents
-        });
+        if (eventsData) {
+          setDoctorEvents(eventsData);
 
-        setRecentEvents(eventsData.slice(0, 5));
+          // Extract unique patient map
+          const pMap = new Map<string, any>();
+          eventsData.forEach(evt => {
+            if (evt.patient_id) {
+              const pObj = Array.isArray(evt.patient) ? evt.patient[0] : evt.patient;
+              if (pObj && !pMap.has(evt.patient_id)) {
+                pMap.set(evt.patient_id, pObj);
+              }
+            }
+          });
+          setDoctorPatientsMap(pMap);
+        }
       }
     } catch (err) {
-      console.error("Error loading Doctor dashboard data:", err);
+      console.error("Error loading Doctor dashboard statistics:", err);
     } finally {
       setLoading(false);
     }
@@ -151,35 +181,236 @@ function DoctorDashboardPage() {
     loadDashboardData();
   }, []);
 
+  // COMPUTED METRICS
+
+  // 1. Unique Patients Count
+  const totalUniquePatients = doctorPatientsMap.size;
+
+  // 2. Events Count & Current Month Events Count
+  const totalEvents = doctorEvents.length;
+  const currentMonthEventsCount = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    return doctorEvents.filter(e => new Date(e.created_at) >= startOfMonth).length;
+  }, [doctorEvents]);
+
+  // 3. New Patients Created This Month
+  const currentMonthNewPatientsCount = useMemo(() => {
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    let count = 0;
+    doctorEvents.forEach(e => {
+      if (new Date(e.created_at) >= startOfMonth) {
+        count++;
+      }
+    });
+    return count;
+  }, [doctorEvents]);
+
+  // 4. Critical Events Count
+  const criticalEventsCount = useMemo(() => {
+    return doctorEvents.filter(e => e.severity === 'CRITICAL').length;
+  }, [doctorEvents]);
+
+  // 5. Severity Distribution
+  const severityDist: SeverityDistribution = useMemo(() => {
+    const dist = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
+    doctorEvents.forEach(e => {
+      if (e.severity in dist) {
+        dist[e.severity as keyof SeverityDistribution]++;
+      }
+    });
+    return dist;
+  }, [doctorEvents]);
+
+  // 6. Top Declared Diseases
+  const topDiseases: DiseaseStat[] = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    doctorEvents.forEach(evt => {
+      const diseaseObj = Array.isArray(evt.reportable_disease) ? evt.reportable_disease[0] : evt.reportable_disease;
+      const dName = diseaseObj?.name || 'Non spécifiée';
+      const dId = evt.reportable_disease_id || dName;
+
+      if (map.has(dName)) {
+        map.get(dName)!.count++;
+      } else {
+        map.set(dName, { id: dId, name: dName, count: 1 });
+      }
+    });
+
+    const sorted = Array.from(map.values()).sort((a, b) => b.count - a.count);
+    return sorted.map(d => ({
+      ...d,
+      pct: totalEvents > 0 ? Math.round((d.count / totalEvents) * 100) : 0
+    }));
+  }, [doctorEvents, totalEvents]);
+
+  const topDiseaseName = topDiseases.length > 0 ? topDiseases[0]?.name || "Aucune" : "Aucune";
+  const topDiseaseCount = topDiseases.length > 0 ? topDiseases[0]?.count || 0 : 0;
+
+  // 7. Patient Gender Demographics (Derived from unique patients)
+  const demographics: PatientDemographics = useMemo(() => {
+    let female = 0;
+    let male = 0;
+    doctorPatientsMap.forEach(p => {
+      if (p.gender === 'F') female++;
+      else if (p.gender === 'M') male++;
+    });
+
+    const total = female + male;
+    return {
+      femaleCount: female,
+      maleCount: male,
+      femalePct: total > 0 ? Math.round((female / total) * 100) : 0,
+      malePct: total > 0 ? Math.round((male / total) * 100) : 0,
+      totalUniquePatients: total
+    };
+  }, [doctorPatientsMap]);
+
+  // 8. Blood Group Distribution (Derived from unique patients)
+  const bloodTypeDist: { label: string; count: number; pct: number }[] = useMemo(() => {
+    const knownGroups: Record<string, number> = {
+      'A+': 0, 'A-': 0, 'B+': 0, 'B-': 0, 'AB+': 0, 'AB-': 0, 'O+': 0, 'O-': 0
+    };
+    let totalKnown = 0;
+
+    doctorPatientsMap.forEach(p => {
+      if (p.blood_type && p.blood_type in knownGroups) {
+        knownGroups[p.blood_type] = (knownGroups[p.blood_type] || 0) + 1;
+        totalKnown++;
+      }
+    });
+
+    const list = Object.entries(knownGroups).map(([type, count]) => ({
+      label: type,
+      count,
+      pct: totalKnown > 0 ? Math.round((count / totalKnown) * 100) : 0
+    }));
+
+    // Sort by count descending
+    return list.sort((a, b) => b.count - a.count);
+  }, [doctorPatientsMap]);
+
+  const dominantBloodGroup = bloodTypeDist.length > 0 && bloodTypeDist[0] && bloodTypeDist[0].count > 0 ? bloodTypeDist[0] : null;
+
+  // 9. Time Series Activity Data
+  const activityTimeSeries = useMemo(() => {
+    const now = new Date();
+    const points: { label: string; count: number }[] = [];
+
+    if (timeRange === "7D") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now);
+        d.setDate(d.getDate() - i);
+        const dayStr = d.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric" });
+        const count = doctorEvents.filter(e => {
+          const ed = new Date(e.created_at);
+          return ed.toDateString() === d.toDateString();
+        }).length;
+        points.push({ label: dayStr, count });
+      }
+    } else if (timeRange === "30D") {
+      for (let i = 4; i >= 0; i--) {
+        const dEnd = new Date(now);
+        dEnd.setDate(dEnd.getDate() - i * 6);
+        const dStart = new Date(dEnd);
+        dStart.setDate(dStart.getDate() - 6);
+        const label = `Sem. ${5 - i}`;
+        const count = doctorEvents.filter(e => {
+          const ed = new Date(e.created_at);
+          return ed >= dStart && ed <= dEnd;
+        }).length;
+        points.push({ label, count });
+      }
+    } else {
+      // 6M or 12M
+      const monthsCount = timeRange === "12M" ? 12 : 6;
+      for (let i = monthsCount - 1; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthLabel = d.toLocaleDateString("fr-FR", { month: "short" });
+        const count = doctorEvents.filter(e => {
+          const ed = new Date(e.created_at);
+          return ed.getFullYear() === d.getFullYear() && ed.getMonth() === d.getMonth();
+        }).length;
+        points.push({ label: monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1), count });
+      }
+    }
+    return points;
+  }, [doctorEvents, timeRange]);
+
+  const maxActivityValue = Math.max(...activityTimeSeries.map(p => p.count), 1);
+
+  // 10. Critical & High Priority Attention List
+  const criticalAttentionEvents = useMemo(() => {
+    return doctorEvents
+      .filter(e => e.severity === 'CRITICAL' || e.severity === 'HIGH')
+      .slice(0, 4);
+  }, [doctorEvents]);
+
+  // Derived Key Metrics
+  const avgEventsPerPatient = totalUniquePatients > 0 ? (totalEvents / totalUniquePatients).toFixed(1) : "0.0";
+  const criticalRate = totalEvents > 0 ? ((criticalEventsCount / totalEvents) * 100).toFixed(1) : "0.0";
+
+  // Helper for masking patient ID for privacy
+  const getMaskedPatientId = (patientObj: any) => {
+    if (!patientObj) return "Patient #••••";
+    if (patientObj.nin && patientObj.nin.length >= 4) {
+      return `Patient #••••${patientObj.nin.slice(-4)}`;
+    }
+    return `Patient #${patientObj.id.slice(0, 6)}`;
+  };
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
-      {/* Premium Greeting Banner */}
-      <div style={{
-        backgroundColor: COLORS.navy,
-        borderRadius: '20px',
-        padding: '32px 36px',
-        color: 'white',
-        background: `linear-gradient(135deg, ${COLORS.navy} 0%, #0d4680 100%)`,
-        boxShadow: '0 12px 30px -5px rgba(6, 44, 84, 0.25)',
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        flexWrap: 'wrap',
-        gap: '20px'
-      }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', maxWidth: '1240px', margin: '0 auto', paddingBottom: '40px' }}>
+      
+      {/* 1. COMPACT HERO HEADER SECTION */}
+      <div 
+        style={{
+          backgroundColor: COLORS.navy,
+          borderRadius: '20px',
+          padding: '28px 32px',
+          color: 'white',
+          background: `linear-gradient(135deg, ${COLORS.navy} 0%, #0c3e70 100%)`,
+          boxShadow: '0 10px 30px -5px rgba(6, 44, 84, 0.25)',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '20px'
+        }}
+      >
         <div>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px', backgroundColor: 'rgba(15, 162, 155, 0.2)', padding: '6px 14px', borderRadius: '20px', fontSize: '0.82rem', fontWeight: '600', color: '#5eead4', marginBottom: '12px' }}>
-            <Stethoscope size={16} /> Espace Praticien Déclarant
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
+            <span style={{ backgroundColor: 'rgba(15, 162, 155, 0.2)', color: '#5eead4', padding: '4px 12px', borderRadius: '20px', fontSize: '0.8rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+              <Stethoscope size={14} /> Espace Praticien Déclarant
+            </span>
+            <span style={{ fontSize: '0.8rem', color: '#94A3B8', textTransform: 'capitalize' }}>
+              • {todayFormatted}
+            </span>
           </div>
-          <h1 style={{ fontSize: '2.1rem', fontWeight: '800', margin: '0 0 8px 0', letterSpacing: '-0.02em' }}>
-            Bonjour, Dr. {currentDoctor?.firstName || ''} {currentDoctor?.lastName || ''}
+
+          <h1 style={{ fontSize: '1.85rem', fontWeight: '800', margin: '0 0 6px 0', letterSpacing: '-0.02em' }}>
+            Bonjour, Dr. {currentDoctor?.firstName || ''} {currentDoctor?.lastName || ''} 👋
           </h1>
-          <p style={{ margin: 0, opacity: 0.9, fontSize: '0.98rem', color: '#e2e8f0', maxWidth: '600px', lineHeight: '1.5' }}>
-            Voici l'aperçu de vos activités médicales et déclarations d'événements de santé pour {currentDoctor?.facilityName || 'votre établissement'}.
+          <p style={{ margin: 0, opacity: 0.9, fontSize: '0.92rem', color: '#CBD5E1', maxWidth: '650px' }}>
+            Voici un aperçu synthétique et en temps réel de votre activité médicale et épidémiologique.
           </p>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginTop: '12px', fontSize: '0.85rem', color: '#93C5FD' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: '700' }}>
+              <Building2 size={15} color={COLORS.teal} />
+              <span>🏥 {currentDoctor?.facilityName}</span>
+            </div>
+            {currentDoctor?.specialty && (
+              <>
+                <span>•</span>
+                <span style={{ color: '#E2E8F0', fontWeight: '600' }}>Spécialité : {currentDoctor.specialty}</span>
+              </>
+            )}
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
           <button 
             onClick={loadDashboardData}
             disabled={loading}
@@ -187,268 +418,735 @@ function DoctorDashboardPage() {
               backgroundColor: 'rgba(255,255,255,0.1)',
               color: 'white',
               border: '1px solid rgba(255,255,255,0.2)',
-              padding: '11px 18px',
-              borderRadius: '12px',
-              fontWeight: '600',
+              padding: '10px 16px',
+              borderRadius: '10px',
+              fontWeight: '700',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              fontSize: '0.88rem'
+              fontSize: '0.85rem',
+              transition: 'background-color 0.2s'
             }}
           >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
+            <RefreshCw size={15} className={loading ? "animate-spin" : ""} />
             Actualiser
           </button>
         </div>
       </div>
 
-      {/* Quick Action Toolbar */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-        <Link
-          to="/doctor/patients"
-          style={{
-            backgroundColor: COLORS.teal,
-            color: 'white',
-            padding: '18px 20px',
-            borderRadius: '16px',
-            textDecoration: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 4px 14px rgba(15, 162, 155, 0.3)',
-            transition: 'transform 0.15s'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <UserPlus size={22} />
-            <div>
-              <div style={{ fontWeight: '800', fontSize: '0.98rem' }}>+ Ajouter un patient</div>
-              <div style={{ fontSize: '0.78rem', opacity: 0.9 }}>Nouvelle fiche médicale</div>
+      {/* 2. KPI CARDS ROW */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+        
+        {/* Card 1: Patients Suivis */}
+        <div style={{ backgroundColor: 'white', borderRadius: '18px', padding: '20px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Patients suivis
+            </span>
+            <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
+              <Users size={18} />
             </div>
           </div>
-          <ChevronRight size={18} />
-        </Link>
+          {loading ? (
+            <div style={{ height: '36px', width: '80px', backgroundColor: '#E2E8F0', borderRadius: '8px', marginTop: '10px' }} className="animate-pulse" />
+          ) : (
+            <>
+              <div style={{ fontSize: '2rem', fontWeight: '800', color: COLORS.navy, marginTop: '8px', letterSpacing: '-0.02em' }}>
+                {totalUniquePatients}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: COLORS.teal, fontWeight: '700', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <TrendingUp size={13} />
+                <span>+{currentMonthNewPatientsCount} événements ce mois</span>
+              </div>
+            </>
+          )}
+        </div>
 
-        <Link
-          to="/doctor/health-events"
-          style={{
-            backgroundColor: COLORS.navy,
-            color: 'white',
-            padding: '18px 20px',
-            borderRadius: '16px',
-            textDecoration: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 4px 14px rgba(6, 44, 84, 0.25)',
-            transition: 'transform 0.15s'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Plus size={22} color={COLORS.teal} />
-            <div>
-              <div style={{ fontWeight: '800', fontSize: '0.98rem' }}>+ Déclarer un événement</div>
-              <div style={{ fontSize: '0.78rem', opacity: 0.9 }}>Signalement sanitaire</div>
+        {/* Card 2: Événements Déclarés */}
+        <div style={{ backgroundColor: 'white', borderRadius: '18px', padding: '20px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Événements déclarés
+            </span>
+            <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: '#EFF6FF', color: '#1D4ED8' }}>
+              <Activity size={18} />
             </div>
           </div>
-          <ChevronRight size={18} />
-        </Link>
+          {loading ? (
+            <div style={{ height: '36px', width: '80px', backgroundColor: '#E2E8F0', borderRadius: '8px', marginTop: '10px' }} className="animate-pulse" />
+          ) : (
+            <>
+              <div style={{ fontSize: '2rem', fontWeight: '800', color: COLORS.navy, marginTop: '8px', letterSpacing: '-0.02em' }}>
+                {totalEvents}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#1D4ED8', fontWeight: '700', marginTop: '4px' }}>
+                {currentMonthEventsCount} déclarés ce mois
+              </div>
+            </>
+          )}
+        </div>
 
-        <Link
-          to="/doctor/patients"
-          style={{
-            backgroundColor: 'white',
-            color: COLORS.navy,
-            padding: '18px 20px',
-            borderRadius: '16px',
-            border: `1px solid ${COLORS.border}`,
-            textDecoration: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
+        {/* Card 3: Événements Critiques */}
+        <div 
+          style={{ 
+            backgroundColor: criticalEventsCount > 0 ? '#FEF2F2' : 'white', 
+            borderRadius: '18px', 
+            padding: '20px', 
+            border: `1px solid ${criticalEventsCount > 0 ? '#FCA5A5' : COLORS.border}`, 
+            boxShadow: '0 2px 10px rgba(0,0,0,0.02)' 
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Users size={20} color={COLORS.teal} />
-            <div style={{ fontWeight: '700', fontSize: '0.92rem' }}>Consulter les Patients</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', color: criticalEventsCount > 0 ? '#B91C1C' : COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Événements critiques
+            </span>
+            <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: criticalEventsCount > 0 ? '#FEE2E2' : '#F1F5F9', color: criticalEventsCount > 0 ? '#DC2626' : COLORS.muted }}>
+              <ShieldAlert size={18} />
+            </div>
           </div>
-          <ChevronRight size={18} color={COLORS.muted} />
-        </Link>
+          {loading ? (
+            <div style={{ height: '36px', width: '80px', backgroundColor: '#E2E8F0', borderRadius: '8px', marginTop: '10px' }} className="animate-pulse" />
+          ) : (
+            <>
+              <div style={{ fontSize: '2rem', fontWeight: '800', color: criticalEventsCount > 0 ? '#DC2626' : COLORS.navy, marginTop: '8px', letterSpacing: '-0.02em' }}>
+                {criticalEventsCount}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: criticalEventsCount > 0 ? '#B91C1C' : COLORS.muted, fontWeight: '700', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                {criticalEventsCount > 0 ? (
+                  <>
+                    <AlertTriangle size={13} color="#DC2626" />
+                    <span>Attention requise ({criticalRate}% du total)</span>
+                  </>
+                ) : (
+                  <span>✓ Aucune urgence critique</span>
+                )}
+              </div>
+            </>
+          )}
+        </div>
 
-        <Link
-          to="/doctor/health-events"
-          style={{
-            backgroundColor: 'white',
-            color: COLORS.navy,
-            padding: '18px 20px',
-            borderRadius: '16px',
-            border: `1px solid ${COLORS.border}`,
-            textDecoration: 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.02)'
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Activity size={20} color={COLORS.teal} />
-            <div style={{ fontWeight: '700', fontSize: '0.92rem' }}>Historique Événements</div>
+        {/* Card 4: Maladie la Plus Déclarée */}
+        <div style={{ backgroundColor: 'white', borderRadius: '18px', padding: '20px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span style={{ fontSize: '0.78rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              Maladie la plus déclarée
+            </span>
+            <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: '#FEF3C7', color: '#D97706' }}>
+              <HeartPulse size={18} />
+            </div>
           </div>
-          <ChevronRight size={18} color={COLORS.muted} />
-        </Link>
+          {loading ? (
+            <div style={{ height: '36px', width: '80px', backgroundColor: '#E2E8F0', borderRadius: '8px', marginTop: '10px' }} className="animate-pulse" />
+          ) : (
+            <>
+              <div style={{ fontSize: '1.25rem', fontWeight: '800', color: COLORS.navy, marginTop: '12px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={topDiseaseName}>
+                {topDiseaseName}
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#D97706', fontWeight: '700', marginTop: '4px' }}>
+                {topDiseaseCount} événement{topDiseaseCount > 1 ? 's' : ''} enregistré{topDiseaseCount > 1 ? 's' : ''}
+              </div>
+            </>
+          )}
+        </div>
+
       </div>
 
-      {/* Real Statistics Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
-        {/* Total Patients */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.78rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Patients Enregistrés</span>
-            <Users size={18} color={COLORS.teal} />
+      {/* 3. PATIENT DEMOGRAPHICS & BLOOD TYPES (2 COLUMNS) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+        
+        {/* Gender Distribution Card */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <PieChartIcon size={18} color={COLORS.teal} /> Profil des patients
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Répartition par sexe de la population suivie</p>
+            </div>
+            <span style={{ fontSize: '0.75rem', fontWeight: '700', color: COLORS.teal, backgroundColor: COLORS.lightTeal, padding: '4px 10px', borderRadius: '999px' }}>
+              {demographics.totalUniquePatients} uniques
+            </span>
           </div>
-          <div style={{ fontSize: '2.1rem', fontWeight: '800', color: COLORS.navy, marginTop: '8px' }}>{stats.patientsCount}</div>
-          <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '4px' }}>Patients au registre</div>
+
+          {loading ? (
+            <div style={{ height: '140px', backgroundColor: '#F8FAFC', borderRadius: '14px' }} className="animate-pulse" />
+          ) : demographics.totalUniquePatients === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: COLORS.muted, fontSize: '0.88rem' }}>
+              Aucune donnée patient disponible pour le moment.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Segmented Donut / Progress Bar */}
+              <div style={{ height: '20px', width: '100%', backgroundColor: '#F1F5F9', borderRadius: '999px', overflow: 'hidden', display: 'flex' }}>
+                <div 
+                  style={{ 
+                    width: `${demographics.femalePct}%`, 
+                    backgroundColor: '#EC4899', 
+                    transition: 'width 0.5s ease-out' 
+                  }} 
+                  title={`Femmes: ${demographics.femalePct}%`} 
+                />
+                <div 
+                  style={{ 
+                    width: `${demographics.malePct}%`, 
+                    backgroundColor: '#3B82F6', 
+                    transition: 'width 0.5s ease-out' 
+                  }} 
+                  title={`Hommes: ${demographics.malePct}%`} 
+                />
+              </div>
+
+              {/* Legend & Stat Boxes */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div style={{ backgroundColor: '#FDF2F8', border: '1px solid #FBCFE8', borderRadius: '14px', padding: '14px 18px' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#DB2777', fontWeight: '700', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#EC4899' }} />
+                    Femmes
+                  </div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#9D174D', marginTop: '4px' }}>
+                    {demographics.femalePct}%
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '2px' }}>
+                    {demographics.femaleCount} patientes
+                  </div>
+                </div>
+
+                <div style={{ backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '14px', padding: '14px 18px' }}>
+                  <div style={{ fontSize: '0.75rem', color: '#2563EB', fontWeight: '700', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#3B82F6' }} />
+                    Hommes
+                  </div>
+                  <div style={{ fontSize: '1.4rem', fontWeight: '800', color: '#1E40AF', marginTop: '4px' }}>
+                    {demographics.malePct}%
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '2px' }}>
+                    {demographics.maleCount} patients
+                  </div>
+                </div>
+              </div>
+
+              {/* Derived Population Insight */}
+              <div style={{ fontSize: '0.8rem', color: COLORS.muted, display: 'flex', alignItems: 'center', gap: '6px', fontStyle: 'italic', backgroundColor: '#F8FAFC', padding: '10px 14px', borderRadius: '10px' }}>
+                <Sparkles size={14} color={COLORS.teal} />
+                <span>
+                  Population majoritairement {demographics.femalePct >= demographics.malePct ? `féminine (${demographics.femalePct}%)` : `masculine (${demographics.malePct}%)`}.
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Total Health Events */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.78rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Mes Déclarations</span>
-            <Activity size={18} color="#1D4ED8" />
+        {/* Blood Group Analytics Card */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Droplet size={18} color="#DC2626" /> Groupes sanguins
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Distribution sérologique des patients connus</p>
+            </div>
+            {dominantBloodGroup && (
+              <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#B91C1C', backgroundColor: '#FEE2E2', padding: '4px 10px', borderRadius: '999px' }}>
+                Dominant: {dominantBloodGroup.label} ({dominantBloodGroup.pct}%)
+              </span>
+            )}
           </div>
-          <div style={{ fontSize: '2.1rem', fontWeight: '800', color: '#1D4ED8', marginTop: '8px' }}>{stats.totalEvents}</div>
-          <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '4px' }}>Événements déclarés</div>
+
+          {loading ? (
+            <div style={{ height: '140px', backgroundColor: '#F8FAFC', borderRadius: '14px' }} className="animate-pulse" />
+          ) : bloodTypeDist.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: COLORS.muted, fontSize: '0.88rem' }}>
+              Aucun groupe sanguin enregistré.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {bloodTypeDist.slice(0, 5).map((b) => (
+                <div key={b.label} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ width: '36px', fontWeight: '800', color: COLORS.navy, fontSize: '0.85rem' }}>
+                    {b.label}
+                  </div>
+                  <div style={{ flex: 1, backgroundColor: '#F1F5F9', height: '12px', borderRadius: '6px', overflow: 'hidden' }}>
+                    <div 
+                      style={{ 
+                        width: `${Math.max(b.pct, b.count > 0 ? 5 : 0)}%`, 
+                        backgroundColor: COLORS.teal, 
+                        height: '100%', 
+                        borderRadius: '6px',
+                        transition: 'width 0.4s ease-out'
+                      }} 
+                    />
+                  </div>
+                  <div style={{ width: '55px', textAlign: 'right', fontSize: '0.8rem', fontWeight: '700', color: COLORS.text }}>
+                    {b.count} <span style={{ color: COLORS.muted, fontWeight: '400', fontSize: '0.72rem' }}>({b.pct}%)</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
-        {/* Pending Events */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.78rem', color: '#B45309', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>En Attente de Validation</span>
-            <Clock size={18} color="#D97706" />
-          </div>
-          <div style={{ fontSize: '2.1rem', fontWeight: '800', color: '#B45309', marginTop: '8px' }}>{stats.pendingEvents}</div>
-          <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '4px' }}>En revue par l'autorité</div>
-        </div>
-
-        {/* Validated Events */}
-        <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.78rem', color: '#15803D', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Événements Validés</span>
-            <CheckCircle2 size={18} color="#15803D" />
-          </div>
-          <div style={{ fontSize: '2.1rem', fontWeight: '800', color: '#15803D', marginTop: '8px' }}>{stats.validatedEvents}</div>
-          <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '4px' }}>Validés et enregistrés</div>
-        </div>
       </div>
 
-      {/* Two Column Layout: Recent Declared Events & Patient Registrations */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: '24px' }}>
-        {/* Left Column: Recent Health Events */}
-        <div style={{ backgroundColor: 'white', borderRadius: '18px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+      {/* 4. HEALTH EVENTS BY DISEASE & SEVERITY DISTRIBUTION (2 COLUMNS) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+        
+        {/* Horizontal Bar Chart: Diseases */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
             <div>
-              <h3 style={{ fontSize: '1.08rem', fontWeight: '800', color: COLORS.navy, margin: 0 }}>Dernières Déclarations</h3>
-              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Événements sanitaires récents</p>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <BarChart2 size={18} color={COLORS.teal} /> Maladies les plus déclarées
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Palmarès des pathologies signalées par vos soins</p>
             </div>
-            <Link to="/doctor/health-events" style={{ color: COLORS.teal, textDecoration: 'none', fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              Voir tout <ChevronRight size={16} />
+          </div>
+
+          {loading ? (
+            <div style={{ height: '180px', backgroundColor: '#F8FAFC', borderRadius: '14px' }} className="animate-pulse" />
+          ) : topDiseases.length === 0 ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: COLORS.muted, fontSize: '0.88rem' }}>
+              Aucun événement de santé enregistré pour le moment.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {topDiseases.slice(0, 6).map((d) => (
+                <div key={d.name} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy }}>
+                    <span>{d.name}</span>
+                    <span>{d.count} evt{d.count > 1 ? 's' : ''} ({d.pct}%)</span>
+                  </div>
+                  <div style={{ backgroundColor: '#F1F5F9', height: '10px', borderRadius: '5px', overflow: 'hidden' }}>
+                    <div 
+                      style={{ 
+                        width: `${Math.max(d.pct, 4)}%`, 
+                        backgroundColor: COLORS.navy, 
+                        height: '100%',
+                        borderRadius: '5px',
+                        transition: 'width 0.4s ease-out'
+                      }} 
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Severity Ring / Donut Distribution */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldAlert size={18} color="#EA580C" /> Niveau de gravité
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Répartition des cas selon l'urgence médicale</p>
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ height: '180px', backgroundColor: '#F8FAFC', borderRadius: '14px' }} className="animate-pulse" />
+          ) : totalEvents === 0 ? (
+            <div style={{ padding: '3rem', textAlign: 'center', color: COLORS.muted, fontSize: '0.88rem' }}>
+              Aucune donnée de gravité enregistrée.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              {/* Stacked Severity Bar */}
+              <div style={{ height: '16px', width: '100%', backgroundColor: '#F1F5F9', borderRadius: '8px', overflow: 'hidden', display: 'flex' }}>
+                <div style={{ width: `${(severityDist.LOW / totalEvents) * 100}%`, backgroundColor: '#3B82F6' }} title="Faible" />
+                <div style={{ width: `${(severityDist.MEDIUM / totalEvents) * 100}%`, backgroundColor: '#F59E0B' }} title="Modérée" />
+                <div style={{ width: `${(severityDist.HIGH / totalEvents) * 100}%`, backgroundColor: '#EA580C' }} title="Élevée" />
+                <div style={{ width: `${(severityDist.CRITICAL / totalEvents) * 100}%`, backgroundColor: '#DC2626' }} title="Critique" />
+              </div>
+
+              {/* Grid Legend */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                <div style={{ padding: '10px 14px', borderRadius: '10px', backgroundColor: '#EFF6FF', border: '1px solid #BFDBFE' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#1E40AF', textTransform: 'uppercase' }}>🟢 Faible</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#1E3A8A', marginTop: '2px' }}>
+                    {severityDist.LOW} <span style={{ fontSize: '0.75rem', fontWeight: '500', color: COLORS.muted }}>({Math.round((severityDist.LOW / totalEvents) * 100)}%)</span>
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', borderRadius: '10px', backgroundColor: '#FEF3C7', border: '1px solid #FCD34D' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#92400E', textTransform: 'uppercase' }}>🟡 Modérée</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#78350F', marginTop: '2px' }}>
+                    {severityDist.MEDIUM} <span style={{ fontSize: '0.75rem', fontWeight: '500', color: COLORS.muted }}>({Math.round((severityDist.MEDIUM / totalEvents) * 100)}%)</span>
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', borderRadius: '10px', backgroundColor: '#FFEDD5', border: '1px solid #FDBA74' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#9A3412', textTransform: 'uppercase' }}>🟠 Élevée</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#7C2D12', marginTop: '2px' }}>
+                    {severityDist.HIGH} <span style={{ fontSize: '0.75rem', fontWeight: '500', color: COLORS.muted }}>({Math.round((severityDist.HIGH / totalEvents) * 100)}%)</span>
+                  </div>
+                </div>
+
+                <div style={{ padding: '10px 14px', borderRadius: '10px', backgroundColor: '#FEE2E2', border: '1px solid #FCA5A5' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: '800', color: '#991B1B', textTransform: 'uppercase' }}>🔴 Critique</div>
+                  <div style={{ fontSize: '1.1rem', fontWeight: '800', color: '#7F1D1D', marginTop: '2px' }}>
+                    {severityDist.CRITICAL} <span style={{ fontSize: '0.75rem', fontWeight: '500', color: COLORS.muted }}>({Math.round((severityDist.CRITICAL / totalEvents) * 100)}%)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* 5. ACTIVITY OVER TIME & ATTENTION REQUIRED (2 COLUMNS) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+        
+        {/* Activity Over Time Line / Bar Visualization */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '10px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <TrendingUp size={18} color={COLORS.teal} /> Activité médicale
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Évolution du volume de déclarations dans le temps</p>
+            </div>
+
+            {/* Time Range Selector */}
+            <div style={{ display: 'flex', backgroundColor: '#F1F5F9', padding: '3px', borderRadius: '10px', gap: '2px' }}>
+              {(["7D", "30D", "6M", "12M"] as TimeRange[]).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setTimeRange(r)}
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: timeRange === r ? 'white' : 'transparent',
+                    color: timeRange === r ? COLORS.navy : COLORS.muted,
+                    fontWeight: timeRange === r ? '800' : '600',
+                    fontSize: '0.75rem',
+                    cursor: 'pointer',
+                    boxShadow: timeRange === r ? '0 2px 4px rgba(0,0,0,0.05)' : 'none',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {r === '7D' ? '7j' : r === '30D' ? '30j' : r === '6M' ? '6 mois' : '1 an'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loading ? (
+            <div style={{ height: '180px', backgroundColor: '#F8FAFC', borderRadius: '14px' }} className="animate-pulse" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              {/* Histogram Bar Chart curve */}
+              <div style={{ display: 'flex', alignItems: 'flex-end', gap: '12px', height: '140px', paddingTop: '20px', borderBottom: `1px solid ${COLORS.border}` }}>
+                {activityTimeSeries.map((pt) => {
+                  const barHeightPct = Math.max((pt.count / maxActivityValue) * 100, 8);
+                  return (
+                    <div key={pt.label} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', height: '100%', justifyContent: 'flex-end' }}>
+                      <div style={{ fontSize: '0.72rem', fontWeight: '800', color: pt.count > 0 ? COLORS.navy : COLORS.muted, marginBottom: '4px' }}>
+                        {pt.count}
+                      </div>
+                      <div 
+                        style={{ 
+                          width: '100%', 
+                          maxWidth: '38px', 
+                          height: `${barHeightPct}%`, 
+                          backgroundColor: pt.count > 0 ? COLORS.teal : '#E2E8F0', 
+                          borderRadius: '6px 6px 0 0',
+                          transition: 'height 0.3s ease-out'
+                        }} 
+                      />
+                      <div style={{ fontSize: '0.72rem', color: COLORS.muted, fontWeight: '600', marginTop: '6px', whiteSpace: 'nowrap' }}>
+                        {pt.label}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: COLORS.muted }}>
+                <span>Moyenne : <strong>{avgEventsPerPatient} evt / patient</strong></span>
+                <span>Rapport d'activité : <strong>{totalEvents} déclarations</strong></span>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Critical Attention Events List */}
+        <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+            <div>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <ShieldAlert size={18} color="#DC2626" /> À surveiller
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Événements graves ou critiques nécessitant une attention</p>
+            </div>
+            <Link to="/doctor/health-events" style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.teal, textDecoration: 'none' }}>
+              Tout voir →
             </Link>
           </div>
 
           {loading ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: COLORS.muted }}>Chargement des déclarations...</div>
-          ) : recentEvents.length === 0 ? (
-            <div style={{ padding: '2.5rem', textAlign: 'center', color: COLORS.muted }}>
-              Aucun événement sanitaire déclaré pour le moment.
+            <div style={{ height: '180px', backgroundColor: '#F8FAFC', borderRadius: '14px' }} className="animate-pulse" />
+          ) : criticalAttentionEvents.length === 0 ? (
+            <div style={{ padding: '2.5rem 1.5rem', textAlign: 'center', backgroundColor: '#F0FDF4', borderRadius: '14px', border: '1px solid #86EFAC', color: '#15803D' }}>
+              <CheckCircle2 size={32} color="#16A34A" style={{ margin: '0 auto 8px auto' }} />
+              <div style={{ fontWeight: '800', fontSize: '0.95rem' }}>✓ Aucun événement critique</div>
+              <div style={{ fontSize: '0.8rem', opacity: 0.9, marginTop: '2px' }}>Toutes vos déclarations sont sous contrôle.</div>
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {recentEvents.map((evt) => {
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {criticalAttentionEvents.map((evt) => {
+                const diseaseObj = Array.isArray(evt.reportable_disease) ? evt.reportable_disease[0] : evt.reportable_disease;
                 const patientObj = Array.isArray(evt.patient) ? evt.patient[0] : evt.patient;
-                const userObj = Array.isArray(patientObj?.users) ? patientObj.users[0] : patientObj?.users;
-                const pName = userObj ? `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() : "Patient";
 
                 return (
-                  <div key={evt.id} style={{ padding: '14px', borderRadius: '12px', border: `1px solid ${COLORS.border}`, backgroundColor: '#FAFAFA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Link
+                    key={evt.id}
+                    to="/doctor/health-events"
+                    style={{
+                      textDecoration: 'none',
+                      padding: '12px 14px',
+                      borderRadius: '12px',
+                      border: `1px solid ${evt.severity === 'CRITICAL' ? '#FCA5A5' : '#FDBA74'}`,
+                      backgroundColor: evt.severity === 'CRITICAL' ? '#FEF2F2' : '#FFF7ED',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      transition: 'transform 0.15s'
+                    }}
+                  >
                     <div>
-                      <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.92rem' }}>{evt.incident_type}</div>
-                      <div style={{ fontSize: '0.8rem', color: COLORS.muted, marginTop: '2px' }}>
-                        Patient: <strong>{pName}</strong> (NIN: {patientObj?.nin || '—'})
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: '800', padding: '2px 8px', borderRadius: '999px', backgroundColor: evt.severity === 'CRITICAL' ? '#DC2626' : '#EA580C', color: 'white' }}>
+                          {evt.severity === 'CRITICAL' ? '🔴 CRITIQUE' : '🟠 ÉLEVÉE'}
+                        </span>
+                        <span style={{ fontWeight: '800', color: COLORS.navy, fontSize: '0.9rem' }}>
+                          {diseaseObj?.name || 'Maladie'}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '0.75rem', marginTop: '4px', display: 'inline-flex', gap: '8px' }}>
-                        <span style={{
-                          fontWeight: '700',
-                          color: evt.severity === 'CRITICAL' ? '#DC2626' : evt.severity === 'HIGH' ? '#EA580C' : evt.severity === 'MEDIUM' ? '#D97706' : '#2563EB'
-                        }}>
-                          Grave : {evt.severity}
-                        </span>
-                        <span>•</span>
-                        <span style={{
-                          fontWeight: '700',
-                          color: evt.status === 'VALIDATED' ? '#15803D' : evt.status === 'REJECTED' ? '#DC2626' : '#D97706'
-                        }}>
-                          Statut : {evt.status === 'VALIDATED' ? 'Validé' : evt.status === 'REJECTED' ? 'Refusé' : 'En attente'}
-                        </span>
+                      <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>
+                        {getMaskedPatientId(patientObj)} • Déclaré le {new Date(evt.created_at).toLocaleDateString('fr-FR')}
                       </div>
                     </div>
 
-                    <div style={{ fontSize: '0.75rem', color: COLORS.muted, textAlign: 'right' }}>
-                      <Calendar size={13} style={{ marginBottom: '2px' }} />
-                      <div>{new Date(evt.created_at).toLocaleDateString('fr-FR')}</div>
-                    </div>
-                  </div>
+                    <ArrowUpRight size={16} color={COLORS.muted} />
+                  </Link>
                 );
               })}
             </div>
           )}
         </div>
 
-        {/* Right Column: Patients Overview */}
-        <div style={{ backgroundColor: 'white', borderRadius: '18px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-            <div>
-              <h3 style={{ fontSize: '1.08rem', fontWeight: '800', color: COLORS.navy, margin: 0 }}>Patients Récents</h3>
-              <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Dernières fiches patients consultées</p>
-            </div>
-            <Link to="/doctor/patients" style={{ color: COLORS.teal, textDecoration: 'none', fontWeight: '600', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              Voir tout <ChevronRight size={16} />
-            </Link>
+      </div>
+
+      {/* 6. RECENT HEALTH EVENTS TABLE */}
+      <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h3 style={{ fontSize: '1.08rem', fontWeight: '800', color: COLORS.navy, margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Activity size={18} color={COLORS.teal} /> Derniers événements déclarés
+            </h3>
+            <p style={{ fontSize: '0.8rem', color: COLORS.muted, margin: '2px 0 0 0' }}>Journal de vos signalements épidémiologiques récents</p>
           </div>
 
-          {loading ? (
-            <div style={{ padding: '3rem', textAlign: 'center', color: COLORS.muted }}>Chargement des patients...</div>
-          ) : recentPatients.length === 0 ? (
-            <div style={{ padding: '2.5rem', textAlign: 'center', color: COLORS.muted }}>
-              Aucun patient enregistré.
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {recentPatients.map((p) => {
-                const userObj = Array.isArray(p.users) ? p.users[0] : p.users;
-                const pName = userObj ? `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() : "Patient";
+          <Link 
+            to="/doctor/health-events" 
+            style={{ 
+              color: COLORS.teal, 
+              textDecoration: 'none', 
+              fontWeight: '700', 
+              fontSize: '0.88rem', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: '4px' 
+            }}
+          >
+            <span>Voir tous les événements</span>
+            <ChevronRight size={16} />
+          </Link>
+        </div>
 
-                return (
-                  <div key={p.id} style={{ padding: '14px', borderRadius: '12px', border: `1px solid ${COLORS.border}`, backgroundColor: '#FAFAFA', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.92rem' }}>{pName}</div>
-                      <div style={{ fontSize: '0.8rem', color: COLORS.muted, marginTop: '2px' }}>
-                        NIN: {p.nin} • Sexe: {p.gender === 'M' ? 'Homme' : 'Femme'}
-                      </div>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <span style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.teal, backgroundColor: COLORS.lightTeal, padding: '3px 8px', borderRadius: '6px' }}>
-                        {p.blood_type || '—'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })}
+        {loading ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: COLORS.muted }}>Chargement du journal...</div>
+        ) : doctorEvents.length === 0 ? (
+          <div style={{ padding: '3rem', textAlign: 'center', color: COLORS.muted }}>
+            <div style={{ fontSize: '1.1rem', fontWeight: '800', color: COLORS.navy, marginBottom: '6px' }}>
+              Commencez votre suivi médical
             </div>
-          )}
+            <p style={{ margin: '0 0 16px 0', fontSize: '0.88rem', color: COLORS.muted }}>
+              Vous n'avez encore déclaré aucun événement de santé.
+            </p>
+            <Link
+              to="/doctor/health-events"
+              style={{
+                backgroundColor: COLORS.teal,
+                color: 'white',
+                padding: '10px 20px',
+                borderRadius: '10px',
+                textDecoration: 'none',
+                fontWeight: '700',
+                fontSize: '0.88rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}
+            >
+              <Plus size={16} />
+              <span>Déclarer un événement</span>
+            </Link>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ borderBottom: `1px solid ${COLORS.border}`, backgroundColor: '#F8FAFC' }}>
+                  <th style={{ padding: '12px 16px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maladie</th>
+                  <th style={{ padding: '12px 16px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Patient ID</th>
+                  <th style={{ padding: '12px 16px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Gravité</th>
+                  <th style={{ padding: '12px 16px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date & Heure</th>
+                </tr>
+              </thead>
+              <tbody>
+                {doctorEvents.slice(0, 6).map((evt, idx) => {
+                  const diseaseObj = Array.isArray(evt.reportable_disease) ? evt.reportable_disease[0] : evt.reportable_disease;
+                  const patientObj = Array.isArray(evt.patient) ? evt.patient[0] : evt.patient;
+
+                  return (
+                    <tr key={evt.id} style={{ borderBottom: idx !== doctorEvents.slice(0, 6).length - 1 ? `1px solid ${COLORS.border}` : 'none' }}>
+                      <td style={{ padding: '14px 16px', fontWeight: '800', color: COLORS.navy, fontSize: '0.9rem' }}>
+                        🏥 {diseaseObj?.name || 'Maladie non spécifiée'}
+                      </td>
+                      <td style={{ padding: '14px 16px', color: COLORS.text, fontSize: '0.85rem', fontWeight: '600' }}>
+                        {getMaskedPatientId(patientObj)}
+                      </td>
+                      <td style={{ padding: '14px 16px' }}>
+                        <span style={{
+                          backgroundColor: evt.severity === 'CRITICAL' ? '#FEE2E2' : evt.severity === 'HIGH' ? '#FFEDD5' : evt.severity === 'MEDIUM' ? '#FEF3C7' : '#DBEAFE',
+                          color: evt.severity === 'CRITICAL' ? '#DC2626' : evt.severity === 'HIGH' ? '#EA580C' : evt.severity === 'MEDIUM' ? '#D97706' : '#2563EB',
+                          padding: '3px 10px',
+                          borderRadius: '999px',
+                          fontSize: '0.78rem',
+                          fontWeight: '700'
+                        }}>
+                          {evt.severity === 'CRITICAL' ? '🔴 Critique' : evt.severity === 'HIGH' ? '🟠 Élevée' : evt.severity === 'MEDIUM' ? '🟡 Modérée' : '🟢 Faible'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '14px 16px', color: COLORS.muted, fontSize: '0.85rem' }}>
+                        {new Date(evt.created_at).toLocaleDateString('fr-FR')} à {new Date(evt.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* 7. QUICK ACTIONS TOOLBAR */}
+      <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+        <h4 style={{ fontSize: '1rem', fontWeight: '800', color: COLORS.navy, margin: '0 0 16px 0' }}>
+          Actions rapides
+        </h4>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
+          <Link
+            to="/doctor/health-events"
+            style={{
+              backgroundColor: COLORS.teal,
+              color: 'white',
+              padding: '16px 20px',
+              borderRadius: '14px',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              boxShadow: '0 4px 14px rgba(15, 162, 155, 0.25)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Plus size={18} />
+              <span>+ Déclarer un événement</span>
+            </div>
+            <ChevronRight size={18} />
+          </Link>
+
+          <Link
+            to="/doctor/patients"
+            style={{
+              backgroundColor: COLORS.navy,
+              color: 'white',
+              padding: '16px 20px',
+              borderRadius: '14px',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: '700',
+              fontSize: '0.9rem',
+              boxShadow: '0 4px 14px rgba(6, 44, 84, 0.2)'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <UserPlus size={18} color={COLORS.teal} />
+              <span>+ Ajouter un patient</span>
+            </div>
+            <ChevronRight size={18} />
+          </Link>
+
+          <Link
+            to="/doctor/patients"
+            style={{
+              backgroundColor: '#F8FAFC',
+              color: COLORS.navy,
+              border: `1px solid ${COLORS.border}`,
+              padding: '16px 20px',
+              borderRadius: '14px',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: '700',
+              fontSize: '0.9rem'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Users size={18} color={COLORS.teal} />
+              <span>Voir mes patients</span>
+            </div>
+            <ChevronRight size={18} color={COLORS.muted} />
+          </Link>
+
+          <Link
+            to="/doctor/health-events"
+            style={{
+              backgroundColor: '#F8FAFC',
+              color: COLORS.navy,
+              border: `1px solid ${COLORS.border}`,
+              padding: '16px 20px',
+              borderRadius: '14px',
+              textDecoration: 'none',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              fontWeight: '700',
+              fontSize: '0.9rem'
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Activity size={18} color={COLORS.teal} />
+              <span>Voir mes événements</span>
+            </div>
+            <ChevronRight size={18} color={COLORS.muted} />
+          </Link>
         </div>
       </div>
+
     </div>
   );
 }

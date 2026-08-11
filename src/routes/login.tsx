@@ -44,6 +44,9 @@ export const Route = createFileRoute("/login")({
   component: LoginPage,
 });
 
+import { useEffect } from "react";
+import { validateCurrentSession, getRoleDashboardPath } from "@/lib/auth";
+
 function LoginPage() {
   const navigate = useNavigate();
   const [session, setSession] = useState<null | { role: string; demo: boolean }>(null);
@@ -54,6 +57,18 @@ function LoginPage() {
     doctor: any;
     latestActionMessage?: string;
   }>(null);
+
+  // Redirect if user is already authenticated
+  useEffect(() => {
+    const checkExistingAuth = async () => {
+      const authResult = await validateCurrentSession();
+      if (authResult.authorized && authResult.user) {
+        const dest = getRoleDashboardPath(authResult.user.role);
+        navigate({ to: dest as any });
+      }
+    };
+    checkExistingAuth();
+  }, []);
 
   const handleAuthenticated = async (role: string, userDetails?: { id?: string; email?: string }, demo = false) => {
     const normRole = role.toUpperCase();

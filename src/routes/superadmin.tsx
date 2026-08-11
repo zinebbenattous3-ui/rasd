@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Outlet, Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, ShieldAlert, Building2, LogOut, User } from "lucide-react";
+import { LayoutDashboard, Users, ShieldAlert, Building2, LogOut, User, Activity } from "lucide-react";
 
 export const Route = createFileRoute("/superadmin")({
   component: SuperadminLayout,
@@ -15,11 +15,33 @@ const COLORS = {
   border: "#e2e8f0"
 };
 
+import { useEffect } from "react";
+import { validateCurrentSession, clearSession } from "@/lib/auth";
+
 function SuperadminLayout() {
   const navigate = useNavigate();
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  const handleLogout = () => {
+  useEffect(() => {
+    const verifyAuth = async () => {
+      const authResult = await validateCurrentSession(["SUPERADMIN"]);
+      if (!authResult.authorized) {
+        navigate({ to: authResult.redirectTo || "/login" as any });
+      }
+    };
+    verifyAuth();
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "rased_auth_session" && !e.newValue) {
+        navigate({ to: "/login" });
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
+  const handleLogout = async () => {
+    await clearSession();
     navigate({ to: "/login" });
   };
 
@@ -71,6 +93,10 @@ function SuperadminLayout() {
           <Link to="/superadmin/facilities" style={linkStyle} activeProps={{ style: activeStyle }}>
             <Building2 size={20} />
             <span>Établissements</span>
+          </Link>
+          <Link to="/superadmin/reportable-diseases" style={linkStyle} activeProps={{ style: activeStyle }}>
+            <Activity size={20} />
+            <span>Maladies Déclarables</span>
           </Link>
         </nav>
 

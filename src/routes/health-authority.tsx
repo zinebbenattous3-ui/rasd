@@ -17,6 +17,8 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
+import { validateCurrentSession, clearSession } from "@/lib/auth";
+
 function HealthAuthorityLayout() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -25,10 +27,29 @@ function HealthAuthorityLayout() {
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   useEffect(() => {
-    // Fetch currently logged in HEALTH_AUTHORITY user profile from users & health_authorities
+    // 1. Guard check: Validate HEALTH_AUTHORITY role and active user session in database
+    const verifyAuth = async () => {
+      const authResult = await validateCurrentSession(["HEALTH_AUTHORITY"]);
+      if (!authResult.authorized) {
+        navigate({ to: authResult.redirectTo || "/login" as any });
+        return;
+      }
+    };
+
+    verifyAuth();
+
+    // 2. Listen to storage changes for single active session per browser sync
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "rased_auth_session" && !e.newValue) {
+        navigate({ to: "/login" });
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+
+    // 3. Fetch currently logged in HEALTH_AUTHORITY user profile from users & health_authorities
     const loadProfile = async () => {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('health_authorities')
           .select(`
             *,
@@ -61,9 +82,12 @@ function HealthAuthorityLayout() {
     };
 
     loadProfile();
-  }, []);
 
-  const handleLogout = () => {
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, [location.pathname]);
+
+  const handleLogout = async () => {
+    await clearSession();
     navigate({ to: "/login" });
   };
 

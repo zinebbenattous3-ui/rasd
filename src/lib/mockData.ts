@@ -16,7 +16,11 @@ export interface HealthEvent {
   doctor_id: string;
   facility_id: string;
   patient_nin: string;
-  incident_type: string;
+  reportable_disease_id: string;
+  reportable_disease?: {
+    id: string;
+    name: string;
+  };
   description: string;
   severity: Severity;
   status: EventStatus;
@@ -39,7 +43,8 @@ export const healthEvents: HealthEvent[] = [
     doctor_id: "d1",
     facility_id: "f1",
     patient_nin: "1098•••4421",
-    incident_type: "Choléra suspecté",
+    reportable_disease_id: "rd-1",
+    reportable_disease: { id: "rd-1", name: "Choléra" },
     description: "Trois cas de diarrhée aiguë déshydratante rapportés dans le même quartier.",
     severity: "CRITICAL",
     status: "under_review",
@@ -51,7 +56,8 @@ export const healthEvents: HealthEvent[] = [
     doctor_id: "d2",
     facility_id: "f2",
     patient_nin: "2087•••1130",
-    incident_type: "Rougeole",
+    reportable_disease_id: "rd-2",
+    reportable_disease: { id: "rd-2", name: "Rougeole" },
     description: "Éruption fébrile chez un enfant non vacciné, contact scolaire.",
     severity: "HIGH",
     status: "confirmed",
@@ -63,7 +69,8 @@ export const healthEvents: HealthEvent[] = [
     doctor_id: "d3",
     facility_id: "f3",
     patient_nin: "3341•••7752",
-    incident_type: "Intoxication alimentaire",
+    reportable_disease_id: "rd-3",
+    reportable_disease: { id: "rd-3", name: "Intoxication alimentaire collective" },
     description: "Sept personnes admises après un repas collectif.",
     severity: "MEDIUM",
     status: "pending",
@@ -75,7 +82,8 @@ export const healthEvents: HealthEvent[] = [
     doctor_id: "d4",
     facility_id: "f4",
     patient_nin: "4410•••2298",
-    incident_type: "Leishmaniose cutanée",
+    reportable_disease_id: "rd-4",
+    reportable_disease: { id: "rd-4", name: "Leishmaniose cutanée/viscérale" },
     description: "Cas isolé, zone endémique, suivi dermatologique en cours.",
     severity: "LOW",
     status: "closed",
@@ -87,7 +95,8 @@ export const healthEvents: HealthEvent[] = [
     doctor_id: "d2",
     facility_id: "f2",
     patient_nin: "5520•••6614",
-    incident_type: "Méningite bactérienne",
+    reportable_disease_id: "rd-5",
+    reportable_disease: { id: "rd-5", name: "Méningite Cérébro-spinale" },
     description: "Syndrome méningé fébrile, ponction lombaire positive.",
     severity: "CRITICAL",
     status: "confirmed",

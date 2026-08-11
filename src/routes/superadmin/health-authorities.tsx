@@ -149,6 +149,18 @@ function HealthAuthoritiesPage() {
     fetchAuthorities();
   }, []);
 
+  // ESC key listener to close modal
+  useEffect(() => {
+    if (!showModal) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Esc") {
+        setShowModal(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showModal]);
+
   // Reset form when opening modal
   const handleOpenModal = () => {
     setForm({
