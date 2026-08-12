@@ -209,38 +209,133 @@ function DoctorLayout() {
         </div>
       </aside>
 
+      {/* Mobile Drawer Navigation Overlay */}
+      {mobileMenuOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(6, 44, 84, 0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 50,
+            display: 'flex'
+          }}
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <div
+            style={{
+              width: '280px',
+              maxWidth: '85vw',
+              backgroundColor: COLORS.navy,
+              color: 'white',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '4px 0 24px rgba(0,0,0,0.2)',
+              padding: '1.5rem 1rem'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: COLORS.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                  <Stethoscope size={18} />
+                </div>
+                <span style={{ fontWeight: '800', fontSize: '1.05rem', color: 'white' }}>Rased Medical</span>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={22} />
+              </button>
+            </div>
+
+            <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.exact 
+                  ? location.pathname === item.to 
+                  : location.pathname.startsWith(item.to);
+
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.85rem',
+                      padding: '0.85rem 1rem',
+                      borderRadius: '12px',
+                      color: isActive ? 'white' : '#94a3b8',
+                      backgroundColor: isActive ? COLORS.teal : 'transparent',
+                      fontWeight: isActive ? '700' : '500',
+                      textDecoration: 'none'
+                    }}
+                  >
+                    <Icon size={20} color={isActive ? 'white' : '#94a3b8'} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <button
+              onClick={handleLogout}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                width: '100%',
+                padding: '0.75rem 1rem',
+                borderRadius: '10px',
+                color: '#f87171',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: 'none',
+                fontWeight: '600',
+                cursor: 'pointer',
+                marginTop: 'auto'
+              }}
+            >
+              <LogOut size={18} />
+              <span>Déconnexion</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
         {/* Top Header */}
-        <header style={{ height: '70px', backgroundColor: 'white', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', zIndex: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <header style={{ height: '70px', backgroundColor: 'white', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1rem', boxShadow: '0 2px 10px rgba(0,0,0,0.02)', zIndex: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               className="md:hidden"
-              style={{ background: 'none', border: 'none', color: COLORS.navy, cursor: 'pointer', padding: '4px' }}
+              style={{ background: 'none', border: 'none', color: COLORS.navy, cursor: 'pointer', padding: '6px' }}
+              aria-label="Menu mobile"
             >
               {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <span style={{ fontSize: '1.1rem', fontWeight: '700', color: COLORS.navy }}>
+            <span style={{ fontSize: '1rem', fontWeight: '700', color: COLORS.navy }}>
               Portail Médical Déclarant
             </span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#DCFCE7', color: '#15803D', padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div className="hidden sm:inline-flex" style={{ alignItems: 'center', gap: '6px', backgroundColor: '#DCFCE7', color: '#15803D', padding: '4px 12px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700' }}>
               <CheckCircle2 size={14} /> Médecin Agréé
             </div>
 
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => setShowProfileMenu(!showProfileMenu)}
-                style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}
               >
-                <div style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: COLORS.navy, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.95rem' }}>
+                <div style={{ width: '36px', height: '36px', borderRadius: '50%', backgroundColor: COLORS.navy, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', fontSize: '0.9rem' }}>
                   Dr
                 </div>
                 <div style={{ textAlign: 'left' }} className="hidden sm:block">
-                  <div style={{ fontSize: '0.9rem', fontWeight: '700', color: COLORS.navy }}>
+                  <div style={{ fontSize: '0.88rem', fontWeight: '700', color: COLORS.navy }}>
                     Dr. {currentDoctor?.firstName || ''} {currentDoctor?.lastName || ''}
                   </div>
                   <div style={{ fontSize: '0.75rem', color: COLORS.muted }}>
@@ -250,7 +345,7 @@ function DoctorLayout() {
               </button>
 
               {showProfileMenu && (
-                <div style={{ position: 'absolute', right: 0, top: '50px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: `1px solid ${COLORS.border}`, width: '220px', padding: '8px', zIndex: 30 }}>
+                <div style={{ position: 'absolute', right: 0, top: '50px', backgroundColor: 'white', borderRadius: '12px', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', border: `1px solid ${COLORS.border}`, width: '200px', padding: '8px', zIndex: 30 }}>
                   <Link
                     to="/doctor/profile"
                     onClick={() => setShowProfileMenu(false)}
@@ -271,7 +366,7 @@ function DoctorLayout() {
         </header>
 
         {/* Scrollable Main Area */}
-        <main style={{ flex: 1, overflowY: 'auto', padding: '2rem', backgroundColor: COLORS.bgLight }}>
+        <main style={{ flex: 1, overflowY: 'auto', padding: '1rem', backgroundColor: COLORS.bgLight }} className="md:p-8">
           <Outlet />
         </main>
       </div>

@@ -553,7 +553,7 @@ function DoctorDashboardPage() {
       </div>
 
       {/* 3. PATIENT DEMOGRAPHICS & BLOOD TYPES (2 COLUMNS) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '20px' }}>
         
         {/* Gender Distribution Card */}
         <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
@@ -689,7 +689,7 @@ function DoctorDashboardPage() {
       </div>
 
       {/* 4. HEALTH EVENTS BY DISEASE & SEVERITY DISTRIBUTION (2 COLUMNS) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '20px' }}>
         
         {/* Horizontal Bar Chart: Diseases */}
         <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
@@ -797,7 +797,7 @@ function DoctorDashboardPage() {
       </div>
 
       {/* 5. ACTIVITY OVER TIME & ATTENTION REQUIRED (2 COLUMNS) */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '20px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: '20px' }}>
         
         {/* Activity Over Time Line / Bar Visualization */}
         <div style={{ backgroundColor: 'white', borderRadius: '20px', border: `1px solid ${COLORS.border}`, padding: '24px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>

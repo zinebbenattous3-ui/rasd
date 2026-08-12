@@ -583,3 +583,80 @@ body {
 [dir="rtl"] .site { text-align: right; }
 .site .auth { min-height: 0; }
 .site .auth-panel { padding-block: 3rem; }
+
+/* ── Mobile & Tablet Global Responsive Enhancements ── */
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+}
+
+/* Touch-friendly inputs and buttons */
+@media (max-width: 768px) {
+  input, select, textarea, button {
+    font-size: 16px !important; /* Prevents auto-zoom on mobile safari/chrome */
+  }
+
+  .table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-top: 0.5rem;
+    border-radius: 8px;
+  }
+
+  .data-table {
+    min-width: 600px;
+  }
+
+  .kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 0.6rem;
+  }
+
+  .kpi-value {
+    font-size: 1.5rem;
+  }
+
+  .app-main {
+    padding: 1rem 0.75rem 4rem;
+    gap: 1rem;
+  }
+
+  .panel {
+    padding: 0.85rem;
+    border-radius: 10px;
+  }
+
+  .bar-row {
+    grid-template-columns: 4.5rem 1fr 2rem;
+    gap: 0.4rem;
+    font-size: 0.8rem;
+  }
+}
+
+/* Ultra-mobile small screen optimization (360px - 480px) */
+@media (max-width: 480px) {
+  .data-table {
+    min-width: 520px;
+  }
+
+  .field-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .hero-cta {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .hero-cta .btn-primary, .hero-cta .btn-ghost {
+    width: 100%;
+  }
+}
+

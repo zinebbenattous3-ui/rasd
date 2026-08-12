@@ -193,27 +193,123 @@ function HealthAuthorityLayout() {
         </div>
       </aside>
 
+      {/* Mobile Drawer Navigation Overlay */}
+      {mobileMenuOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(6, 44, 84, 0.6)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 50,
+            display: 'flex'
+          }}
+          onClick={() => setMobileMenuOpen(false)}
+        >
+          <div
+            style={{
+              width: '280px',
+              maxWidth: '85vw',
+              backgroundColor: COLORS.navy,
+              color: 'white',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '4px 0 24px rgba(0,0,0,0.2)',
+              padding: '1.5rem 1rem'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingBottom: '0.75rem', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <div style={{ width: '34px', height: '34px', borderRadius: '8px', backgroundColor: COLORS.teal, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
+                  <ShieldAlert size={18} />
+                </div>
+                <span style={{ fontWeight: '800', fontSize: '1.05rem', color: 'white' }}>Rased Health</span>
+              </div>
+              <button onClick={() => setMobileMenuOpen(false)} style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer' }}>
+                <X size={22} />
+              </button>
+            </div>
+
+            <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+              {navItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = item.exact 
+                  ? location.pathname === item.to 
+                  : location.pathname.startsWith(item.to);
+
+                return (
+                  <Link 
+                    key={item.to} 
+                    to={item.to} 
+                    onClick={() => setMobileMenuOpen(false)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.85rem',
+                      padding: '0.85rem 1.1rem',
+                      borderRadius: '10px',
+                      textDecoration: 'none',
+                      color: isActive ? 'white' : '#a0aec0',
+                      fontWeight: isActive ? '600' : '500',
+                      backgroundColor: isActive ? 'rgba(15, 162, 155, 0.2)' : 'transparent',
+                      borderLeft: isActive ? `3px solid ${COLORS.teal}` : '3px solid transparent'
+                    }}
+                  >
+                    <Icon size={20} color={isActive ? COLORS.teal : '#a0aec0'} />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <button 
+              onClick={handleLogout} 
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.75rem',
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                color: '#f87171',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                border: 'none',
+                cursor: 'pointer',
+                fontWeight: '500',
+                fontSize: '0.9rem',
+                width: '100%',
+                marginTop: 'auto'
+              }}
+            >
+              <LogOut size={18} />
+              <span>Déconnexion</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content View */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Top Header */}
-        <header style={{ height: '70px', backgroundColor: 'white', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 2rem', zIndex: 10 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-            <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.navy }}>
-              <Menu size={24} />
+        <header style={{ height: '70px', backgroundColor: 'white', borderBottom: `1px solid ${COLORS.border}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 1rem', zIndex: 10 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.navy, padding: '4px' }} aria-label="Menu mobile">
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
             </button>
-            <h1 style={{ fontSize: '1.15rem', fontWeight: '700', color: COLORS.navy, margin: 0 }}>
+            <h1 style={{ fontSize: '1rem', fontWeight: '700', color: COLORS.navy, margin: 0 }}>
               Direction Sanitaire Régionale
             </h1>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', position: 'relative' }}>
-            <div style={{ padding: '6px 14px', backgroundColor: COLORS.lightTeal, color: COLORS.teal, borderRadius: '999px', fontSize: '0.82rem', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
+            <div className="hidden sm:flex" style={{ padding: '6px 14px', backgroundColor: COLORS.lightTeal, color: COLORS.teal, borderRadius: '999px', fontSize: '0.82rem', fontWeight: '600', alignItems: 'center', gap: '6px' }}>
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: COLORS.teal }} />
               Autorité Agréée
             </div>
             
             <div 
-              style={{ width: '42px', height: '42px', borderRadius: '50%', backgroundColor: COLORS.navy, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', cursor: 'pointer', userSelect: 'none', border: `2px solid ${COLORS.teal}` }}
+              style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: COLORS.navy, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', cursor: 'pointer', userSelect: 'none', border: `2px solid ${COLORS.teal}` }}
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
               {currentUser?.firstName?.[0] || 'A'}{currentUser?.lastName?.[0] || 'S'}
@@ -245,7 +341,7 @@ function HealthAuthorityLayout() {
         </header>
 
         {/* Page Content Rendered via Outlet */}
-        <main style={{ flex: 1, padding: '2rem', overflowY: 'auto' }}>
+        <main style={{ flex: 1, padding: '1rem', overflowY: 'auto' }} className="md:p-8">
           <div style={{ maxWidth: '1280px', margin: '0 auto' }}>
             <Outlet />
           </div>

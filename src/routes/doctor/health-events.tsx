@@ -832,11 +832,11 @@ function DoctorHealthEventsPage() {
       </div>
 
       {/* Health Events Table */}
-      <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
+      <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, overflowX: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
         {loading ? (
           <div style={{ padding: '4rem', textAlign: 'center', color: COLORS.muted }}>Chargement des événements de santé...</div>
         ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+          <table style={{ width: '100%', minWidth: '680px', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ backgroundColor: '#f8fafc', borderBottom: `1px solid ${COLORS.border}` }}>
               <tr>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Maladie</th>
@@ -1049,8 +1049,8 @@ function DoctorHealthEventsPage() {
                 </div>
               )}
 
-              {/* Wide 2-Column Horizontal Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+              {/* Responsive 2-Column Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '24px' }}>
                 {/* Left Column: Patient & Reportable Disease */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   {/* Patient Selection */}
