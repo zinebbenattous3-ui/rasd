@@ -87,7 +87,7 @@ export function Dashboard({ role, demo, onLogout }: DashboardProps) {
           <div className="kpi-grid">
             <KpiCard label="Cas actifs" value={kpis.activeCases} hint="Suivi en cours" />
             <KpiCard label="Épidémies suivies" value={kpis.epidemics} hint="Foyers déclarés" />
-            <KpiCard label="Wilayas couvertes" value={kpis.wilayasCovered} hint="Sur 58" />
+            <KpiCard label="Wilayas couvertes" value={kpis.wilayasCovered} hint="Sur 69" />
             <KpiCard label="Alertes ouvertes" value={kpis.alerts} hint="Gravité élevée ou critique" tone="alert" />
           </div>
         </section>

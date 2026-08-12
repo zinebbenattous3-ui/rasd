@@ -169,7 +169,7 @@ function Landing() {
                 <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#38BDF8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
                   Couverture Nationale
                 </div>
-                <div style={{ fontSize: "1.5rem", fontWeight: "800", color: "white" }}>58 Wilayas</div>
+                <div style={{ fontSize: "1.5rem", fontWeight: "800", color: "white" }}>69 Wilayas</div>
                 <div style={{ fontSize: "0.82rem", color: "#94A3B8", marginTop: "2px" }}>Maillage territorial complet</div>
               </div>
 
