@@ -182,6 +182,26 @@ export function Navbar() {
                 )}
               </Link>
             </li>
+            <li>
+              <Link
+                to="/map"
+                onClick={() => setOpen(false)}
+                style={{
+                  textDecoration: "none",
+                  fontSize: "0.92rem",
+                  fontWeight: location.pathname === "/map" ? "700" : "550",
+                  color: location.pathname === "/map" ? "#062C54" : "#4a5568",
+                  position: "relative",
+                  padding: "0.4rem 0",
+                  transition: "color 0.2s ease"
+                }}
+              >
+                Carte 69 Wilayas
+                {location.pathname === "/map" && (
+                  <span style={{ position: "absolute", bottom: "-2px", left: 0, right: 0, height: "2px", backgroundColor: "#0fa29b", borderRadius: "2px" }} />
+                )}
+              </Link>
+            </li>
           </ul>
 
           {/* Action Buttons & Language Switcher */}

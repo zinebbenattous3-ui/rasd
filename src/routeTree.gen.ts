@@ -14,6 +14,7 @@ import { Route as AboutRouteImport } from './routes/about'
 import { Route as DoctorRouteImport } from './routes/doctor'
 import { Route as HealthAuthorityRouteImport } from './routes/health-authority'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as MapRouteImport } from './routes/map'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SignupRouteImport } from './routes/signup'
@@ -57,6 +58,11 @@ const HealthAuthorityRoute = HealthAuthorityRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MapRoute = MapRouteImport.update({
+  id: '/map',
+  path: '/map',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/doctor': typeof DoctorRouteWithChildren
   '/health-authority': typeof HealthAuthorityRouteWithChildren
   '/login': typeof LoginRoute
+  '/map': typeof MapRoute
   '/privacy': typeof PrivacyRoute
   '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
@@ -188,6 +195,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
+  '/map': typeof MapRoute
   '/privacy': typeof PrivacyRoute
   '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
@@ -214,6 +222,7 @@ export interface FileRoutesById {
   '/doctor': typeof DoctorRouteWithChildren
   '/health-authority': typeof HealthAuthorityRouteWithChildren
   '/login': typeof LoginRoute
+  '/map': typeof MapRoute
   '/privacy': typeof PrivacyRoute
   '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
@@ -242,6 +251,7 @@ export interface FileRouteTypes {
     | '/doctor'
     | '/health-authority'
     | '/login'
+    | '/map'
     | '/privacy'
     | '/security'
     | '/signup'
@@ -266,6 +276,7 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/login'
+    | '/map'
     | '/privacy'
     | '/security'
     | '/signup'
@@ -291,6 +302,7 @@ export interface FileRouteTypes {
     | '/doctor'
     | '/health-authority'
     | '/login'
+    | '/map'
     | '/privacy'
     | '/security'
     | '/signup'
@@ -318,6 +330,7 @@ export interface RootRouteChildren {
   DoctorRoute: typeof DoctorRouteWithChildren
   HealthAuthorityRoute: typeof HealthAuthorityRouteWithChildren
   LoginRoute: typeof LoginRoute
+  MapRoute: typeof MapRoute
   PrivacyRoute: typeof PrivacyRoute
   SecurityRoute: typeof SecurityRoute
   SignupRoute: typeof SignupRoute
@@ -360,6 +373,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/map': {
+      id: '/map'
+      path: '/map'
+      fullPath: '/map'
+      preLoaderRoute: typeof MapRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -561,6 +581,7 @@ const rootRouteChildren: RootRouteChildren = {
   DoctorRoute: DoctorRouteWithChildren,
   HealthAuthorityRoute: HealthAuthorityRouteWithChildren,
   LoginRoute: LoginRoute,
+  MapRoute: MapRoute,
   PrivacyRoute: PrivacyRoute,
   SecurityRoute: SecurityRoute,
   SignupRoute: SignupRoute,

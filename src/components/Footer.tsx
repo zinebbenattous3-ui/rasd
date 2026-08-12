@@ -98,8 +98,8 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/" hash="fonctionnement" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
-                  {t("nav.how")}
+                <Link to="/map" style={{ color: "#CBD5E1", fontSize: "0.9rem", textDecoration: "none", transition: "color 0.2s" }}>
+                  Carte 69 Wilayas
                 </Link>
               </li>
             </ul>
