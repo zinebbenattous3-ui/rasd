@@ -12,6 +12,7 @@ const INITIAL_WELCOME_MESSAGE: ChatMessage = {
 
 export function MedicalChatbot() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isDismissed, setIsDismissed] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
@@ -94,46 +95,91 @@ export function MedicalChatbot() {
     }
   };
 
+  if (isDismissed) {
+    return null;
+  }
+
   return (
-    <div style={{ position: "fixed", bottom: "24px", right: "24px", zIndex: 9999, fontFamily: "sans-serif" }}>
+    <div style={{ position: "fixed", bottom: "24px", left: "24px", zIndex: 9999, fontFamily: "sans-serif" }}>
       {/* FLOATING CHAT BUTTON */}
       {!isOpen && (
-        <button
-          onClick={() => setIsOpen(true)}
-          style={{
-            backgroundColor: "#062C54",
-            color: "white",
-            border: "2px solid #0fa29b",
-            borderRadius: "999px",
-            padding: "12px 20px",
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            boxShadow: "0 10px 30px rgba(6, 44, 84, 0.4)",
-            cursor: "pointer",
-            transition: "all 0.25s ease",
-          }}
-          aria-label="Ouvrir l'assistant médical"
-        >
-          <div
+        <div style={{ position: "relative", display: "inline-flex", alignItems: "center" }}>
+          <button
+            onClick={() => setIsOpen(true)}
             style={{
-              width: "34px",
-              height: "34px",
+              backgroundColor: "#062C54",
+              color: "white",
+              border: "2px solid #0fa29b",
+              borderRadius: "999px",
+              padding: "12px 18px",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              boxShadow: "0 10px 30px rgba(6, 44, 84, 0.4)",
+              cursor: "pointer",
+              transition: "all 0.25s ease",
+            }}
+            aria-label="Ouvrir l'assistant médical"
+          >
+            <div
+              style={{
+                width: "34px",
+                height: "34px",
+                borderRadius: "50%",
+                backgroundColor: "#0fa29b",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Bot size={20} color="white" />
+            </div>
+            <div style={{ textAlign: "left" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: "800", letterSpacing: "0.02em" }}>Assistant RASED</div>
+              <div style={{ fontSize: "0.7rem", color: "#38BDF8", fontWeight: "700" }}>Information médicale</div>
+            </div>
+            <Sparkles size={16} color="#38BDF8" style={{ marginLeft: "2px" }} />
+          </button>
+
+          {/* CLOSE / DISMISS BADGE BUTTON */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsDismissed(true);
+            }}
+            title="Masquer l'assistant AI"
+            style={{
+              position: "absolute",
+              top: "-6px",
+              right: "-6px",
+              backgroundColor: "#062C54",
+              color: "#94A3B8",
+              border: "1.5px solid #0fa29b",
               borderRadius: "50%",
-              backgroundColor: "#0fa29b",
+              width: "22px",
+              height: "22px",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              cursor: "pointer",
+              boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
+              transition: "all 0.2s ease",
             }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = "white";
+              e.currentTarget.style.backgroundColor = "#EF4444";
+              e.currentTarget.style.borderColor = "#EF4444";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = "#94A3B8";
+              e.currentTarget.style.backgroundColor = "#062C54";
+              e.currentTarget.style.borderColor = "#0fa29b";
+            }}
+            aria-label="Masquer le bouton de l'assistant AI"
           >
-            <Bot size={20} color="white" />
-          </div>
-          <div style={{ textAlign: "left" }}>
-            <div style={{ fontSize: "0.85rem", fontWeight: "800", letterSpacing: "0.02em" }}>Assistant RASED</div>
-            <div style={{ fontSize: "0.7rem", color: "#38BDF8", fontWeight: "700" }}>Information médicale</div>
-          </div>
-          <Sparkles size={16} color="#38BDF8" style={{ marginLeft: "4px" }} />
-        </button>
+            <X size={12} />
+          </button>
+        </div>
       )}
 
       {/* FLOATING CHAT WINDOW */}
