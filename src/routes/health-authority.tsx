@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, Link, createFileRoute, useNavigate, useLocation } from "@tanstack/react-router";
-import { LayoutDashboard, Building2, User, LogOut, Menu, X, ShieldAlert, Stethoscope } from "lucide-react";
+import { LayoutDashboard, Building2, User, LogOut, Menu, X, ShieldAlert, Stethoscope, BarChart3 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/health-authority")({
@@ -95,6 +95,7 @@ function HealthAuthorityLayout() {
     { to: "/health-authority", label: "Tableau de bord", icon: LayoutDashboard, exact: true },
     { to: "/health-authority/facilities", label: "Établissements", icon: Building2, exact: false },
     { to: "/health-authority/doctors", label: "Médecins", icon: Stethoscope, exact: false },
+    { to: "/health-authority/reports", label: "📊 Rapports", icon: BarChart3, exact: false },
     { to: "/health-authority/profile", label: "Mon Profil", icon: User, exact: false }
   ];
 

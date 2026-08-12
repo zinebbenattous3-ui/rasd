@@ -185,14 +185,36 @@ export const getReportDataServer = createServerFn({ method: "POST" })
       let userScopeDescription = "";
 
       // 2. Role-Based Authorization & Scope Computation
-      if (role === "PATIENT") {
-        return { ...defaultPayload, error: "Accès refusé : Les comptes patients n'ont pas accès au centre de rapports administratifs." };
+      if (role === "PATIENT" || role === "DOCTOR") {
+        return { ...defaultPayload, error: "Accès refusé : Le centre de rapports est réservé aux Inspecteurs, Autorités de Santé et Superadministrateurs." };
       } else if (role === "SUPERADMIN") {
         privacyLevel = 3;
-        userScopeDescription = "Administration Nationale — Accès Complet (Niveau 3)";
+        userScopeDescription = "🌍 Toutes les Wilayas (Accès Observatoire National)";
       } else if (role === "HEALTH_AUTHORITY") {
         privacyLevel = 3;
-        userScopeDescription = "Autorité Sanitaire Nationale / Régionale — Accès Étendu (Niveau 3)";
+        // Fetch authorized facilities linked to this Health Authority
+        const { data: userFacs } = await supabase
+          .from("facilities")
+          .select("id, name, wilaya, facility_type")
+          .eq("created_by", userRec.id);
+
+        let authFacIds = (userFacs || []).map((f) => f.id);
+
+        if (authFacIds.length === 0) {
+          // Fallback: If authority has not explicitly created facilities, query all facilities
+          const { data: allFacs } = await supabase.from("facilities").select("id, name, wilaya, facility_type");
+          authFacIds = (allFacs || []).map((f) => f.id);
+        }
+
+        // Verify requested facilityId against authorized list
+        if (data.facilityId) {
+          if (!authFacIds.includes(data.facilityId)) {
+            return { ...defaultPayload, error: "Accès refusé : Vous n'êtes pas autorisé à consulter cet établissement." };
+          }
+          forcedFacilityId = data.facilityId;
+        }
+
+        userScopeDescription = `🏥 Mes Établissements (${authFacIds.length} structures autorisées)`;
       } else if (role === "INSPECTOR") {
         privacyLevel = 3;
         const { data: inspRec } = await supabase
@@ -202,25 +224,19 @@ export const getReportDataServer = createServerFn({ method: "POST" })
           .maybeSingle();
 
         if (inspRec && inspRec.wilaya) {
-          forcedWilaya = normalizeWilayaCode(inspRec.wilaya) || inspRec.wilaya;
-          userScopeDescription = `Inspection Sanitaire Wilaya ${forcedWilaya} — Portée Limitée (Niveau 3)`;
-        } else {
-          userScopeDescription = "Inspection Sanitaire — Portée Wilaya";
-        }
-      } else if (role === "DOCTOR") {
-        privacyLevel = 2; // Level 2 for general facility events, Level 3 for patient info
-        const { data: docRec } = await supabase
-          .from("doctors")
-          .select("id, facility_id")
-          .eq("user_id", userRec.id)
-          .maybeSingle();
+          const normWilaya = normalizeWilayaCode(inspRec.wilaya) || inspRec.wilaya;
+          forcedWilaya = normWilaya;
 
-        if (docRec) {
-          forcedFacilityId = docRec.facility_id;
-          forcedDoctorId = docRec.id;
-          userScopeDescription = "Médecin Déclarant — Portée Établissement (Niveau 2/3)";
+          // Reject if client requested a different wilaya
+          if (data.wilaya && normalizeWilayaCode(data.wilaya) !== normWilaya) {
+            console.warn(`[ReportCenter Audit] Inspector ${userRec.id} requested unauthorized wilaya ${data.wilaya}, forcing ${normWilaya}`);
+          }
+
+          const wilayaObj = ALGERIA_WILAYAS_69.find((w) => w.code === normWilaya);
+          const wilayaLabel = wilayaObj ? `${normWilaya} — ${wilayaObj.name}` : normWilaya;
+          userScopeDescription = `📍 Wilaya ${wilayaLabel} (Vos rapports sont limités à cette Wilaya)`;
         } else {
-          return { ...defaultPayload, error: "Profil médecin non trouvé." };
+          userScopeDescription = "📍 Inspection Sanitaire — Portée Wilaya";
         }
       }
 
