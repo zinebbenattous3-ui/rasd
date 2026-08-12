@@ -10,6 +10,7 @@ import { PlatformFlowVisual } from "@/components/landing/PlatformFlowVisual";
 import { SecuritySection } from "@/components/landing/SecuritySection";
 import { DashboardPreview } from "@/components/landing/DashboardPreview";
 import { NationalNetworkVisual } from "@/components/landing/NationalNetworkVisual";
+import { Algeria69WilayaMap } from "@/components/Algeria69WilayaMap";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -215,7 +216,26 @@ function Landing() {
         {/* SECTION 5: DATA SECURITY & CONFIDENTIALITY */}
         <SecuritySection />
 
-        {/* SECTION 6: NATIONAL NETWORK HUB VISUAL */}
+        {/* SECTION 6: INTERACTIVE ALGERIA 69 WILAYAS MAP */}
+        <section style={{ padding: "5rem 1.5rem", backgroundColor: "#062C54", color: "white", borderBottom: "1px solid rgba(255, 255, 255, 0.1)" }}>
+          <div style={{ maxWidth: "1100px", margin: "0 auto", textAlign: "center" }}>
+            <div style={{ display: "inline-block", padding: "6px 16px", borderRadius: "999px", backgroundColor: "rgba(15, 162, 155, 0.2)", color: "#38BDF8", fontSize: "0.78rem", fontWeight: "800", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "1rem" }}>
+              COUVERTURE NATIONALE · 69 WILAYAS
+            </div>
+            <h2 style={{ fontSize: "2.25rem", fontWeight: "800", color: "white", marginBottom: "1rem" }}>
+              Carte interactive des divisions administratives de l'Algérie
+            </h2>
+            <p style={{ fontSize: "1.05rem", color: "#94A3B8", maxWidth: "650px", margin: "0 auto 3rem auto" }}>
+              Survolez les wilayas pour visualiser leurs codes officiels et dénominations multilingues (Français / العربية).
+            </p>
+
+            <div style={{ backgroundColor: "rgba(255, 255, 255, 0.03)", borderRadius: "24px", padding: "2rem", border: "1px solid rgba(255, 255, 255, 0.1)", backdropFilter: "blur(10px)" }}>
+              <Algeria69WilayaMap style={{ height: "480px" }} />
+            </div>
+          </div>
+        </section>
+
+        {/* SECTION 7: NATIONAL NETWORK HUB VISUAL */}
         <NationalNetworkVisual />
 
         {/* SECTION 7: CLOSING CALL TO ACTION BAND */}

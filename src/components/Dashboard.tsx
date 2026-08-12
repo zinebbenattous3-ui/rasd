@@ -12,6 +12,7 @@ import {
   type EventStatus,
   type HealthEvent,
 } from "@/lib/mockData";
+import { Algeria69WilayaMap } from "./Algeria69WilayaMap";
 
 interface DashboardProps {
   role: string;
@@ -124,9 +125,9 @@ export function Dashboard({ role, demo, onLogout }: DashboardProps) {
                 </li>
               ))}
             </ul>
-            <p className="panel-note">
-              Emplacement réservé à la carte interactive des wilayas.
-            </p>
+            <div style={{ marginTop: "1rem", height: "300px", borderRadius: "12px", overflow: "hidden" }}>
+              <Algeria69WilayaMap style={{ minHeight: "280px" }} />
+            </div>
           </section>
         </div>
 
