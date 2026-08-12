@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { MedicalNetworkCanvas, type NetworkState } from "@/components/medical/MedicalNetworkCanvas";
@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth-hash";
+import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/TurnstileWidget";
+import { verifyTurnstileToken } from "@/lib/turnstileServer";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -117,6 +119,8 @@ function SignupPage() {
   const [showSpecialtyDropdown, setShowSpecialtyDropdown] = useState(false);
   const [showFacilityDropdown, setShowFacilityDropdown] = useState(false);
   const [facilitiesList, setFacilitiesList] = useState<any[]>([]);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileWidgetRef = useRef<TurnstileWidgetRef>(null);
 
   useEffect(() => {
     async function loadFacilities() {
@@ -233,7 +237,34 @@ function SignupPage() {
     e.preventDefault();
     if (!validateStep(step)) return;
 
+    if (!turnstileToken) {
+      setErrors({ form: "Veuillez valider le contrôle anti-robot Turnstile pour créer votre compte." });
+      setNetworkState('error');
+      return;
+    }
+
     setLoading(true);
+
+    // 1. Mandatory server-side Turnstile token verification
+    try {
+      const turnstileRes = await verifyTurnstileToken({ data: { token: turnstileToken } });
+      if (!turnstileRes.success) {
+        setLoading(false);
+        setNetworkState('error');
+        setErrors({ form: turnstileRes.error || "La vérification anti-robot a échoué. Veuillez réessayer." });
+        setTurnstileToken("");
+        turnstileWidgetRef.current?.reset();
+        return; // REJECT: Do NOT execute registration RPC or create user in DB
+      }
+    } catch (turnstileErr: any) {
+      setLoading(false);
+      setNetworkState('error');
+      setErrors({ form: turnstileErr.message || "Erreur lors de la vérification Turnstile." });
+      setTurnstileToken("");
+      turnstileWidgetRef.current?.reset();
+      return; // REJECT: Do NOT execute registration RPC or create user in DB
+    }
+
     setNetworkState('done');
 
     try {
@@ -848,6 +879,23 @@ function SignupPage() {
                         <Lock size={14} color="#0fa29b" />
                         <span>Vos informations sont transmises via un canal chiffré et sécurisé.</span>
                       </div>
+
+                      {/* Cloudflare Turnstile Anti-Robot Verification */}
+                      <TurnstileWidget
+                        ref={turnstileWidgetRef}
+                        onVerify={(token) => {
+                          setTurnstileToken(token);
+                          if (errors.form) {
+                            setErrors((err) => {
+                              const copy = { ...err };
+                              delete copy.form;
+                              return copy;
+                            });
+                          }
+                        }}
+                        onExpire={() => setTurnstileToken("")}
+                        onError={() => setTurnstileToken("")}
+                      />
 
                       <div style={{ display: "flex", gap: "1rem" }}>
                         <button type="button" onClick={prevStep} style={{ flex: 1, padding: "0.85rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", backgroundColor: "transparent", color: "#062C54", fontWeight: "600", cursor: "pointer" }}>
