@@ -92,6 +92,11 @@ function LoginPage() {
       return;
     }
 
+    if (normRole === "INSPECTOR") {
+      navigate({ to: "/inspector" });
+      return;
+    }
+
     if (normRole === "DOCTOR" && userDetails?.id) {
       try {
         const { data: docData } = await supabase
