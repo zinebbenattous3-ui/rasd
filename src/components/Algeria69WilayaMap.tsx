@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { getWilayaByCode, getWilayaByName, Wilaya } from '@/lib/wilayas';
 import wilayaPathsData from '@/lib/algeria69WilayaPaths.json';
+import { PublicWilayaStats } from '@/lib/publicHealthMap';
 
 export interface WilayaPathItem {
   code: string;
@@ -12,12 +13,14 @@ export interface WilayaPathItem {
 export interface Algeria69WilayaMapProps {
   selectedWilaya?: string;
   onWilayaSelect?: (wilaya: Wilaya) => void;
+  stats?: Record<string, PublicWilayaStats> | undefined;
   className?: string;
   style?: React.CSSProperties;
   fillColor?: string;
   strokeColor?: string;
   hoverColor?: string;
   selectedColor?: string;
+  activeColor?: string;
   showTooltip?: boolean;
 }
 
@@ -26,12 +29,14 @@ export const WILAYA_MAP_PATHS: WilayaPathItem[] = wilayaPathsData as WilayaPathI
 export function Algeria69WilayaMap({
   selectedWilaya,
   onWilayaSelect,
+  stats,
   className,
   style,
   fillColor = "rgba(6, 44, 84, 0.75)",
   strokeColor = "rgba(255, 255, 255, 0.35)",
   hoverColor = "#0fa29b",
   selectedColor = "#38BDF8",
+  activeColor = "#10B981",
   showTooltip = true,
 }: Algeria69WilayaMapProps) {
   const [hoveredWilaya, setHoveredWilaya] = useState<Wilaya | null>(null);
@@ -64,6 +69,8 @@ export function Algeria69WilayaMap({
     }
   };
 
+  const currentHoveredStat = hoveredWilaya && stats ? stats[hoveredWilaya.code] : undefined;
+
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%', minHeight: '380px', display: 'flex', alignItems: 'center', justifyContent: 'center', ...style }} className={className}>
       <svg
@@ -80,10 +87,17 @@ export function Algeria69WilayaMap({
           {WILAYA_MAP_PATHS.map((item) => {
             const isSelected = activeWilayaObj && activeWilayaObj.code === item.code;
             const isHovered = hoveredWilaya && hoveredWilaya.code === item.code;
+            const wilayaStat = stats ? stats[item.code] : undefined;
+            const hasEvents = wilayaStat && wilayaStat.totalEvents > 0;
 
             let fill = fillColor;
-            if (isSelected) fill = selectedColor;
-            else if (isHovered) fill = hoverColor;
+            if (isSelected) {
+              fill = selectedColor;
+            } else if (isHovered) {
+              fill = hoverColor;
+            } else if (hasEvents) {
+              fill = activeColor;
+            }
 
             return (
               <path
@@ -95,8 +109,8 @@ export function Algeria69WilayaMap({
                 d={item.d}
                 style={{
                   fill: fill,
-                  stroke: isSelected ? '#FFFFFF' : strokeColor,
-                  strokeWidth: isSelected ? 12 : 4,
+                  stroke: isSelected ? '#FFFFFF' : hasEvents ? '#34D399' : strokeColor,
+                  strokeWidth: isSelected ? 14 : hasEvents ? 8 : 4,
                   cursor: 'pointer',
                   transition: 'fill 0.2s ease, stroke 0.2s ease',
                 }}
@@ -127,19 +141,38 @@ export function Algeria69WilayaMap({
             zIndex: 100,
             display: 'flex',
             flexDirection: 'column',
-            gap: '2px',
+            gap: '4px',
             fontSize: '0.85rem',
+            minWidth: '160px',
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
             <span style={{ backgroundColor: '#0fa29b', color: 'white', fontWeight: '800', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '4px' }}>
               Wilaya {hoveredWilaya.code}
             </span>
-            <span style={{ fontWeight: '700', color: 'white' }}>{hoveredWilaya.name}</span>
+            <span style={{ fontSize: '0.8rem', color: '#38BDF8', fontWeight: '600', fontFamily: 'system-ui, sans-serif' }}>
+              {hoveredWilaya.nameAr}
+            </span>
           </div>
-          <div style={{ fontSize: '0.8rem', color: '#38BDF8', textAlign: 'right', fontWeight: '600', fontFamily: 'system-ui, sans-serif' }}>
-            {hoveredWilaya.nameAr}
+          
+          <div style={{ fontWeight: '800', color: 'white', fontSize: '0.95rem' }}>
+            {hoveredWilaya.name}
           </div>
+
+          {currentHoveredStat !== undefined && (
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', paddingTop: '4px', marginTop: '2px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '0.75rem', color: '#94A3B8' }}>Événements :</span>
+              <span
+                style={{
+                  fontSize: '0.82rem',
+                  fontWeight: '800',
+                  color: currentHoveredStat.totalEvents > 0 ? '#34D399' : '#CBD5E1',
+                }}
+              >
+                {currentHoveredStat.totalEvents} cas
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

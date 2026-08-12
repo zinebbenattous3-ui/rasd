@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { useI18n } from "@/lib/i18n";
@@ -11,6 +12,7 @@ import { SecuritySection } from "@/components/landing/SecuritySection";
 import { DashboardPreview } from "@/components/landing/DashboardPreview";
 import { NationalNetworkVisual } from "@/components/landing/NationalNetworkVisual";
 import { Algeria69WilayaMap } from "@/components/Algeria69WilayaMap";
+import { getPublicHealthMapData, PublicHealthMapResponse } from "@/lib/publicHealthMap";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -43,6 +45,21 @@ const COLORS = {
 
 function Landing() {
   const { t } = useI18n();
+  const [mapData, setMapData] = useState<PublicHealthMapResponse | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      const res = await getPublicHealthMapData();
+      if (isMounted) {
+        setMapData(res);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div style={{ width: "100%", minHeight: "100vh", display: "flex", flexDirection: "column", backgroundColor: "#ffffff" }}>
@@ -73,23 +90,60 @@ function Landing() {
             }} 
           />
 
-          <div style={{ maxWidth: "1280px", margin: "0 auto", position: "relative", zIndex: 1 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "3.5rem", alignItems: "center" }}>
-              {/* Left Column: Content */}
+          <div style={{ maxWidth: "1280px", margin: "0 auto", position: "relative", zIndex: 10 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "3.5rem", alignItems: "center" }} className="lg:grid-cols-2">
+              {/* Left Column: Core Value Proposition */}
               <div>
-                <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "6px 16px", borderRadius: "999px", backgroundColor: "rgba(15, 162, 155, 0.2)", color: "#38BDF8", fontSize: "0.8rem", fontWeight: "800", letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: "1.5rem" }}>
-                  <ShieldCheck size={16} /> {t("hero.eyebrow")}
+                {/* Security Trust Pill */}
+                <div 
+                  style={{ 
+                    display: "inline-flex", 
+                    alignItems: "center", 
+                    gap: "8px", 
+                    backgroundColor: "rgba(15, 162, 155, 0.15)", 
+                    border: "1px solid rgba(15, 162, 155, 0.3)",
+                    padding: "6px 14px", 
+                    borderRadius: "999px", 
+                    fontSize: "0.8rem", 
+                    color: "#38BDF8", 
+                    fontWeight: "700",
+                    marginBottom: "1.5rem",
+                    letterSpacing: "0.02em"
+                  }}
+                >
+                  <ShieldCheck size={16} color="#38BDF8" />
+                  <span>Surveillance épidémiologique nationale sécurisée</span>
                 </div>
 
-                <h1 style={{ fontSize: "2.8rem", fontWeight: "900", color: "white", lineHeight: "1.15", letterSpacing: "-0.025em", marginBottom: "1.25rem" }}>
-                  La surveillance sanitaire, pensée pour agir plus vite.
+                <h1 
+                  style={{ 
+                    fontSize: "3.1rem", 
+                    fontWeight: "900", 
+                    lineHeight: "1.15", 
+                    color: "white", 
+                    marginBottom: "1.5rem",
+                    letterSpacing: "-0.03em"
+                  }}
+                >
+                  Réseau National de <br />
+                  <span style={{ color: "#38BDF8", textShadow: "0 0 20px rgba(56, 189, 248, 0.3)" }}>
+                    Veille & Surveillance Sanitaire
+                  </span>
                 </h1>
 
-                <p style={{ fontSize: "1.1rem", color: "#CBD5E1", lineHeight: "1.65", marginBottom: "2.25rem", maxWidth: "560px" }}>
-                  RASED connecte les professionnels de santé, établissements et autorités pour transformer les déclarations cliniques en décisions épidémiologiques immédiates.
+                <p 
+                  style={{ 
+                    fontSize: "1.15rem", 
+                    lineHeight: "1.65", 
+                    color: "#CBD5E1", 
+                    marginBottom: "2.5rem",
+                    maxWidth: "580px" 
+                  }}
+                >
+                  Une plateforme institutionnelle unifiée interconnectant praticiens, établissements de santé et autorités de surveillance pour la signalisation rapide et la gestion efficace des alertes sanitaires.
                 </p>
 
-                {/* Primary & Secondary Action CTAs */}
+                {/* Primary Action Buttons */}
                 <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
                   <Link
                     to="/login"
@@ -99,12 +153,12 @@ function Landing() {
                       padding: "0.95rem 1.75rem",
                       borderRadius: "14px",
                       fontWeight: "800",
-                      fontSize: "0.95rem",
+                      fontSize: "0.98rem",
                       textDecoration: "none",
                       display: "inline-flex",
                       alignItems: "center",
-                      gap: "10px",
-                      boxShadow: "0 8px 24px rgba(15, 162, 155, 0.35)",
+                      gap: "8px",
+                      boxShadow: "0 10px 25px rgba(15, 162, 155, 0.35)",
                       transition: "all 0.2s ease"
                     }}
                   >
@@ -158,44 +212,53 @@ function Landing() {
               style={{ 
                 marginTop: "4.5rem", 
                 padding: "1.75rem 2rem", 
-                backgroundColor: "rgba(255, 255, 255, 0.04)", 
-                border: "1px solid rgba(255, 255, 255, 0.1)", 
                 borderRadius: "20px", 
-                display: "grid", 
-                gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", 
-                gap: "1.5rem" 
+                backgroundColor: "rgba(255, 255, 255, 0.04)", 
+                border: "1px solid rgba(255, 255, 255, 0.08)",
+                display: "grid",
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                gap: "1.5rem",
+                backdropFilter: "blur(10px)"
               }}
             >
-              <div>
-                <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#38BDF8", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-                  Couverture Nationale
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ padding: "10px", borderRadius: "12px", backgroundColor: "rgba(56, 189, 248, 0.15)" }}>
+                  <Activity size={20} color="#38BDF8" />
                 </div>
-                <div style={{ fontSize: "1.5rem", fontWeight: "800", color: "white" }}>69 Wilayas</div>
-                <div style={{ fontSize: "0.82rem", color: "#94A3B8", marginTop: "2px" }}>Maillage territorial complet</div>
+                <div>
+                  <div style={{ fontSize: "0.8rem", color: "#94A3B8", fontWeight: "600" }}>Veille épidémiologique</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: "800", color: "white" }}>Déclarations en temps réel</div>
+                </div>
               </div>
 
-              <div>
-                <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#0fa29b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-                  Structures de Santé
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ padding: "10px", borderRadius: "12px", backgroundColor: "rgba(15, 162, 155, 0.15)" }}>
+                  <Building2 size={20} color="#0fa29b" />
                 </div>
-                <div style={{ fontSize: "1.5rem", fontWeight: "800", color: "white" }}>CHU · EPH · EPSP</div>
-                <div style={{ fontSize: "0.82rem", color: "#94A3B8", marginTop: "2px" }}>Établissements interconnectés</div>
+                <div>
+                  <div style={{ fontSize: "0.8rem", color: "#94A3B8", fontWeight: "600" }}>Couverture nationale</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: "800", color: "white" }}>69 Wilayas administrées</div>
+                </div>
               </div>
 
-              <div>
-                <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#F59E0B", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-                  Transmission
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ padding: "10px", borderRadius: "12px", backgroundColor: "rgba(56, 189, 248, 0.15)" }}>
+                  <Users size={20} color="#38BDF8" />
                 </div>
-                <div style={{ fontSize: "1.5rem", fontWeight: "800", color: "white" }}>Temps Réel</div>
-                <div style={{ fontSize: "0.82rem", color: "#94A3B8", marginTop: "2px" }}>Remontée directe des cas graves</div>
+                <div>
+                  <div style={{ fontSize: "0.8rem", color: "#94A3B8", fontWeight: "600" }}>Acteurs de santé</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: "800", color: "white" }}>Médecins & Inspecteurs</div>
+                </div>
               </div>
 
-              <div>
-                <div style={{ fontSize: "0.78rem", fontWeight: "700", color: "#10B981", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "4px" }}>
-                  Sécurité des Données
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                <div style={{ padding: "10px", borderRadius: "12px", backgroundColor: "rgba(15, 162, 155, 0.15)" }}>
+                  <Lock size={20} color="#0fa29b" />
                 </div>
-                <div style={{ fontSize: "1.5rem", fontWeight: "800", color: "white" }}>Authentifié & Tracé</div>
-                <div style={{ fontSize: "0.82rem", color: "#94A3B8", marginTop: "2px" }}>Contrôle d'accès par rôle</div>
+                <div>
+                  <div style={{ fontSize: "0.8rem", color: "#94A3B8", fontWeight: "600" }}>Confidentialité</div>
+                  <div style={{ fontSize: "1.05rem", fontWeight: "800", color: "white" }}>Agrégation anonymisée</div>
+                </div>
               </div>
             </div>
           </div>
@@ -226,11 +289,11 @@ function Landing() {
               Carte interactive des divisions administratives de l'Algérie
             </h2>
             <p style={{ fontSize: "1.05rem", color: "#94A3B8", maxWidth: "650px", margin: "0 auto 3rem auto" }}>
-              Survolez les wilayas pour visualiser leurs codes officiels et dénominations multilingues (Français / العربية).
+              Survolez les wilayas pour visualiser leurs codes officiels et les événements de santé agrégés en temps réel.
             </p>
 
             <div style={{ backgroundColor: "rgba(255, 255, 255, 0.03)", borderRadius: "24px", padding: "2rem", border: "1px solid rgba(255, 255, 255, 0.1)", backdropFilter: "blur(10px)" }}>
-              <Algeria69WilayaMap style={{ height: "480px" }} />
+              <Algeria69WilayaMap stats={mapData?.stats} style={{ height: "480px" }} />
             </div>
           </div>
         </section>
@@ -264,27 +327,12 @@ function Landing() {
                   textDecoration: "none",
                   display: "inline-flex",
                   alignItems: "center",
-                  gap: "10px",
-                  boxShadow: "0 8px 24px rgba(15, 162, 155, 0.4)"
+                  gap: "8px",
+                  boxShadow: "0 10px 25px rgba(15, 162, 155, 0.4)"
                 }}
               >
-                <span>Accéder à RASED</span>
+                <span>Accéder à l'espace sécurisé</span>
                 <ArrowRight size={18} />
-              </Link>
-              <Link
-                to="/signup"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.08)",
-                  color: "white",
-                  border: "1.5px solid rgba(255,255,255,0.2)",
-                  padding: "1rem 1.75rem",
-                  borderRadius: "14px",
-                  fontWeight: "700",
-                  fontSize: "1rem",
-                  textDecoration: "none"
-                }}
-              >
-                Inscrire mon établissement / cabinet
               </Link>
             </div>
           </div>

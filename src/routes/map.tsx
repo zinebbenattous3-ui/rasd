@@ -1,24 +1,25 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { Algeria69WilayaMap } from "@/components/Algeria69WilayaMap";
 import { ALGERIA_WILAYAS_69, getWilayaByCode, Wilaya } from "@/lib/wilayas";
-import { MapPin, Search, CheckCircle2, Info, ArrowLeft, RefreshCw, ShieldCheck } from "lucide-react";
+import { getPublicHealthMapData, PublicHealthMapResponse, PublicWilayaStats } from "@/lib/publicHealthMap";
+import { MapPin, Search, CheckCircle2, Info, ArrowLeft, RefreshCw, ShieldCheck, Activity, Building2, AlertTriangle, FileText } from "lucide-react";
 
 export const Route = createFileRoute("/map")({
   head: () => ({
     meta: [
-      { title: "Carte des 69 Wilayas — Rased — Réseau National de Veille Sanitaire" },
+      { title: "Carte Observatoire 69 Wilayas — Rased — Réseau National de Veille Sanitaire" },
       {
         name: "description",
         content:
-          "Carte interactive complète des 69 wilayas de l'Algérie pour la surveillance et la veille sanitaire nationale Rased.",
+          "Carte interactive observatoire des 69 wilayas d'Algérie basées sur les événements de santé enregistrés Rased.",
       },
-      { property: "og:title", content: "Carte des 69 Wilayas — Rased" },
+      { property: "og:title", content: "Carte Observatoire des 69 Wilayas — Rased" },
       {
         property: "og:description",
-        content: "Carte interactive complète de la structure administrative des 69 wilayas d'Algérie.",
+        content: "Visualisation en temps réel des statistiques sanitaires agrégées sur la carte des 69 wilayas d'Algérie.",
       },
     ],
   }),
@@ -28,8 +29,27 @@ export const Route = createFileRoute("/map")({
 export function MapPage() {
   const [selectedWilayaCode, setSelectedWilayaCode] = useState<string>("16"); // Default to 16 Alger
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [mapData, setMapData] = useState<PublicHealthMapResponse | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    async function loadData() {
+      setIsLoading(true);
+      const res = await getPublicHealthMapData();
+      if (isMounted) {
+        setMapData(res);
+        setIsLoading(false);
+      }
+    }
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const selectedWilaya: Wilaya | undefined = getWilayaByCode(selectedWilayaCode);
+  const selectedStats: PublicWilayaStats | undefined = mapData?.stats ? mapData.stats[selectedWilayaCode] : undefined;
 
   const filteredWilayas = ALGERIA_WILAYAS_69.filter((w) => {
     const query = searchQuery.trim().toLowerCase();
@@ -64,27 +84,50 @@ export function MapPage() {
               <ArrowLeft size={14} /> Accueil
             </Link>
             <span style={{ color: "#CBD5E1" }}>/</span>
-            <span style={{ fontSize: "0.85rem", color: "#0fa29b", fontWeight: "700" }}>Carte 69 Wilayas</span>
+            <span style={{ fontSize: "0.85rem", color: "#0fa29b", fontWeight: "700" }}>Observatoire 69 Wilayas</span>
           </div>
 
           <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
             <div>
               <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", backgroundColor: "#E0F2FE", color: "#0369A1", padding: "4px 12px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: "800", letterSpacing: "0.04em", textTransform: "uppercase", marginBottom: "0.5rem" }}>
-                <MapPin size={14} /> Découpage Administratif Officiel
+                <MapPin size={14} /> Données Réelles de Santé Publique RASED
               </div>
               <h1 style={{ fontSize: "2.2rem", fontWeight: "900", color: "#062C54", letterSpacing: "-0.02em", margin: 0 }}>
-                Carte Interactive des 69 Wilayas d'Algérie
+                Carte Observatoire des 69 Wilayas d'Algérie
               </h1>
               <p style={{ color: "#64748B", fontSize: "1rem", marginTop: "0.4rem", maxWidth: "700px" }}>
-                Visualisez la couverture territoriale nationale et interragissez avec chacune des 69 wilayas administratives.
+                Visualisez les événements de santé agrégés enregistrés par les établissements sanitaires à travers le territoire national.
               </p>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#FFFFFF", padding: "10px 16px", borderRadius: "14px", border: "1px solid #E2E8F0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
-              <ShieldCheck size={20} color="#0fa29b" />
-              <div>
-                <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#062C54" }}>Structure 69 Wilayas</div>
-                <div style={{ fontSize: "0.72rem", color: "#10B981", fontWeight: "700" }}>Conforme aux normes nationales</div>
+            {/* LIVE DB METRICS SUMMARY CARDS */}
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#FFFFFF", padding: "10px 16px", borderRadius: "14px", border: "1px solid #E2E8F0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                <Activity size={22} color="#10B981" />
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748B", fontWeight: "700", textTransform: "uppercase" }}>Événements Enregistrés</div>
+                  <div style={{ fontSize: "1.2rem", fontWeight: "900", color: "#062C54" }}>
+                    {isLoading ? "..." : mapData?.totalEvents || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#FFFFFF", padding: "10px 16px", borderRadius: "14px", border: "1px solid #E2E8F0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                <Building2 size={22} color="#0fa29b" />
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748B", fontWeight: "700", textTransform: "uppercase" }}>Établissements</div>
+                  <div style={{ fontSize: "1.2rem", fontWeight: "900", color: "#062C54" }}>
+                    {isLoading ? "..." : mapData?.totalFacilities || 0}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "10px", backgroundColor: "#FFFFFF", padding: "10px 16px", borderRadius: "14px", border: "1px solid #E2E8F0", boxShadow: "0 2px 8px rgba(0,0,0,0.04)" }}>
+                <ShieldCheck size={22} color="#0369A1" />
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#64748B", fontWeight: "700", textTransform: "uppercase" }}>Structure</div>
+                  <div style={{ fontSize: "1.2rem", fontWeight: "900", color: "#062C54" }}>69 Wilayas</div>
+                </div>
               </div>
             </div>
           </div>
@@ -104,36 +147,27 @@ export function MapPage() {
               display: "flex",
               flexDirection: "column",
               position: "relative",
-              minHeight: "520px",
+              minHeight: "540px",
             }}
           >
-            {/* Map Action Overlay Header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", color: "white" }}>
-              <div style={{ fontSize: "0.9rem", fontWeight: "700", color: "#38BDF8", display: "flex", alignItems: "center", gap: "6px" }}>
+            {/* Map Header Legend & Actions */}
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", color: "white", gap: "10px" }}>
+              <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "#38BDF8", display: "flex", alignItems: "center", gap: "8px" }}>
                 <span style={{ width: "8px", height: "8px", borderRadius: "50%", backgroundColor: "#38BDF8", boxShadow: "0 0 10px #38BDF8" }} />
-                Cliquez ou survolez une wilaya pour sélectionner
+                Cliquez ou survolez une wilaya pour explorer ses statistiques
               </div>
 
-              {selectedWilaya && (
-                <button
-                  onClick={() => setSelectedWilayaCode("")}
-                  style={{
-                    background: "rgba(255,255,255,0.1)",
-                    border: "none",
-                    borderRadius: "8px",
-                    padding: "4px 10px",
-                    color: "#CBD5E1",
-                    fontSize: "0.78rem",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "4px",
-                  }}
-                >
-                  <RefreshCw size={12} /> Réinitialiser
-                </button>
-              )}
+              {/* Dynamic Map Legend */}
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", fontSize: "0.75rem", background: "rgba(255,255,255,0.08)", padding: "4px 12px", borderRadius: "999px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: "#10B981" }} />
+                  <span>Cas Déclarés</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                  <span style={{ width: "10px", height: "10px", borderRadius: "2px", backgroundColor: "rgba(6, 44, 84, 0.75)", border: "1px solid rgba(255,255,255,0.3)" }} />
+                  <span>0 Événement</span>
+                </div>
+              </div>
             </div>
 
             {/* Interactive SVG Map */}
@@ -141,6 +175,7 @@ export function MapPage() {
               <Algeria69WilayaMap
                 selectedWilaya={selectedWilayaCode}
                 onWilayaSelect={(w) => setSelectedWilayaCode(w.code)}
+                stats={mapData?.stats}
                 style={{ height: "100%", width: "100%", maxHeight: "550px" }}
               />
             </div>
@@ -159,51 +194,119 @@ export function MapPage() {
               }}
             >
               <div style={{ fontSize: "0.75rem", fontWeight: "800", color: "#0fa29b", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.5rem" }}>
-                Fiche Wilaya Sélectionnée
+                Statistiques Wilaya Sélectionnée
               </div>
 
               {selectedWilaya ? (
                 <div>
-                  <div style={{ display: "flex", alignItems: "baseline", gap: "10px", marginBottom: "0.5rem" }}>
+                  <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: "8px" }}>
+                      <span
+                        style={{
+                          backgroundColor: "#062C54",
+                          color: "#38BDF8",
+                          fontWeight: "900",
+                          fontSize: "1.1rem",
+                          padding: "4px 10px",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        {selectedWilaya.code}
+                      </span>
+                      <h2 style={{ fontSize: "1.5rem", fontWeight: "900", color: "#062C54", margin: 0 }}>
+                        {selectedWilaya.name}
+                      </h2>
+                    </div>
+
+                    <div style={{ fontSize: "1.2rem", fontWeight: "800", color: "#0fa29b", fontFamily: "system-ui, sans-serif" }}>
+                      {selectedWilaya.nameAr}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: "0.8rem", color: "#64748B", marginBottom: "1rem" }}>
+                    {selectedWilaya.number <= 48 ? "Wilaya Principale" : "Nouvelle Wilaya Administrée"}
+                  </div>
+
+                  {/* TOTAL WILAYA EVENT COUNT BADGE */}
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      backgroundColor: selectedStats && selectedStats.totalEvents > 0 ? "#ECFDF5" : "#F8FAFC",
+                      border: "1.5px solid",
+                      borderColor: selectedStats && selectedStats.totalEvents > 0 ? "#A7F3D0" : "#E2E8F0",
+                      padding: "0.85rem 1rem",
+                      borderRadius: "14px",
+                      marginBottom: "1rem",
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <Activity size={18} color={selectedStats && selectedStats.totalEvents > 0 ? "#059669" : "#64748B"} />
+                      <span style={{ fontSize: "0.88rem", fontWeight: "700", color: "#062C54" }}>Total Événements</span>
+                    </div>
+
                     <span
                       style={{
-                        backgroundColor: "#062C54",
-                        color: "#38BDF8",
-                        fontWeight: "900",
                         fontSize: "1.1rem",
-                        padding: "4px 10px",
-                        borderRadius: "8px",
+                        fontWeight: "900",
+                        color: selectedStats && selectedStats.totalEvents > 0 ? "#059669" : "#64748B",
                       }}
                     >
-                      {selectedWilaya.code}
+                      {selectedStats?.totalEvents || 0}
                     </span>
-                    <h2 style={{ fontSize: "1.6rem", fontWeight: "900", color: "#062C54", margin: 0 }}>
-                      {selectedWilaya.name}
-                    </h2>
                   </div>
 
-                  <div style={{ fontSize: "1.3rem", fontWeight: "800", color: "#0fa29b", textAlign: "right", fontFamily: "system-ui, sans-serif", marginBottom: "1.25rem" }}>
-                    {selectedWilaya.nameAr}
+                  {/* AGGREGATED DISEASE BREAKDOWN LIST */}
+                  <div style={{ fontSize: "0.82rem", fontWeight: "800", color: "#062C54", marginBottom: "0.5rem" }}>
+                    Répartition par Pathologie / Événement :
                   </div>
 
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.88rem", backgroundColor: "#F8FAFC", padding: "1rem", borderRadius: "12px", border: "1px solid #F1F5F9" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "#64748B", fontWeight: "600" }}>Code Officiel :</span>
-                      <span style={{ color: "#062C54", fontWeight: "800" }}>{selectedWilaya.code}</span>
+                  {selectedStats && selectedStats.diseases.length > 0 ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {selectedStats.diseases.map((d) => (
+                        <div
+                          key={d.name}
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            padding: "8px 12px",
+                            borderRadius: "10px",
+                            backgroundColor: "#F1F5F9",
+                            fontSize: "0.85rem",
+                          }}
+                        >
+                          <span style={{ fontWeight: "700", color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+                            <FileText size={14} color="#0fa29b" />
+                            {d.name}
+                          </span>
+                          <span
+                            style={{
+                              backgroundColor: "#062C54",
+                              color: "#FFFFFF",
+                              fontSize: "0.78rem",
+                              fontWeight: "800",
+                              padding: "2px 8px",
+                              borderRadius: "999px",
+                            }}
+                          >
+                            {d.count} {d.count > 1 ? "cas" : "cas"}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "#64748B", fontWeight: "600" }}>Région :</span>
-                      <span style={{ color: "#062C54", fontWeight: "700" }}>
-                        {selectedWilaya.number <= 48 ? "Wilaya Principale" : "Nouvelle Wilaya"}
-                      </span>
+                  ) : (
+                    <div style={{ padding: "1rem", textAlign: "center", backgroundColor: "#F8FAFC", borderRadius: "12px", border: "1px dashed #CBD5E1" }}>
+                      <CheckCircle2 size={20} color="#10B981" style={{ margin: "0 auto 4px auto", display: "block" }} />
+                      <div style={{ fontSize: "0.82rem", fontWeight: "700", color: "#475569" }}>
+                        Aucun événement de santé enregistré
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "#94A3B8" }}>
+                        Aucune déclaration active dans la base de données.
+                      </div>
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between" }}>
-                      <span style={{ color: "#64748B", fontWeight: "600" }}>Statut Sanitaire :</span>
-                      <span style={{ color: "#10B981", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                        <CheckCircle2 size={14} /> Couvert RASED
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </div>
               ) : (
                 <div style={{ padding: "2rem 1rem", textAlign: "center", color: "#94A3B8" }}>
@@ -213,7 +316,7 @@ export function MapPage() {
               )}
             </div>
 
-            {/* SEARCH & QUICK SEARCH WILAYA SELECTOR */}
+            {/* WILAYA SELECTOR LIST WITH LIVE EVENT BADGES */}
             <div
               style={{
                 backgroundColor: "#FFFFFF",
@@ -250,9 +353,12 @@ export function MapPage() {
               </div>
 
               {/* Scrollable Wilaya List */}
-              <div style={{ flex: 1, maxHeight: "260px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px", paddingRight: "4px" }}>
+              <div style={{ flex: 1, maxHeight: "240px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "4px", paddingRight: "4px" }}>
                 {filteredWilayas.map((w) => {
                   const isSelected = selectedWilayaCode === w.code;
+                  const wStat = mapData?.stats ? mapData.stats[w.code] : undefined;
+                  const hasEvents = wStat && wStat.totalEvents > 0;
+
                   return (
                     <button
                       key={w.code}
@@ -289,6 +395,21 @@ export function MapPage() {
                           {w.code}
                         </span>
                         <span style={{ fontWeight: isSelected ? "800" : "600" }}>{w.name}</span>
+
+                        {hasEvents && (
+                          <span
+                            style={{
+                              backgroundColor: "#10B981",
+                              color: "#FFFFFF",
+                              fontWeight: "900",
+                              fontSize: "0.7rem",
+                              padding: "1px 6px",
+                              borderRadius: "999px",
+                            }}
+                          >
+                            {wStat.totalEvents}
+                          </span>
+                        )}
                       </div>
                       <span style={{ fontSize: "0.8rem", color: isSelected ? "#0fa29b" : "#94A3B8", fontFamily: "system-ui, sans-serif" }}>
                         {w.nameAr}
