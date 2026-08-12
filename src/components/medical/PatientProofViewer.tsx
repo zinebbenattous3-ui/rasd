@@ -574,8 +574,8 @@ export function PatientProofViewer({
                   display: "block",
                   pointerEvents: "none",
                   WebkitUserDrag: "none",
-                  WebkitTouchCallout: "none" as any
-                }}
+                  WebkitTouchCallout: "none"
+                } as any}
               />
 
               {/* Transparent Click Shield & Security Watermark */}

@@ -10,7 +10,8 @@ import {
   RefreshCw, 
   Award,
   Calendar,
-  UserCheck
+  UserCheck,
+  FileText
 } from "lucide-react";
 
 export const Route = createFileRoute("/health-authority/")({
@@ -180,6 +181,28 @@ function HealthAuthorityDashboard() {
             Actualiser
           </button>
           
+          <Link
+            to="/reports"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.15)",
+              color: "white",
+              border: "1px solid rgba(255,255,255,0.3)",
+              padding: "12px 20px",
+              borderRadius: "12px",
+              fontWeight: "600",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              fontSize: "0.9rem",
+              textDecoration: "none",
+              backdropFilter: "blur(10px)",
+            }}
+          >
+            <FileText size={18} />
+            Centre de Rapports
+          </Link>
+
           <Link
             to="/health-authority/facilities"
             style={{

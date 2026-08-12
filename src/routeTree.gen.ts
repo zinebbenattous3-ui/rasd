@@ -16,6 +16,7 @@ import { Route as HealthAuthorityRouteImport } from './routes/health-authority'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MapRouteImport } from './routes/map'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ReportsRouteImport } from './routes/reports'
 import { Route as SecurityRouteImport } from './routes/security'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as SuperadminRouteImport } from './routes/superadmin'
@@ -68,6 +69,11 @@ const MapRoute = MapRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportsRoute = ReportsRouteImport.update({
+  id: '/reports',
+  path: '/reports',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SecurityRoute = SecurityRouteImport.update({
@@ -172,6 +178,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/map': typeof MapRoute
   '/privacy': typeof PrivacyRoute
+  '/reports': typeof ReportsRoute
   '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/superadmin': typeof SuperadminRouteWithChildren
@@ -197,6 +204,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/map': typeof MapRoute
   '/privacy': typeof PrivacyRoute
+  '/reports': typeof ReportsRoute
   '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
@@ -224,6 +232,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/map': typeof MapRoute
   '/privacy': typeof PrivacyRoute
+  '/reports': typeof ReportsRoute
   '/security': typeof SecurityRoute
   '/signup': typeof SignupRoute
   '/superadmin': typeof SuperadminRouteWithChildren
@@ -253,6 +262,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/map'
     | '/privacy'
+    | '/reports'
     | '/security'
     | '/signup'
     | '/superadmin'
@@ -278,6 +288,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/map'
     | '/privacy'
+    | '/reports'
     | '/security'
     | '/signup'
     | '/terms'
@@ -304,6 +315,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/map'
     | '/privacy'
+    | '/reports'
     | '/security'
     | '/signup'
     | '/superadmin'
@@ -332,6 +344,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   MapRoute: typeof MapRoute
   PrivacyRoute: typeof PrivacyRoute
+  ReportsRoute: typeof ReportsRoute
   SecurityRoute: typeof SecurityRoute
   SignupRoute: typeof SignupRoute
   SuperadminRoute: typeof SuperadminRouteWithChildren
@@ -387,6 +400,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reports': {
+      id: '/reports'
+      path: '/reports'
+      fullPath: '/reports'
+      preLoaderRoute: typeof ReportsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/security': {
@@ -583,6 +603,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   MapRoute: MapRoute,
   PrivacyRoute: PrivacyRoute,
+  ReportsRoute: ReportsRoute,
   SecurityRoute: SecurityRoute,
   SignupRoute: SignupRoute,
   SuperadminRoute: SuperadminRouteWithChildren,

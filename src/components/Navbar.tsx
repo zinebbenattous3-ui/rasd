@@ -202,6 +202,26 @@ export function Navbar() {
                 )}
               </Link>
             </li>
+            <li>
+              <Link
+                to="/reports"
+                onClick={() => setOpen(false)}
+                style={{
+                  textDecoration: "none",
+                  fontSize: "0.92rem",
+                  fontWeight: location.pathname === "/reports" ? "700" : "550",
+                  color: location.pathname === "/reports" ? "#062C54" : "#4a5568",
+                  position: "relative",
+                  padding: "0.4rem 0",
+                  transition: "color 0.2s ease"
+                }}
+              >
+                Rapports & Observatoire
+                {location.pathname === "/reports" && (
+                  <span style={{ position: "absolute", bottom: "-2px", left: 0, right: 0, height: "2px", backgroundColor: "#0fa29b", borderRadius: "2px" }} />
+                )}
+              </Link>
+            </li>
           </ul>
 
           {/* Action Buttons & Language Switcher */}
