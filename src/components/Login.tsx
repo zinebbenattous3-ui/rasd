@@ -1,10 +1,12 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, useEffect, useRef, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff, AlertCircle, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
 import { storeSession, getStoredSession, clearSession } from "@/lib/auth";
 import { verifyPassword } from "@/lib/auth-hash";
 import { loadGoogleGsiScript, authenticateWithGoogleCredential } from "@/lib/googleAuth";
 import type { RadarState } from "./medical/MedicalRadarCanvas";
+import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/TurnstileWidget";
+import { verifyTurnstileToken } from "@/lib/turnstileServer";
 
 const COLORS = {
   navy: "#062C54",
@@ -31,6 +33,8 @@ export function Login({ onAuthenticated, onStateChange, onDoctorStateChange }: L
   const [noAccountError, setNoAccountError] = useState(false);
   const [loadingStepText, setLoadingStepText] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const turnstileWidgetRef = useRef<TurnstileWidgetRef>(null);
 
   // Existing active session detection for "One Session Per Browser" rule
   const [existingSession, setExistingSession] = useState<{ userId: string; role: string } | null>(null);
@@ -65,7 +69,35 @@ export function Login({ onAuthenticated, onStateChange, onDoctorStateChange }: L
       return;
     }
 
+    if (!turnstileToken) {
+      setErrors({ form: "Veuillez valider le contrôle anti-robot Turnstile pour vous connecter." });
+      triggerState('error');
+      return;
+    }
+
     setLoading(true);
+    setLoadingStepText("Vérification anti-robot Turnstile...");
+    triggerState('loading', "Vérification anti-robot Turnstile...");
+
+    try {
+      const turnstileRes = await verifyTurnstileToken({ data: { token: turnstileToken } });
+      if (!turnstileRes.success) {
+        setLoading(false);
+        setErrors({ form: turnstileRes.error || "La vérification anti-robot a échoué. Veuillez réessayer." });
+        triggerState('error');
+        setTurnstileToken("");
+        turnstileWidgetRef.current?.reset();
+        return;
+      }
+    } catch (tErr: any) {
+      setLoading(false);
+      setErrors({ form: tErr.message || "Erreur lors de la vérification Turnstile." });
+      triggerState('error');
+      setTurnstileToken("");
+      turnstileWidgetRef.current?.reset();
+      return;
+    }
+
     setLoadingStepText("Vérification des identifiants...");
     triggerState('loading', "Vérification des identifiants...");
     
@@ -463,6 +495,19 @@ export function Login({ onAuthenticated, onStateChange, onDoctorStateChange }: L
             Rester connecté sur cet appareil
           </label>
         </div>
+
+        {/* Cloudflare Turnstile Anti-Robot Verification */}
+        <TurnstileWidget
+          ref={turnstileWidgetRef}
+          onVerify={(token) => {
+            setTurnstileToken(token);
+            if (errors.form) {
+              setErrors((err) => { const { form, ...rest } = err; return rest; });
+            }
+          }}
+          onExpire={() => setTurnstileToken("")}
+          onError={() => setTurnstileToken("")}
+        />
 
         {/* Standard Submit Button */}
         <div style={{ marginTop: '0.5rem' }}>
