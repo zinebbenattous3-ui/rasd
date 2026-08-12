@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from "react";
 import { supabase } from "@/lib/supabase";
 import { Eye, EyeOff, AlertCircle, ShieldCheck, CheckCircle2, ArrowRight } from "lucide-react";
 import { storeSession, getStoredSession, clearSession } from "@/lib/auth";
+import { verifyPassword } from "@/lib/auth-hash";
 import { loadGoogleGsiScript, authenticateWithGoogleCredential } from "@/lib/googleAuth";
 import type { RadarState } from "./medical/MedicalRadarCanvas";
 
@@ -73,7 +74,7 @@ export function Login({ onAuthenticated, onStateChange, onDoctorStateChange }: L
     setLoadingStepText("Sécurisation de la session...");
     triggerState('loading', "Sécurisation de la session...");
 
-    // 1. Try RPC authentication
+    // 1. Try RPC authentication (PostgreSQL pgcrypto bcrypt verification)
     const { data: userData, error: userError } = await supabase.rpc('login_user', {
       email_input: email.trim(),
       password_input: password,
@@ -98,15 +99,14 @@ export function Login({ onAuthenticated, onStateChange, onDoctorStateChange }: L
       return;
     }
 
-    // 2. Fallback to direct query on centralized users table
+    // 2. Fallback to bcrypt verification on centralized users table
     const { data: directUser, error: directError } = await supabase
       .from('users')
-      .select('id, role, is_active')
+      .select('id, role, is_active, password_hash')
       .eq('email', email.trim().toLowerCase())
-      .eq('password_hash', password)
       .maybeSingle();
 
-    if (directError || !directUser) {
+    if (directError || !directUser || !verifyPassword(password, directUser.password_hash)) {
       setLoading(false);
       setErrors({ form: "Impossible de vous connecter. Vérifiez votre adresse e-mail et votre mot de passe." });
       triggerState('error');

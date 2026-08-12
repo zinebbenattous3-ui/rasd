@@ -9,6 +9,7 @@ import {
   Stethoscope, User, Search, Building2, Lock, ChevronRight, Edit2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { hashPassword } from "@/lib/auth-hash";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -266,7 +267,7 @@ function SignupPage() {
         .from('users')
         .insert([{
           email: form.email.trim().toLowerCase(),
-          password_hash: form.password,
+          password_hash: hashPassword(form.password),
           first_name: form.first_name.trim(),
           last_name: form.last_name.trim(),
           role: form.role,

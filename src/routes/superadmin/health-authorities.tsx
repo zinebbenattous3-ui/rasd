@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { hashPassword } from "@/lib/auth-hash";
 import { 
   Plus, 
   ShieldCheck, 
@@ -264,7 +265,7 @@ function HealthAuthoritiesPage() {
         .from('users')
         .insert([{
           email: form.email.trim().toLowerCase(),
-          password_hash: form.password,
+          password_hash: hashPassword(form.password),
           first_name: form.firstName.trim(),
           last_name: form.lastName.trim(),
           role: 'HEALTH_AUTHORITY',
