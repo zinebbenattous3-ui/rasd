@@ -83,47 +83,44 @@ CREATE TABLE public.superadmins (
   CONSTRAINT superadmins_pkey PRIMARY KEY (id),
   CONSTRAINT superadmins_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-CREATE TABLE public.reportable_diseases (
-  id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  name character varying NOT NULL UNIQUE,
-  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT reportable_diseases_pkey PRIMARY KEY (id)
-);
-
 CREATE TABLE public.health_events (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   doctor_id uuid NOT NULL,
   facility_id uuid NOT NULL,
   patient_id uuid NOT NULL,
-  reportable_disease_id uuid NOT NULL,
   description text NOT NULL,
   severity character varying NOT NULL CHECK (severity::text = ANY (ARRAY['LOW'::character varying, 'MEDIUM'::character varying, 'HIGH'::character varying, 'CRITICAL'::character varying]::text[])),
-  status character varying NOT NULL DEFAULT 'PENDING'::character varying CHECK (status::text = ANY (ARRAY['PENDING'::character varying, 'VALIDATED'::character varying, 'REJECTED'::character varying, 'ARCHIVED'::character varying]::text[])),
   patient_proof_url text,
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reportable_disease_id uuid NOT NULL,
   CONSTRAINT health_events_pkey PRIMARY KEY (id),
   CONSTRAINT health_events_facility_id_fkey FOREIGN KEY (facility_id) REFERENCES public.facilities(id),
   CONSTRAINT health_events_patient_id_fkey FOREIGN KEY (patient_id) REFERENCES public.patients(id),
   CONSTRAINT health_events_reportable_disease_id_fkey FOREIGN KEY (reportable_disease_id) REFERENCES public.reportable_diseases(id),
   CONSTRAINT health_events_doctor_id_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id)
 );
-
--- Seed initial reportable diseases
-INSERT INTO public.reportable_diseases (name) VALUES
-  ('Choléra'),
-  ('Rougeole'),
-  ('Paludisme (Malaria)'),
-  ('Tuberculose (toutes formes)'),
-  ('Brucellose'),
-  ('Fièvre Typhoïde'),
-  ('Méningite Cérébro-spinale'),
-  ('Rage humaine'),
-  ('Poliomyélite antérieure aiguë'),
-  ('Diphthérie'),
-  ('Hépatite virale A/B/C'),
-  ('COVID-19 / SRAS'),
-  ('Intoxication alimentaire collective'),
-  ('Leishmaniose cutanée/viscérale'),
-  ('Autre événement de santé publique')
-ON CONFLICT (name) DO NOTHING;
+CREATE TABLE public.reportable_diseases (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  name character varying NOT NULL UNIQUE,
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT reportable_diseases_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.doctor_facility_change_requests (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  doctor_id uuid NOT NULL,
+  current_facility_id uuid NOT NULL,
+  requested_facility_id uuid NOT NULL,
+  reason text NOT NULL,
+  status character varying NOT NULL DEFAULT 'PENDING'::character varying CHECK (status::text = ANY (ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying, 'CANCELLED'::character varying]::text[])),
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  review_message text,
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT doctor_facility_change_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT doctor_facility_change_requests_doctor_fkey FOREIGN KEY (doctor_id) REFERENCES public.doctors(id),
+  CONSTRAINT doctor_facility_change_requests_current_facility_fkey FOREIGN KEY (current_facility_id) REFERENCES public.facilities(id),
+  CONSTRAINT doctor_facility_change_requests_requested_facility_fkey FOREIGN KEY (requested_facility_id) REFERENCES public.facilities(id),
+  CONSTRAINT doctor_facility_change_requests_reviewer_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
+);
