@@ -95,7 +95,7 @@ function HealthAuthorityLayout() {
     { to: "/health-authority", label: "Tableau de bord", icon: LayoutDashboard, exact: true },
     { to: "/health-authority/facilities", label: "Établissements", icon: Building2, exact: false },
     { to: "/health-authority/doctors", label: "Médecins", icon: Stethoscope, exact: false },
-    { to: "/health-authority/reports", label: "📊 Rapports", icon: BarChart3, exact: false },
+    { to: "/health-authority/reports", label: " Rapports", icon: BarChart3, exact: false },
     { to: "/health-authority/profile", label: "Mon Profil", icon: User, exact: false }
   ];
 
@@ -114,20 +114,20 @@ function HealthAuthorityLayout() {
             </div>
           </Link>
         </div>
-        
+
         <nav style={{ flex: 1, padding: '1.5rem 1rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)', marginBottom: '1rem', paddingLeft: '1rem' }}>Espace Sanitaire</div>
-          
+
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.exact 
-              ? location.pathname === item.to 
+            const isActive = item.exact
+              ? location.pathname === item.to
               : location.pathname.startsWith(item.to);
 
             return (
-              <Link 
-                key={item.to} 
-                to={item.to} 
+              <Link
+                key={item.to}
+                to={item.to}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -168,8 +168,8 @@ function HealthAuthorityLayout() {
             </div>
           )}
 
-          <button 
-            onClick={handleLogout} 
+          <button
+            onClick={handleLogout}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -236,14 +236,14 @@ function HealthAuthorityLayout() {
             <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {navItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = item.exact 
-                  ? location.pathname === item.to 
+                const isActive = item.exact
+                  ? location.pathname === item.to
                   : location.pathname.startsWith(item.to);
 
                 return (
-                  <Link 
-                    key={item.to} 
-                    to={item.to} 
+                  <Link
+                    key={item.to}
+                    to={item.to}
                     onClick={() => setMobileMenuOpen(false)}
                     style={{
                       display: 'flex',
@@ -265,8 +265,8 @@ function HealthAuthorityLayout() {
               })}
             </nav>
 
-            <button 
-              onClick={handleLogout} 
+            <button
+              onClick={handleLogout}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -308,8 +308,8 @@ function HealthAuthorityLayout() {
               <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: COLORS.teal }} />
               Autorité Agréée
             </div>
-            
-            <div 
+
+            <div
               style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: COLORS.navy, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '700', cursor: 'pointer', userSelect: 'none', border: `2px solid ${COLORS.teal}` }}
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
@@ -323,14 +323,14 @@ function HealthAuthorityLayout() {
                   <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem' }}>{currentUser?.firstName} {currentUser?.lastName}</div>
                   <div style={{ fontSize: '0.78rem', color: COLORS.muted, overflow: 'hidden', textOverflow: 'ellipsis' }}>{currentUser?.email}</div>
                 </div>
-                <Link 
-                  to="/health-authority/profile" 
+                <Link
+                  to="/health-authority/profile"
                   onClick={() => setShowProfileMenu(false)}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', textDecoration: 'none', color: COLORS.text, fontWeight: '500', borderRadius: '8px' }}
                 >
                   <User size={18} color={COLORS.teal} /> Mon Profil
                 </Link>
-                <button 
+                <button
                   onClick={handleLogout}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', textDecoration: 'none', color: '#DC2626', fontWeight: '500', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer' }}
                 >

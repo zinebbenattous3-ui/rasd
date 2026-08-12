@@ -233,12 +233,12 @@ export function InspectorReportsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      
+
       {/* HEADER & SCOPE BADGE */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            📊 Rapports & Observatoire Régional
+            Rapports & Observatoire Régional
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Surveillance et génération de bilans sanitaires officiels pour l'inspection territoriale.
@@ -246,12 +246,12 @@ export function InspectorReportsPage() {
         </div>
 
         {/* WILAYA SCOPE LOCKED BADGE */}
-        <div 
-          style={{ 
-            backgroundColor: "white", 
-            padding: "14px 18px", 
-            borderRadius: "16px", 
-            border: `1.5px solid ${COLORS.border}`, 
+        <div
+          style={{
+            backgroundColor: "white",
+            padding: "14px 18px",
+            borderRadius: "16px",
+            border: `1.5px solid ${COLORS.border}`,
             boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
             display: "flex",
             alignItems: "center",
@@ -391,7 +391,7 @@ export function InspectorReportsPage() {
 
       {/* FILTERS AND PREVIEW WORKSPACE */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }} className="lg:grid-cols-4">
-        
+
         {/* LEFT: FILTER PANEL */}
         <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "10px" }}>
@@ -408,15 +408,15 @@ export function InspectorReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
               Wilaya Restreinte
             </label>
-            <div 
-              style={{ 
-                width: "100%", 
-                padding: "9px 12px", 
-                borderRadius: "10px", 
-                border: `1px solid ${COLORS.border}`, 
-                backgroundColor: "#F1F5F9", 
-                color: COLORS.navy, 
-                fontWeight: "700", 
+            <div
+              style={{
+                width: "100%",
+                padding: "9px 12px",
+                borderRadius: "10px",
+                border: `1px solid ${COLORS.border}`,
+                backgroundColor: "#F1F5F9",
+                color: COLORS.navy,
+                fontWeight: "700",
                 fontSize: "0.85rem",
                 display: "flex",
                 alignItems: "center",
@@ -530,7 +530,7 @@ export function InspectorReportsPage() {
 
         {/* RIGHT: ACTION BANNER & CONTENT TABS */}
         <div className="lg:col-span-3" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          
+
           <div
             style={{
               backgroundColor: COLORS.navy,
@@ -605,7 +605,7 @@ export function InspectorReportsPage() {
 
           {/* TAB CONTENTS */}
           <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, padding: "20px" }}>
-            
+
             <div style={{ display: "flex", borderBottom: `1px solid ${COLORS.border}`, gap: "6px", marginBottom: "16px", overflowX: "auto" }}>
               {[
                 { id: "summary", label: "Synthèse" },

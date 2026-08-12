@@ -69,7 +69,7 @@ function SuperadminLayout() {
     { to: "/superadmin/health-authorities", label: "Autorités de Santé", icon: ShieldAlert, exact: false },
     { to: "/superadmin/facilities", label: "Établissements", icon: Building2, exact: false },
     { to: "/superadmin/reportable-diseases", label: "Maladies Déclarables", icon: Activity, exact: false },
-    { to: "/superadmin/reports", label: "📊 Rapports", icon: BarChart3, exact: false },
+    { to: "/superadmin/reports", label: " Rapports", icon: BarChart3, exact: false },
   ];
 
   return (
@@ -82,10 +82,10 @@ function SuperadminLayout() {
             <span style={{ fontSize: '1.25rem', fontWeight: '700', color: 'white', letterSpacing: '0.02em' }}>Superadmin</span>
           </Link>
         </div>
-        
+
         <nav style={{ flex: 1, padding: '1.5rem 1rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)', marginBottom: '1rem', paddingLeft: '1rem' }}>Menu Principal</div>
-          
+
           <Link to="/superadmin" style={linkStyle} activeProps={{ style: activeStyle }} activeOptions={{ exact: true }}>
             <LayoutDashboard size={20} />
             <span>Tableau de bord</span>
@@ -108,13 +108,13 @@ function SuperadminLayout() {
           </Link>
           <Link to="/reports" style={linkStyle} activeProps={{ style: activeStyle }}>
             <BarChart3 size={20} />
-            <span>📊 Rapports</span>
+            <span> Rapports</span>
           </Link>
         </nav>
 
         <div style={{ padding: '1.5rem 1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <button 
-            onClick={handleLogout} 
+          <button
+            onClick={handleLogout}
             style={{ ...linkStyle, width: '100%', background: 'transparent', border: 'none', cursor: 'pointer', textAlign: 'left', marginBottom: 0 }}
           >
             <LogOut size={20} />
@@ -179,8 +179,8 @@ function SuperadminLayout() {
               })}
             </nav>
 
-            <button 
-              onClick={handleLogout} 
+            <button
+              onClick={handleLogout}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -203,7 +203,7 @@ function SuperadminLayout() {
           </div>
         </div>
       )}
-      
+
       {/* Main Content Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         {/* Top Header */}
@@ -214,13 +214,13 @@ function SuperadminLayout() {
             </button>
             <h1 style={{ fontSize: '1rem', fontWeight: '600', color: COLORS.navy, margin: 0 }}>Espace d'Administration</h1>
           </div>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', position: 'relative' }}>
             <div className="hidden sm:block" style={{ padding: '0.4rem 0.8rem', backgroundColor: COLORS.lightTeal, color: COLORS.teal, borderRadius: '999px', fontSize: '0.8rem', fontWeight: '600' }}>
               Super Admin Connecté
             </div>
-            
-            <div 
+
+            <div
               style={{ width: '38px', height: '38px', borderRadius: '50%', backgroundColor: COLORS.navy, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: '600', cursor: 'pointer', userSelect: 'none' }}
               onClick={() => setShowProfileMenu(!showProfileMenu)}
             >
@@ -230,14 +230,14 @@ function SuperadminLayout() {
             {/* Profile Dropdown */}
             {showProfileMenu && (
               <div style={{ position: 'absolute', top: '120%', right: 0, width: '220px', backgroundColor: 'white', borderRadius: '12px', border: `1px solid ${COLORS.border}`, boxShadow: '0 10px 25px rgba(0,0,0,0.1)', zIndex: 50, padding: '0.5rem' }}>
-                <Link 
-                  to="/superadmin/profile" 
+                <Link
+                  to="/superadmin/profile"
                   onClick={() => setShowProfileMenu(false)}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', textDecoration: 'none', color: COLORS.text, fontWeight: '500', borderRadius: '8px' }}
                 >
                   <User size={18} /> Mon Profil
                 </Link>
-                <button 
+                <button
                   onClick={handleLogout}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem 1rem', textDecoration: 'none', color: '#DC2626', fontWeight: '500', borderRadius: '8px', border: 'none', background: 'transparent', cursor: 'pointer' }}
                 >

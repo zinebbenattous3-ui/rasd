@@ -1,18 +1,18 @@
 import { useState, useEffect } from "react";
 import { Outlet, Link, createFileRoute, useNavigate, useLocation } from "@tanstack/react-router";
-import { 
-  LayoutDashboard, 
-  Building2, 
-  Stethoscope, 
-  Activity, 
-  BarChart3, 
-  FileCheck, 
-  History, 
-  User, 
-  LogOut, 
-  Menu, 
-  X, 
-  Shield, 
+import {
+  LayoutDashboard,
+  Building2,
+  Stethoscope,
+  Activity,
+  BarChart3,
+  FileCheck,
+  History,
+  User,
+  LogOut,
+  Menu,
+  X,
+  Shield,
   MapPin,
   Lock
 } from "lucide-react";
@@ -95,7 +95,7 @@ function InspectorLayout() {
     { to: "/inspector/facilities", label: "Établissements", icon: Building2, exact: false },
     { to: "/inspector/doctors", label: "Médecins", icon: Stethoscope, exact: false },
     { to: "/inspector/health-events", label: "Événements de santé", icon: Activity, exact: false },
-    { to: "/inspector/reports", label: "📊 Rapports", icon: BarChart3, exact: false },
+    { to: "/inspector/reports", label: " Rapports", icon: BarChart3, exact: false },
     { to: "/inspector/requests", label: "Demandes", icon: FileCheck, exact: false },
     { to: "/inspector/history", label: "Historique", icon: History, exact: false },
   ];
@@ -137,14 +137,14 @@ function InspectorLayout() {
 
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = item.exact 
-              ? location.pathname === item.to 
+            const isActive = item.exact
+              ? location.pathname === item.to
               : location.pathname.startsWith(item.to);
 
             return (
-              <Link 
-                key={item.to} 
-                to={item.to as any} 
+              <Link
+                key={item.to}
+                to={item.to as any}
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -169,8 +169,8 @@ function InspectorLayout() {
         </nav>
 
         <div style={{ padding: "1.2rem 1rem", borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-          <button 
-            onClick={handleLogout} 
+          <button
+            onClick={handleLogout}
             style={{
               display: "flex",
               alignItems: "center",

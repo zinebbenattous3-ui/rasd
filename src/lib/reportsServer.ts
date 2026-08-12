@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabase";
 import { ALGERIA_WILAYAS_69, getWilayaByCode, getWilayaByName } from "@/lib/wilayas";
 import { normalizeWilayaCode } from "@/lib/publicHealthMap";
 
@@ -67,6 +67,7 @@ export interface EventDetailRecord {
   id: string;
   createdAt: string;
   updatedAt: string;
+  incidentType: string;
   severity: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
   description: string;
   diseaseName: string;
@@ -159,10 +160,6 @@ export const getReportDataServer = createServerFn({ method: "POST" })
       return { ...defaultPayload, error: "Identifiant d'utilisateur requis." };
     }
 
-    const supabaseUrl = process.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"] || "https://placeholder.supabase.co";
-    const supabaseKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] || process.env["VITE_SUPABASE_ANON_KEY"] || "placeholder-key";
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
     try {
       // 1. Authenticate user from DB
       const { data: userRec, error: userErr } = await supabase
@@ -176,7 +173,7 @@ export const getReportDataServer = createServerFn({ method: "POST" })
       }
 
       const role = (userRec.role || "").toUpperCase();
-      const userName = `${userRec.first_name} ${userRec.last_name}`.trim();
+      const userName = `${userRec.first_name || ""} ${userRec.last_name || ""}`.trim();
 
       let privacyLevel: ReportPrivacyLevel = 1;
       let forcedWilaya: string | undefined = undefined;
@@ -189,7 +186,7 @@ export const getReportDataServer = createServerFn({ method: "POST" })
         return { ...defaultPayload, error: "Accès refusé : Le centre de rapports est réservé aux Inspecteurs, Autorités de Santé et Superadministrateurs." };
       } else if (role === "SUPERADMIN") {
         privacyLevel = 3;
-        userScopeDescription = "🌍 Toutes les Wilayas (Accès Observatoire National)";
+        userScopeDescription = "Toutes les Wilayas (Accès Observatoire National)";
       } else if (role === "HEALTH_AUTHORITY") {
         privacyLevel = 3;
         // Fetch authorized facilities linked to this Health Authority
@@ -214,7 +211,7 @@ export const getReportDataServer = createServerFn({ method: "POST" })
           forcedFacilityId = data.facilityId;
         }
 
-        userScopeDescription = `🏥 Mes Établissements (${authFacIds.length} structures autorisées)`;
+        userScopeDescription = `Établissements sous gestion (${authFacIds.length} structures autorisées)`;
       } else if (role === "INSPECTOR") {
         privacyLevel = 3;
         const { data: inspRec } = await supabase
@@ -234,9 +231,9 @@ export const getReportDataServer = createServerFn({ method: "POST" })
 
           const wilayaObj = ALGERIA_WILAYAS_69.find((w) => w.code === normWilaya);
           const wilayaLabel = wilayaObj ? `${normWilaya} — ${wilayaObj.name}` : normWilaya;
-          userScopeDescription = `📍 Wilaya ${wilayaLabel} (Vos rapports sont limités à cette Wilaya)`;
+          userScopeDescription = `Wilaya ${wilayaLabel} (Portée Inspecteur Wilaya)`;
         } else {
-          userScopeDescription = "📍 Inspection Sanitaire — Portée Wilaya";
+          userScopeDescription = "Inspection Sanitaire — Portée Wilaya";
         }
       }
 
@@ -419,6 +416,7 @@ export const getReportDataServer = createServerFn({ method: "POST" })
           id: ev.id,
           createdAt: ev.created_at,
           updatedAt: ev.updated_at,
+          incidentType: (ev as any).incident_type || "Signalement",
           severity: sev,
           description: ev.description,
           diseaseName: disName,

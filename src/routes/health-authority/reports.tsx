@@ -6,6 +6,7 @@ import { getReportDataServer, ReportPayload, ReportType } from "@/lib/reportsSer
 import { generateReportPDF } from "@/lib/pdfGenerator";
 import { generateReportExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
+import { SelectDropdown } from "@/components/ui/select-dropdown";
 import {
   FileText,
   FileSpreadsheet,
@@ -164,7 +165,7 @@ export function HealthAuthorityReportsPage() {
     setTimeout(() => {
       try {
         generateReportPDF(reportData);
-        setExportSuccessMsg("✓ Document PDF d'Espace Sanitaire généré avec succès");
+        setExportSuccessMsg("Document PDF d'Espace Sanitaire généré avec succès.");
       } catch (err: any) {
         console.error("PDF generation failed:", err);
         setErrorMsg("Erreur lors du rendu PDF.");
@@ -184,7 +185,7 @@ export function HealthAuthorityReportsPage() {
     setTimeout(() => {
       try {
         generateReportExcel(reportData);
-        setExportSuccessMsg("✓ Classeur Excel d'Espace Sanitaire exporté avec succès");
+        setExportSuccessMsg("Classeur Excel d'Espace Sanitaire exporté avec succès.");
       } catch (err: any) {
         console.error("Excel generation failed:", err);
         setErrorMsg("Erreur lors de l'exportation Excel.");
@@ -208,12 +209,12 @@ export function HealthAuthorityReportsPage() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      
+
       {/* HEADER & SCOPE BADGE */}
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            📊 Rapports & Observatoire Établissements
+            Rapports & Observatoire Établissements
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Surveillance épidémiologique et consolidations pour les établissements de santé sous votre gestion.
@@ -222,12 +223,12 @@ export function HealthAuthorityReportsPage() {
 
         {/* SCOPE BADGE */}
         {reportData && (
-          <div 
-            style={{ 
-              backgroundColor: "white", 
-              padding: "14px 18px", 
-              borderRadius: "16px", 
-              border: `1.5px solid ${COLORS.border}`, 
+          <div
+            style={{
+              backgroundColor: "white",
+              padding: "14px 18px",
+              borderRadius: "16px",
+              border: `1.5px solid ${COLORS.border}`,
               boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
               display: "flex",
               alignItems: "center",
@@ -364,7 +365,7 @@ export function HealthAuthorityReportsPage() {
 
       {/* WORKSPACE GRID */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "20px" }} className="lg:grid-cols-4">
-        
+
         {/* LEFT: FILTER PANEL */}
         <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, padding: "20px", display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "10px" }}>
@@ -378,45 +379,42 @@ export function HealthAuthorityReportsPage() {
 
           {/* WILAYA FILTER */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
               Wilaya
             </label>
-            <select
+            <SelectDropdown
+              icon={MapPin}
+              searchable={true}
+              placeholder="Toutes les wilayas"
               value={selectedWilaya}
-              onChange={(e) => setSelectedWilaya(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Toutes les wilayas</option>
-              {ALGERIA_WILAYAS_69.map((w) => (
-                <option key={w.code} value={w.code}>
-                  {w.code} - {w.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedWilaya(val)}
+              options={[
+                { value: "", label: "Toutes les wilayas" },
+                ...ALGERIA_WILAYAS_69.map((w) => ({ value: w.code, label: `${w.code} - ${w.name}` }))
+              ]}
+            />
           </div>
 
           {/* FACILITY FILTER */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
               Mes Établissements
             </label>
-            <select
+            <SelectDropdown
+              icon={Building2}
+              placeholder="Tous mes établissements"
               value={selectedFacilityId}
-              onChange={(e) => setSelectedFacilityId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Tous mes établissements</option>
-              {facilitiesList.map((fac) => (
-                <option key={fac.id} value={fac.id}>
-                  {fac.name} ({fac.wilaya})
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedFacilityId(val)}
+              options={[
+                { value: "", label: "Tous mes établissements" },
+                ...facilitiesList.map((fac) => ({ value: fac.id, label: `${fac.name} (${fac.wilaya})` }))
+              ]}
+            />
           </div>
 
           {/* DATE RANGE */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
               Période
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
@@ -424,52 +422,53 @@ export function HealthAuthorityReportsPage() {
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
               />
               <input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}
+                style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
               />
             </div>
           </div>
 
           {/* DISEASE */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
               Pathologie
             </label>
-            <select
+            <SelectDropdown
+              icon={Stethoscope}
+              searchable={true}
+              placeholder="Toutes les pathologies"
               value={selectedDiseaseId}
-              onChange={(e) => setSelectedDiseaseId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Toutes les pathologies</option>
-              {diseasesList.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val) => setSelectedDiseaseId(val)}
+              options={[
+                { value: "", label: "Toutes les pathologies" },
+                ...diseasesList.map((d) => ({ value: d.id, label: d.name }))
+              ]}
+            />
           </div>
 
           {/* SEVERITY */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
               Gravité
             </label>
-            <select
+            <SelectDropdown
+              icon={AlertTriangle}
+              placeholder="Toutes les gravités"
               value={selectedSeverity}
-              onChange={(e) => setSelectedSeverity(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Toutes les gravités</option>
-              <option value="CRITICAL">🔴 CRITIQUE</option>
-              <option value="HIGH">🟠 ÉLEVÉE</option>
-              <option value="MEDIUM">🟡 MOYENNE</option>
-              <option value="LOW">🔵 FAIBLE</option>
-            </select>
+              onChange={(val) => setSelectedSeverity(val)}
+              options={[
+                { value: "", label: "Toutes les gravités" },
+                { value: "CRITICAL", label: "Critique" },
+                { value: "HIGH", label: "Élevée" },
+                { value: "MEDIUM", label: "Moyenne" },
+                { value: "LOW", label: "Faible" }
+              ]}
+            />
           </div>
 
           <button
@@ -479,25 +478,26 @@ export function HealthAuthorityReportsPage() {
               width: "100%",
               backgroundColor: COLORS.navy,
               color: "white",
-              padding: "10px",
+              padding: "11px",
               borderRadius: "10px",
               fontWeight: "700",
-              fontSize: "0.85rem",
+              fontSize: "0.88rem",
               border: "none",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "6px"
+              gap: "8px",
+              boxShadow: "0 4px 12px rgba(6,44,84,0.15)"
             }}
           >
-            <Filter size={14} /> Appliquer les filtres
+            <Filter size={15} /> Appliquer les filtres
           </button>
         </div>
 
         {/* RIGHT: ACTION BANNER & CONTENT TABS */}
         <div className="lg:col-span-3" style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-          
+
           <div
             style={{
               backgroundColor: COLORS.navy,
