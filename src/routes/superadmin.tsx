@@ -5,8 +5,8 @@ import { validateCurrentSession, clearSession } from "@/lib/auth";
 import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 export const Route = createFileRoute("/superadmin")({
-  beforeLoad: async () => {
-    const authResult = await validateCurrentSession(["SUPERADMIN"]);
+  beforeLoad: async ({ location }) => {
+    const authResult = await validateCurrentSession(["SUPERADMIN"], location.href || location.pathname);
     if (!authResult.authorized) {
       throw redirect({ to: (authResult.redirectTo || "/login") as any });
     }

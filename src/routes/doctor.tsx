@@ -17,8 +17,8 @@ import { validateCurrentSession, clearSession } from "@/lib/auth";
 import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 export const Route = createFileRoute("/doctor")({
-  beforeLoad: async () => {
-    const authResult = await validateCurrentSession(["DOCTOR"]);
+  beforeLoad: async ({ location }) => {
+    const authResult = await validateCurrentSession(["DOCTOR"], location.href || location.pathname);
     if (!authResult.authorized) {
       throw redirect({ to: (authResult.redirectTo || "/login") as any });
     }

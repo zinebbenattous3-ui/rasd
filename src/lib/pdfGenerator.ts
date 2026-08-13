@@ -566,8 +566,16 @@ export function generateDetailedRegister(payload: ReportPayload, wilayaInfo?: { 
     doc.text("Aucun événement de santé enregistré.", margin, currentY);
   } else {
     payload.events.forEach((ev, idx) => {
+      const obsText = `Observations : « ${ev.description || "Aucune observation enregistrée"} »`;
+      const maxObsWidth = pageWidth - margin * 2 - 8;
+      const obsLines = doc.splitTextToSize(obsText, maxObsWidth);
+      
+      const baseHeight = 31;
+      const obsLineHeight = 3.5;
+      const boxHeight = baseHeight + (obsLines.length * obsLineHeight);
+
       // Check for page overflow before drawing case card
-      if (currentY + 45 > pageHeight - 15) {
+      if (currentY + boxHeight > pageHeight - 15) {
         doc.addPage();
         drawPdfHeader(doc, doc.getNumberOfPages(), pdfTitle);
         currentY = 20;
@@ -577,7 +585,7 @@ export function generateDetailedRegister(payload: ReportPayload, wilayaInfo?: { 
       doc.setFillColor(...lightBgColor);
       doc.setDrawColor(...borderLineColor);
       doc.setLineWidth(0.4);
-      doc.roundedRect(margin, currentY, pageWidth - margin * 2, 40, 3, 3, "FD");
+      doc.roundedRect(margin, currentY, pageWidth - margin * 2, boxHeight, 3, 3, "FD");
 
       // Case Header Bar
       doc.setFillColor(...navyColor);
@@ -604,25 +612,25 @@ export function generateDetailedRegister(payload: ReportPayload, wilayaInfo?: { 
       doc.setTextColor(ev.severity === "CRITICAL" ? 220 : 15, 162, 155);
       doc.text(`Gravité : ${ev.severity}`, margin + 110, cardY);
 
-      cardY += 6;
+      cardY += 5;
       doc.setFont("helvetica", "normal");
       doc.setFontSize(8);
       doc.setTextColor(...darkTextColor);
       doc.text(`Établissement : ${ev.facilityName} (Wilaya ${ev.wilayaName || ev.wilaya})`, margin + 4, cardY);
 
-      cardY += 5;
+      cardY += 4.5;
       doc.text(`Médecin Déclarant : Dr. ${ev.doctorName || "Anonymisé"} (${ev.doctorSpecialty || "Médecine Générale"})`, margin + 4, cardY);
 
-      cardY += 5;
+      cardY += 4.5;
       doc.text(`Patient : ${ev.patientName || "Cas Anonymisé"} | NIN : ${ev.patientNin || "—"}`, margin + 4, cardY);
 
-      cardY += 6;
+      cardY += 5;
       doc.setFont("helvetica", "italic");
       doc.setFontSize(7.5);
       doc.setTextColor(...mutedTextColor);
-      doc.text(`Observations : « ${ev.description || "Aucune observation enregistrée"} »`, margin + 4, cardY);
+      doc.text(obsLines, margin + 4, cardY);
 
-      currentY += 45;
+      currentY += boxHeight + 4;
     });
   }
 

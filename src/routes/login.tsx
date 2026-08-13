@@ -67,7 +67,11 @@ function LoginPage() {
     const checkExistingAuth = async () => {
       const authResult = await validateCurrentSession();
       if (authResult.authorized && authResult.user) {
-        const dest = getRoleDashboardPath(authResult.user.role);
+        const searchParams = new URLSearchParams(window.location.search);
+        const redirectTarget = searchParams.get("redirect");
+        const dest = (redirectTarget && redirectTarget.startsWith("/")) 
+          ? redirectTarget 
+          : getRoleDashboardPath(authResult.user.role);
         navigate({ to: dest as any });
       }
     };
@@ -82,18 +86,23 @@ function LoginPage() {
   const handleAuthenticated = async (role: string, userDetails?: { id?: string; email?: string }, demo = false) => {
     const normRole = role.toUpperCase();
     
+    // Check if target redirect parameter is present in URL
+    const searchParams = new URLSearchParams(window.location.search);
+    const redirectTarget = searchParams.get("redirect");
+    const hasCustomRedirect = redirectTarget && redirectTarget.startsWith("/");
+    
     if (normRole === "SUPERADMIN") {
-      navigate({ to: "/superadmin" });
+      navigate({ to: (hasCustomRedirect ? redirectTarget : "/superadmin") as any });
       return;
     } 
     
     if (normRole === "HEALTH_AUTHORITY") {
-      navigate({ to: "/health-authority" });
+      navigate({ to: (hasCustomRedirect ? redirectTarget : "/health-authority") as any });
       return;
     }
 
     if (normRole === "INSPECTOR") {
-      navigate({ to: "/inspector" });
+      navigate({ to: (hasCustomRedirect ? redirectTarget : "/inspector") as any });
       return;
     }
 
@@ -129,7 +138,7 @@ function LoginPage() {
           } catch (logErr) {}
 
           if (docData.status === 'ACCEPTED') {
-            navigate({ to: "/doctor" });
+            navigate({ to: (hasCustomRedirect ? redirectTarget : "/doctor") as any });
             return;
           }
 
