@@ -301,8 +301,9 @@ export function generateFacilityReport(payload: ReportPayload, wilayaInfo?: { co
     doc.setTextColor(...mutedTextColor);
     doc.text("Aucun événement enregistré pour les établissements de cette Wilaya.", margin, currentY);
   } else {
-    facNames.forEach((facName, idx) => {
+    facNames.forEach((facName) => {
       const facData = facilityGroups[facName];
+      if (!facData) return;
       const crit = facData.events.filter(e => e.severity === "CRITICAL").length;
       const high = facData.events.filter(e => e.severity === "HIGH").length;
       const med = facData.events.filter(e => e.severity === "MEDIUM").length;
@@ -390,6 +391,7 @@ export function generatePathologyReport(payload: ReportPayload, wilayaInfo?: { c
   } else {
     diseaseNames.forEach((disName) => {
       const disEvents = diseaseGroups[disName];
+      if (!disEvents) return;
       const facSet = new Set(disEvents.map(e => e.facilityName));
 
       // Disease Header Block
@@ -462,18 +464,19 @@ export function generateSeverityReport(payload: ReportPayload, wilayaInfo?: { co
   currentY += 4;
 
   const severityOrder: ("CRITICAL" | "HIGH" | "MEDIUM" | "LOW")[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
-  const severityLabels: Record<string, string> = {
+  const severityLabels: Record<"CRITICAL" | "HIGH" | "MEDIUM" | "LOW", string> = {
     CRITICAL: "CRITIQUE",
     HIGH: "ÉLEVÉE",
     MEDIUM: "MOYENNE",
     LOW: "FAIBLE"
   };
 
-  const summaryRows = severityOrder.map(sev => {
+  const summaryRows: string[][] = severityOrder.map(sev => {
     const matching = payload.events.filter(e => e.severity === sev);
     const pct = payload.summary.totalEvents > 0 ? ((matching.length / payload.summary.totalEvents) * 100).toFixed(0) : "0";
     const facCount = new Set(matching.map(e => e.facilityName)).size;
-    return [severityLabels[sev], `${matching.length}`, `${pct}%`, `${facCount} structure(s)`];
+    const label = severityLabels[sev] || sev;
+    return [label, `${matching.length}`, `${pct}%`, `${facCount} structure(s)`];
   });
 
   autoTable(doc, {
