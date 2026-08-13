@@ -45,15 +45,15 @@ CREATE TABLE public.doctors (
 );
 CREATE TABLE public.patients (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  user_id uuid NOT NULL UNIQUE,
   nin character varying NOT NULL UNIQUE,
   date_of_birth date NOT NULL,
   gender character varying NOT NULL CHECK (gender::text = ANY (ARRAY['M'::character varying, 'F'::character varying]::text[])),
   blood_type character varying CHECK (blood_type::text = ANY (ARRAY['A+'::character varying, 'A-'::character varying, 'B+'::character varying, 'B-'::character varying, 'AB+'::character varying, 'AB-'::character varying, 'O+'::character varying, 'O-'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT patients_pkey PRIMARY KEY (id),
-  CONSTRAINT patients_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+  first_name character varying NOT NULL,
+  last_name character varying NOT NULL,
+  CONSTRAINT patients_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.inspectors (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -125,26 +125,3 @@ CREATE TABLE public.doctor_facility_change_requests (
   CONSTRAINT doctor_facility_change_requests_requested_facility_fkey FOREIGN KEY (requested_facility_id) REFERENCES public.facilities(id),
   CONSTRAINT doctor_facility_change_requests_reviewer_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
 );
-
--- ==================================================
--- STORAGE BUCKET & POLICIES FOR patient-proofs
--- ==================================================
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('patient-proofs', 'patient-proofs', false)
-ON CONFLICT (id) DO UPDATE SET public = false;
-
-CREATE POLICY "patient_proofs_select" ON storage.objects
-FOR SELECT TO authenticated
-USING (bucket_id = 'patient-proofs');
-
-CREATE POLICY "patient_proofs_insert" ON storage.objects
-FOR INSERT TO authenticated
-WITH CHECK (bucket_id = 'patient-proofs');
-
-CREATE POLICY "patient_proofs_update" ON storage.objects
-FOR UPDATE TO authenticated
-USING (bucket_id = 'patient-proofs');
-
-CREATE POLICY "patient_proofs_delete" ON storage.objects
-FOR DELETE TO authenticated
-USING (bucket_id = 'patient-proofs');

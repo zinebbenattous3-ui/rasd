@@ -148,7 +148,7 @@ function HealthAuthorityFacilitiesPage() {
   const handleOpenAddModal = () => {
     setForm({
       name: "",
-      facility_type: "Hôpital",
+      facility_type: "EPSP",
       wilaya: ALGERIA_WILAYAS[15] || "16 - Alger",
       address: ""
     });
@@ -203,7 +203,7 @@ function HealthAuthorityFacilitiesPage() {
     setActiveFacility(facility);
     setForm({
       name: facility.name || "",
-      facility_type: facility.facility_type || "Hôpital",
+      facility_type: facility.facility_type || "EPSP",
       wilaya: facility.wilaya || ALGERIA_WILAYAS[15] || "16 - Alger",
       address: facility.address || ""
     });

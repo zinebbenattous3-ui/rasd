@@ -136,14 +136,12 @@ function DoctorDashboardPage() {
             *,
             patient:patient_id (
               id,
+              first_name,
+              last_name,
               nin,
               gender,
               blood_type,
-              date_of_birth,
-              users:user_id (
-                first_name,
-                last_name
-              )
+              date_of_birth
             ),
             reportable_disease:reportable_disease_id (
               id,

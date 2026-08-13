@@ -270,14 +270,12 @@ export const getReportDataServer = createServerFn({ method: "POST" })
           ),
           patients!inner (
             id,
+            first_name,
+            last_name,
             nin,
             date_of_birth,
             gender,
-            blood_type,
-            users!inner (
-              first_name,
-              last_name
-            )
+            blood_type
           )
         `);
 
@@ -366,7 +364,6 @@ export const getReportDataServer = createServerFn({ method: "POST" })
         const patObj: any = Array.isArray(ev.patients) ? ev.patients[0] : ev.patients;
 
         const docUser = docObj?.users;
-        const patUser = patObj?.users;
 
         // Disease stat
         const disId = disObj?.id || "unknown";
@@ -451,8 +448,8 @@ export const getReportDataServer = createServerFn({ method: "POST" })
           record.doctorPhone = docObj?.phone;
           
           // Level 3 Only: Patient Details
-          if (patUser) {
-            record.patientName = `${patUser.first_name} ${patUser.last_name}`;
+          if (patObj?.first_name || patObj?.last_name) {
+            record.patientName = `${patObj.first_name || ""} ${patObj.last_name || ""}`.trim();
           }
           record.patientNin = patObj?.nin;
           record.patientDob = patObj?.date_of_birth;

@@ -352,14 +352,12 @@ function DoctorHealthEventsPage() {
         .from('patients')
         .select(`
           id,
+          first_name,
+          last_name,
           nin,
           date_of_birth,
           gender,
-          blood_type,
-          users:user_id (
-            first_name,
-            last_name
-          )
+          blood_type
         `);
 
       if (pts) setPatientsList(pts);
@@ -371,15 +369,12 @@ function DoctorHealthEventsPage() {
           *,
           patient:patient_id (
             id,
+            first_name,
+            last_name,
             nin,
             date_of_birth,
             gender,
-            blood_type,
-            users:user_id (
-              first_name,
-              last_name,
-              email
-            )
+            blood_type
           ),
           reportable_disease:reportable_disease_id (
             id,
@@ -418,25 +413,12 @@ function DoctorHealthEventsPage() {
     }
 
     try {
-      // Create user auth / user profile for patient
-      const { data: userData, error: userErr } = await supabase
-        .from('users')
-        .insert([{
-          first_name: patientForm.first_name.trim(),
-          last_name: patientForm.last_name.trim(),
-          email: `patient.${patientForm.nin.trim()}@rased.dz`,
-          role: 'PATIENT'
-        }])
-        .select()
-        .single();
-
-      if (userErr) throw new Error(userErr.message);
-
-      // Create patient entry
+      // Create patient entry directly in patients table (No user account)
       const { data: ptData, error: ptErr } = await supabase
         .from('patients')
         .insert([{
-          user_id: userData.id,
+          first_name: patientForm.first_name.trim(),
+          last_name: patientForm.last_name.trim(),
           nin: patientForm.nin.trim(),
           date_of_birth: patientForm.date_of_birth || '1990-01-01',
           gender: patientForm.gender,
@@ -448,12 +430,7 @@ function DoctorHealthEventsPage() {
       if (ptErr) throw new Error(ptErr.message);
 
       // Update patient list and select new patient automatically
-      const newPatientObj = {
-        ...ptData,
-        users: userData
-      };
-
-      setPatientsList(prev => [newPatientObj, ...prev]);
+      setPatientsList(prev => [ptData, ...prev]);
       setForm(prev => ({ ...prev, patient_id: ptData.id }));
       setShowInlineAddPatient(false);
       setToast({ message: "✓ Patient créé et sélectionné automatiquement", type: 'success' });
@@ -1061,8 +1038,7 @@ function DoctorHealthEventsPage() {
                       icon={User}
                       searchable={true}
                       options={patientsList.map((p) => {
-                        const userObj = Array.isArray(p.users) ? p.users[0] : p.users;
-                        const name = userObj ? `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() : 'Patient';
+                        const name = `${p.first_name || ''} ${p.last_name || ''}`.trim() || 'Patient';
                         const age = calculateAge(p.date_of_birth);
 
                         return {

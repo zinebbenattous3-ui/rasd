@@ -211,15 +211,7 @@ function DoctorPatientsPage() {
     try {
       const { data, error } = await supabase
         .from('patients')
-        .select(`
-          *,
-          users:user_id (
-            id,
-            email,
-            first_name,
-            last_name
-          )
-        `)
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (!error && data) {
@@ -310,28 +302,12 @@ function DoctorPatientsPage() {
         return;
       }
 
-      // 2. Create User account for Patient
-      const patientEmail = form.email.trim() || `${form.nin.trim()}@patient.rasd.local`;
-      const { data: newUser, error: userErr } = await supabase
-        .from('users')
-        .insert([{
-          email: patientEmail.toLowerCase(),
-          password_hash: "PATIENT_NO_LOGIN_HASH",
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          role: 'PATIENT',
-          is_active: true
-        }])
-        .select()
-        .single();
-
-      if (userErr) throw new Error(userErr.message);
-
-      // 3. Create Patient Record linked to user_id
+      // 2. Create Patient Record directly (No user account)
       const { error: patientErr } = await supabase
         .from('patients')
         .insert([{
-          user_id: newUser.id,
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
           nin: form.nin.trim(),
           date_of_birth: form.date_of_birth,
           gender: form.gender,
@@ -361,16 +337,15 @@ function DoctorPatientsPage() {
 
   // Open Edit Patient Modal
   const handleOpenEdit = (p: any) => {
-    const userObj = Array.isArray(p?.users) ? p.users[0] : p?.users;
     setEditingPatient(p);
     setForm({
-      first_name: userObj?.first_name || "",
-      last_name: userObj?.last_name || "",
+      first_name: p.first_name || "",
+      last_name: p.last_name || "",
       nin: p.nin || "",
       date_of_birth: p.date_of_birth || "",
       gender: p.gender || "M",
       blood_type: p.blood_type || "A+",
-      email: userObj?.email || ""
+      email: ""
     });
     setFormError(null);
     setShowEditModal(true);
@@ -405,23 +380,11 @@ function DoctorPatientsPage() {
         }
       }
 
-      const userId = editingPatient.user_id;
-      if (userId) {
-        const { error: userErr } = await supabase
-          .from('users')
-          .update({
-            first_name: form.first_name.trim(),
-            last_name: form.last_name.trim(),
-            ...(form.email.trim() ? { email: form.email.trim().toLowerCase() } : {})
-          })
-          .eq('id', userId);
-
-        if (userErr) throw new Error(userErr.message);
-      }
-
       const { error: patientErr } = await supabase
         .from('patients')
         .update({
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
           nin: form.nin.trim(),
           date_of_birth: form.date_of_birth,
           gender: form.gender,
@@ -437,19 +400,14 @@ function DoctorPatientsPage() {
       loadPatients();
 
       if (selectedPatient && selectedPatient.id === editingPatient.id) {
-        const userObj = Array.isArray(selectedPatient.users) ? selectedPatient.users[0] : selectedPatient.users;
         setSelectedPatient({
           ...selectedPatient,
+          first_name: form.first_name.trim(),
+          last_name: form.last_name.trim(),
           nin: form.nin.trim(),
           date_of_birth: form.date_of_birth,
           gender: form.gender,
-          blood_type: form.blood_type,
-          users: {
-            ...userObj,
-            first_name: form.first_name.trim(),
-            last_name: form.last_name.trim(),
-            email: form.email.trim() || userObj?.email
-          }
+          blood_type: form.blood_type
         });
       }
     } catch (err: any) {
@@ -461,20 +419,18 @@ function DoctorPatientsPage() {
 
   // Helper for Patient Name
   const getPatientFullName = (p: any) => {
-    const userObj = Array.isArray(p?.users) ? p.users[0] : p?.users;
-    if (!userObj) return "Patient";
-    return `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() || "Patient";
+    if (!p) return "Patient";
+    const full = `${p.first_name || ''} ${p.last_name || ''}`.trim();
+    return full || "Patient";
   };
 
   // Filtered Patients List
   const filteredPatients = patients.filter((p) => {
     const q = searchQuery.toLowerCase();
-    const userObj = Array.isArray(p?.users) ? p.users[0] : p?.users;
-    const name = `${userObj?.first_name || ''} ${userObj?.last_name || ''}`.toLowerCase();
-    const email = (userObj?.email || '').toLowerCase();
+    const name = `${p.first_name || ''} ${p.last_name || ''}`.toLowerCase();
     const nin = (p.nin || '').toLowerCase();
 
-    const matchesQuery = name.includes(q) || email.includes(q) || nin.includes(q);
+    const matchesQuery = name.includes(q) || nin.includes(q);
     const matchesGender = genderFilter === "ALL" || p.gender === genderFilter;
     const matchesBlood = bloodFilter === "ALL" || p.blood_type === bloodFilter;
 
@@ -662,14 +618,11 @@ function DoctorPatientsPage() {
             <tbody>
               {filteredPatients.map((p, idx) => {
                 const fullName = getPatientFullName(p);
-                const userObj = Array.isArray(p?.users) ? p.users[0] : p?.users;
-                const email = userObj?.email || "";
 
                 return (
                   <tr key={p.id} style={{ borderBottom: idx !== filteredPatients.length - 1 ? `1px solid ${COLORS.border}` : 'none' }}>
                     <td style={{ padding: '16px 20px' }}>
                       <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.95rem' }}>{fullName}</div>
-                      <div style={{ fontSize: '0.8rem', color: COLORS.muted }}>{email}</div>
                     </td>
 
                     <td style={{ padding: '16px 20px', fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem' }}>

@@ -370,10 +370,10 @@ export function InspectorFacilitiesPage() {
               style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
             >
               <option value="ALL">Tous les types d'établissements</option>
-              <option value="HOSPITAL">Hôpital (CHU / EPH)</option>
-              <option value="CLINIC">Clinique Privée</option>
-              <option value="DISPENSARY">Dispensaire / Polyclinique</option>
-              <option value="OTHER">Autre Structure</option>
+              <option value="EPSP">EPSP — Santé de Proximité</option>
+              <option value="EPH">EPH — Public Hospitalier</option>
+              <option value="CHU">CHU — Hospitalo-Universitaire</option>
+              <option value="Clinique privée">Clinique privée</option>
             </select>
           </div>
 

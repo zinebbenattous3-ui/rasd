@@ -91,7 +91,7 @@ function HealthAuthorityDashboard() {
         const total = facilitiesData.length;
         const epsp = facilitiesData.filter(f => f.facility_type === 'EPSP').length;
         const eph = facilitiesData.filter(f => f.facility_type === 'EPH').length;
-        const chu = facilitiesData.filter(f => f.facility_type === 'CHU' || f.facility_type === 'Hôpital').length;
+        const chu = facilitiesData.filter(f => f.facility_type === 'CHU').length;
 
         setStats({ total, epsp, eph, chu });
         setRecentFacilities(facilitiesData.slice(0, 5));
