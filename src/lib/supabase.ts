@@ -10,3 +10,21 @@ if (!url || !anonKey) {
 }
 
 export const supabase = createClient(url, anonKey);
+
+export async function getSecureProofUrl(proofPath: string): Promise<string> {
+  if (!proofPath) return "";
+  if (proofPath.startsWith("http://") || proofPath.startsWith("https://") || proofPath.startsWith("blob:") || proofPath.startsWith("data:")) {
+    return proofPath;
+  }
+  try {
+    const cleanPath = proofPath.replace(/^\/+/, "");
+    const { data } = await supabase.storage.from("patient_proofs").createSignedUrl(cleanPath, 3600);
+    if (data?.signedUrl) return data.signedUrl;
+
+    const { data: pubData } = supabase.storage.from("patient_proofs").getPublicUrl(cleanPath);
+    return pubData.publicUrl || proofPath;
+  } catch (err) {
+    console.error("Error fetching secure proof URL:", err);
+    return proofPath;
+  }
+}

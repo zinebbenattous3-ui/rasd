@@ -8,6 +8,7 @@ import { generateReportExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
 import { SelectDropdown } from "@/components/ui/select-dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
+import { MedicalProofModal } from "@/components/MedicalProofModal";
 import {
   FileText,
   FileSpreadsheet,
@@ -53,6 +54,23 @@ const COLORS = {
   border: "#e2e8f0",
   bgLight: "#f8fafc",
 };
+
+// Helper for formatting event timestamps strictly as DD/MM/YYYY à HH:mm
+function formatDateTime(isoString?: string): string {
+  if (!isoString) return "—";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} à ${hours}:${minutes}`;
+  } catch {
+    return isoString;
+  }
+}
 
 export function HealthAuthorityReportsPage() {
   const navigate = useNavigate();
@@ -109,11 +127,11 @@ export function HealthAuthorityReportsPage() {
         const { data: diseases } = await supabase.from("reportable_diseases").select("id, name").order("name");
         if (diseases) setDiseasesList(diseases);
 
-        // Fetch facilities linked to this health authority (created_by or user_id)
-        const { data: userFacs } = await supabase
+        // Fetch facilities linked to this health authority by created_by
+        const { data: userFacs, error: facErr } = await supabase
           .from("facilities")
           .select("id, name, wilaya, facility_type")
-          .or(`created_by.eq.${currentUser.id},user_id.eq.${currentUser.id}`)
+          .eq("created_by", currentUser.id)
           .order("name");
 
         if (userFacs && userFacs.length > 0) {
@@ -941,21 +959,7 @@ export function HealthAuthorityReportsPage() {
       </div>
 
       {/* PROOF MODAL */}
-      {selectedProofUrl && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.7)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
-          <div style={{ backgroundColor: "white", borderRadius: "18px", maxWidth: "600px", width: "100%", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.3)" }}>
-            <div style={{ padding: "16px 20px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div style={{ fontWeight: "800", fontSize: "0.95rem" }}>Preuve Médicale Attachée</div>
-              <button onClick={() => setSelectedProofUrl(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}>
-                <X size={20} />
-              </button>
-            </div>
-            <div style={{ padding: "24px", textAlign: "center" }}>
-              <img src={selectedProofUrl} alt="Preuve" style={{ maxWidth: "100%", maxHeight: "400px", borderRadius: "10px", objectFit: "contain" }} />
-            </div>
-          </div>
-        </div>
-      )}
+      <MedicalProofModal proofPath={selectedProofUrl} onClose={() => setSelectedProofUrl(null)} />
     </div>
   );
 }

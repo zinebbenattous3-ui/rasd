@@ -190,18 +190,18 @@ export const getReportDataServer = createServerFn({ method: "POST" })
         userScopeDescription = "Toutes les Wilayas (Accès Observatoire National)";
       } else if (role === "HEALTH_AUTHORITY") {
         privacyLevel = 3;
-        // Fetch authorized facilities linked to this Health Authority
-        const { data: userFacs } = await supabase
+        // Fetch authorized facilities linked to this Health Authority by created_by
+        const { data: userFacs, error: facErr } = await supabase
           .from("facilities")
           .select("id, name, wilaya, facility_type")
-          .or(`created_by.eq.${userRec.id},user_id.eq.${userRec.id}`);
+          .eq("created_by", userRec.id);
 
-        authFacIds = (userFacs || []).map((f) => f.id);
-
-        if (authFacIds.length === 0) {
+        if (facErr || !userFacs || userFacs.length === 0) {
           // Fallback: If authority has not explicitly created facilities, check all facilities
           const { data: allFacs } = await supabase.from("facilities").select("id, name, wilaya, facility_type");
           authFacIds = (allFacs || []).map((f) => f.id);
+        } else {
+          authFacIds = userFacs.map((f) => f.id);
         }
 
         // Verify requested facilityId against authorized list
