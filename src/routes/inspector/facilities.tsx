@@ -503,7 +503,6 @@ export function InspectorFacilitiesPage() {
                 <div><strong>Type:</strong> {selectedFacility.facility_type || "Clinique / Établissement"}</div>
                 <div><strong>Wilaya:</strong> {selectedFacility.wilaya}</div>
                 <div><strong>Adresse:</strong> {selectedFacility.address || "Non spécifiée"}</div>
-                <div><strong>Téléphone:</strong> {selectedFacility.phone || "Non renseigné"}</div>
               </div>
 
               {/* DOCTORS LIST IN FACILITY */}
