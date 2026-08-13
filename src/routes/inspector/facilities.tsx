@@ -66,14 +66,65 @@ export function InspectorFacilitiesPage() {
   const [facilityEvents, setFacilityEvents] = useState<any[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
 
-  // PRIVATE CLINIC ASSIGNMENT WIZARD STATE
-  const [showAssignModal, setShowAssignModal] = useState(false);
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
-  const [selectedClinicId, setSelectedClinicId] = useState("");
-  const [selectedDoctorId, setSelectedDoctorId] = useState("");
-  const [assignReason, setAssignReason] = useState("");
-  const [submittingRequest, setSubmittingRequest] = useState(false);
-  const [assignErrorMsg, setAssignErrorMsg] = useState<string | null>(null);
+  // ADD FACILITY MODAL STATE
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({
+    name: "",
+    facility_type: "Clinique privée",
+    address: ""
+  });
+  const [submittingAdd, setSubmittingAdd] = useState(false);
+  const [addFormError, setAddFormError] = useState<string | null>(null);
+
+  const handleOpenAddModal = () => {
+    setAddForm({
+      name: "",
+      facility_type: "Clinique privée",
+      address: ""
+    });
+    setAddFormError(null);
+    setShowAddModal(true);
+  };
+
+  const handleAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!addForm.name.trim()) {
+      setAddFormError("Le nom de l'établissement est requis.");
+      return;
+    }
+
+    setSubmittingAdd(true);
+    setAddFormError(null);
+
+    try {
+      const authResult = await validateCurrentSession(["INSPECTOR"]);
+      if (!authResult.user) throw new Error("Session invalide");
+
+      const payload: any = {
+        name: addForm.name.trim(),
+        facility_type: addForm.facility_type || "Clinique privée",
+        wilaya: inspectorWilaya || "16 - Alger",
+        address: addForm.address.trim() || null,
+        created_by: authResult.user.id
+      };
+
+      const { error } = await supabase.from("facilities").insert([payload]);
+
+      if (error) {
+        if (error.code === "23505") {
+          throw new Error("Un établissement avec ce nom existe déjà.");
+        }
+        throw new Error(error.message || "Erreur lors de la création de l'établissement.");
+      }
+
+      setShowAddModal(false);
+      await loadFacilities();
+    } catch (err: any) {
+      setAddFormError(err.message || "Une erreur s'est produite lors de l'enregistrement.");
+    } finally {
+      setSubmittingAdd(false);
+    }
+  };
 
   const loadFacilities = async () => {
     setLoading(true);
@@ -183,44 +234,6 @@ export function InspectorFacilitiesPage() {
     }
   };
 
-  // Submit Private Clinic Doctor Assignment Request
-  const handleSubmitAssignmentRequest = async () => {
-    if (!selectedClinicId || !selectedDoctorId) {
-      setAssignErrorMsg("Veuillez sélectionner à la fois la clinique et le médecin.");
-      return;
-    }
-
-    setSubmittingRequest(true);
-    setAssignErrorMsg(null);
-
-    try {
-      const authResult = await validateCurrentSession(["INSPECTOR"]);
-      if (!authResult.user) throw new Error("Session invalide");
-
-      const targetDoctorObj = doctorsList.find(d => d.id === selectedDoctorId);
-      const currentFacId = targetDoctorObj?.facility_id || null;
-
-      const { error } = await supabase
-        .from("doctor_facility_change_requests" as any)
-        .insert({
-          doctor_id: selectedDoctorId,
-          current_facility_id: currentFacId,
-          requested_facility_id: selectedClinicId,
-          reason: assignReason || "Affectation vers clinique privée (soumis par l'Inspecteur)",
-          status: "PENDING",
-          created_by: authResult.user.id
-        });
-
-      if (error) throw error;
-      setWizardStep(4);
-    } catch (err: any) {
-      console.error("Error submitting assignment request:", err);
-      setAssignErrorMsg(err?.message || "Échec de l'enregistrement de la demande.");
-    } finally {
-      setSubmittingRequest(false);
-    }
-  };
-
   const handleApplyFiltres = () => {
     setAppliedSearchQuery(searchQuery);
     setAppliedTypeFilter(typeFilter);
@@ -260,9 +273,6 @@ export function InspectorFacilitiesPage() {
     });
   }
 
-  const targetClinicObj = facilities.find(f => f.id === selectedClinicId);
-  const targetDoctorObj = doctorsList.find(d => d.id === selectedDoctorId);
-
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       
@@ -283,16 +293,9 @@ export function InspectorFacilitiesPage() {
         </div>
 
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
-          {/* PRIVATE CLINIC DOCTOR ASSIGNMENT BUTTON */}
+          {/* ADD FACILITY BUTTON */}
           <button
-            onClick={() => {
-              setShowAssignModal(true);
-              setWizardStep(1);
-              setSelectedClinicId("");
-              setSelectedDoctorId("");
-              setAssignReason("");
-              setAssignErrorMsg(null);
-            }}
+            onClick={handleOpenAddModal}
             style={{
               backgroundColor: COLORS.teal,
               color: "white",
@@ -309,7 +312,7 @@ export function InspectorFacilitiesPage() {
             }}
           >
             <Plus size={18} />
-            <span>Affecter à une clinique privée</span>
+            <span>Déclarer une Structure / Clinique</span>
           </button>
 
           <button onClick={loadFacilities} disabled={loading} style={{ background: "white", border: `1px solid ${COLORS.border}`, padding: "10px", borderRadius: "12px", cursor: "pointer", color: COLORS.navy }}>
@@ -561,211 +564,108 @@ export function InspectorFacilitiesPage() {
         </div>
       )}
 
-      {/* PRIVATE CLINIC DOCTOR ASSIGNMENT WIZARD MODAL */}
-      {showAssignModal && (
+      {/* ADD FACILITY MODAL */}
+      {showAddModal && (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
-          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "600px", width: "100%", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "540px", width: "100%", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
             
-            {/* WIZARD HEADER */}
             <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
                 <div style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "800", textTransform: "uppercase" }}>
-                  Procédure d'Affectation • Clinique Privée
+                  Création de Structure Sanitaire
                 </div>
-                <h3 style={{ fontSize: "1.2rem", fontWeight: "900", margin: "4px 0 0 0", color: "white" }}>
-                  Étape {wizardStep} / 4 — {wizardStep === 1 ? "Sélectionner la clinique" : wizardStep === 2 ? "Identifier le médecin" : wizardStep === 3 ? "Vérification" : "Soumission"}
+                <h3 style={{ fontSize: "1.25rem", fontWeight: "900", margin: "2px 0 0 0", color: "white" }}>
+                  Ajouter une Structure / Clinique
                 </h3>
               </div>
-
-              <button onClick={() => setShowAssignModal(false)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}>
+              <button onClick={() => setShowAddModal(false)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}>
                 <X size={24} />
               </button>
             </div>
 
-            {/* WIZARD BODY */}
-            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
-              
-              {assignErrorMsg && (
+            <form onSubmit={handleAddSubmit} style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              {addFormError && (
                 <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", padding: "10px 14px", borderRadius: "12px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
-                  <AlertTriangle size={16} color="#DC2626" /> {assignErrorMsg}
+                  <AlertTriangle size={16} color="#DC2626" /> {addFormError}
                 </div>
               )}
 
-              {/* STEP 1: SELECT CLINIC */}
-              {wizardStep === 1 && (
-                <div>
-                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "8px" }}>
-                    Étape 1: Sélectionner la clinique privée (Wilaya {inspectorWilaya})
-                  </label>
-                  <div style={{ maxHeight: "240px", overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {facilities.filter(fac => isPrivateClinic(fac.facility_type)).map((fac) => (
-                      <div
-                        key={fac.id}
-                        onClick={() => setSelectedClinicId(fac.id)}
-                        style={{
-                          padding: "10px 14px",
-                          borderRadius: "10px",
-                          cursor: "pointer",
-                          backgroundColor: selectedClinicId === fac.id ? COLORS.lightTeal : "white",
-                          border: selectedClinicId === fac.id ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center"
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.9rem" }}>{fac.name}</div>
-                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>Type: {fac.facility_type || "Clinique"} • Wilaya {fac.wilaya}</div>
-                        </div>
-                        {selectedClinicId === fac.id && <Check size={18} color={COLORS.teal} />}
-                      </div>
-                    ))}
-                  </div>
+              {/* NAME */}
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+                  Nom de la Clinique / Établissement *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="ex: Clinique El Amel, EPH Bologhine..."
+                  value={addForm.name}
+                  onChange={(e) => setAddForm({ ...addForm, name: e.target.value })}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+                />
+              </div>
+
+              {/* FACILITY TYPE */}
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+                  Type d'Établissement *
+                </label>
+                <select
+                  value={addForm.facility_type}
+                  onChange={(e) => setAddForm({ ...addForm, facility_type: e.target.value })}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+                >
+                  <option value="Clinique privée">Clinique privée</option>
+                  <option value="EPSP">EPSP (Établissement Public de Santé de Proximité)</option>
+                  <option value="EPH">EPH (Établissement Public Hospitalier)</option>
+                  <option value="CHU">CHU (Centre Hospitalier Universitaire)</option>
+                </select>
+              </div>
+
+              {/* WILAYA (LOCKED TO INSPECTOR) */}
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+                  Wilaya (Verrouillée sur votre juridiction)
+                </label>
+                <div style={{ padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, backgroundColor: "#F1F5F9", color: COLORS.navy, fontWeight: "700", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Lock size={16} color="#B45309" />
+                  <span>Wilaya {inspectorWilaya || "16 - Alger"}</span>
                 </div>
-              )}
+              </div>
 
-              {/* STEP 2: SELECT DOCTOR */}
-              {wizardStep === 2 && (
-                <div>
-                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "8px" }}>
-                    Étape 2: Identifier le médecin à affecter
-                  </label>
-                  <div style={{ maxHeight: "240px", overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {doctorsList.map((doc) => (
-                      <div
-                        key={doc.id}
-                        onClick={() => setSelectedDoctorId(doc.id)}
-                        style={{
-                          padding: "10px 14px",
-                          borderRadius: "10px",
-                          cursor: "pointer",
-                          backgroundColor: selectedDoctorId === doc.id ? COLORS.lightTeal : "white",
-                          border: selectedDoctorId === doc.id ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
-                          display: "flex",
-                          justifyContent: "space-between",
-                          alignItems: "center"
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.9rem" }}>
-                            Dr. {doc.users?.first_name} {doc.users?.last_name}
-                          </div>
-                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>
-                            Spécialité: {doc.specialty || "Généraliste"} • Établissement actuel: {doc.facility?.name}
-                          </div>
-                        </div>
-                        {selectedDoctorId === doc.id && <Check size={18} color={COLORS.teal} />}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* ADDRESS */}
+              <div>
+                <label style={{ fontSize: "0.82rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+                  Adresse complète
+                </label>
+                <input
+                  type="text"
+                  placeholder="ex: 12 Rue Didouche Mourad, Bologhine..."
+                  value={addForm.address}
+                  onChange={(e) => setAddForm({ ...addForm, address: e.target.value })}
+                  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+                />
+              </div>
 
-              {/* STEP 3: REVIEW & REASON */}
-              {wizardStep === 3 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: COLORS.navy }}>
-                    Étape 3: Vérification du dossier d'affectation
-                  </label>
-
-                  <div style={{ backgroundColor: COLORS.bgLight, padding: "14px", borderRadius: "12px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    <div><strong>Médecin:</strong> Dr. {targetDoctorObj?.users?.first_name} {targetDoctorObj?.users?.last_name}</div>
-                    <div><strong>Spécialité:</strong> {targetDoctorObj?.specialty}</div>
-                    <div><strong>Clinique Privée cible:</strong> {targetClinicObj?.name}</div>
-                    <div><strong>Wilaya:</strong> {inspectorWilaya}</div>
-                  </div>
-
-                  <div>
-                    <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
-                      Motif / Justificatif administratif
-                    </label>
-                    <textarea
-                      rows={3}
-                      placeholder="Indiquez la raison officielle de cette affectation..."
-                      value={assignReason}
-                      onChange={(e) => setAssignReason(e.target.value)}
-                      style={{ width: "100%", padding: "10px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none" }}
-                    />
-                  </div>
-
-                  {/* ADMINISTRATIVE VALIDATION WARNING */}
-                  <div style={{ backgroundColor: "#FEF3C7", border: "1px solid #FCD34D", color: "#B45309", padding: "12px 14px", borderRadius: "12px", fontSize: "0.82rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Lock size={16} />
-                    <span>Cette opération nécessite une validation administrative préalable par le Superadmin.</span>
-                  </div>
-                </div>
-              )}
-
-              {/* STEP 4: SUBMISSION & CONFIRMATION */}
-              {wizardStep === 4 && (
-                <div style={{ textAlign: "center", padding: "20px 10px" }}>
-                  <CheckCircle2 size={48} color="#059669" style={{ margin: "0 auto 12px auto" }} />
-                  <h4 style={{ fontSize: "1.2rem", fontWeight: "900", color: COLORS.navy, margin: 0 }}>
-                    Demande transmise avec succès !
-                  </h4>
-                  <p style={{ fontSize: "0.88rem", color: COLORS.muted, marginTop: "6px" }}>
-                    Votre demande d'affectation pour <strong>Dr. {targetDoctorObj?.users?.last_name}</strong> vers <strong>{targetClinicObj?.name}</strong> a été enregistrée. Elle est actuellement soumise à la validation administrative.
-                  </p>
-                </div>
-              )}
-
-            </div>
-
-            {/* WIZARD FOOTER */}
-            <div style={{ padding: "14px 24px", borderTop: `1px solid ${COLORS.border}`, backgroundColor: COLORS.bgLight, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              {wizardStep > 1 && wizardStep < 4 ? (
+              {/* ACTIONS */}
+              <div style={{ paddingTop: "10px", marginTop: "10px", borderTop: `1px solid ${COLORS.border}`, display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                 <button
-                  onClick={() => setWizardStep((wizardStep - 1) as any)}
-                  style={{ backgroundColor: "white", border: `1px solid ${COLORS.border}`, padding: "8px 16px", borderRadius: "10px", fontWeight: "700", fontSize: "0.85rem", cursor: "pointer" }}
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  style={{ backgroundColor: "white", border: `1px solid ${COLORS.border}`, padding: "9px 18px", borderRadius: "10px", fontWeight: "700", fontSize: "0.85rem", color: COLORS.navy, cursor: "pointer" }}
                 >
-                  Précédent
+                  Annuler
                 </button>
-              ) : <div />}
-
-              {wizardStep === 1 && (
                 <button
-                  onClick={() => {
-                    if (!selectedClinicId) setAssignErrorMsg("Veuillez sélectionner une clinique.");
-                    else { setAssignErrorMsg(null); setWizardStep(2); }
-                  }}
-                  style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 18px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer" }}
+                  type="submit"
+                  disabled={submittingAdd}
+                  style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "9px 20px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
                 >
-                  Suivant (Médecin)
+                  {submittingAdd ? <RefreshCw size={16} className="animate-spin" /> : <Plus size={16} />}
+                  <span>{submittingAdd ? "Création en cours..." : "Créer l'Établissement"}</span>
                 </button>
-              )}
-
-              {wizardStep === 2 && (
-                <button
-                  onClick={() => {
-                    if (!selectedDoctorId) setAssignErrorMsg("Veuillez sélectionner un médecin.");
-                    else { setAssignErrorMsg(null); setWizardStep(3); }
-                  }}
-                  style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 18px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer" }}
-                >
-                  Suivant (Vérification)
-                </button>
-              )}
-
-              {wizardStep === 3 && (
-                <button
-                  onClick={handleSubmitAssignmentRequest}
-                  disabled={submittingRequest}
-                  style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "8px 20px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
-                >
-                  <Send size={14} /> Soumettre la demande
-                </button>
-              )}
-
-              {wizardStep === 4 && (
-                <button
-                  onClick={() => setShowAssignModal(false)}
-                  style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "8px 20px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer" }}
-                >
-                  Fermer
-                </button>
-              )}
-            </div>
-
+              </div>
+            </form>
           </div>
         </div>
       )}
