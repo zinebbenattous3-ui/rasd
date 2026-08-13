@@ -1,153 +1,183 @@
 import * as XLSX from "xlsx";
 import { ReportPayload } from "@/lib/reportsServer";
+import { ReportModelKey } from "@/lib/pdfGenerator";
+import { ALGERIA_WILAYAS_69, normalizeWilayaCode } from "@/lib/wilayas";
 
-export function generateReportExcel(payload: ReportPayload): void {
+function getWilayaLabel(wilayaInput?: string): { code: string; name: string } {
+  const norm = normalizeWilayaCode(wilayaInput || "16");
+  const found = ALGERIA_WILAYAS_69.find(w => w.code === norm);
+  return {
+    code: norm || "16",
+    name: found ? found.name : "Alger"
+  };
+}
+
+// 1. Synthèse Sanitaire Excel
+export function exportSynthesisExcel(payload: ReportPayload, wilayaInfo?: { code: string; name: string }): void {
   const workbook = XLSX.utils.book_new();
+  const wilayaObj = getWilayaLabel(wilayaInfo?.code || payload.appliedScope.forcedWilaya);
 
-  // SHEET 1: SYNTHESE EXECUTIQUE
   const summaryData = [
-    { Metric: "Titre du Rapport", Valeur: payload.summary.reportTitle },
-    { Metric: "Période d'Analyse", Valeur: payload.summary.dateRangeLabel },
-    { Metric: "Date de Génération", Valeur: payload.summary.generatedAt },
-    { Metric: "Généré par", Valeur: payload.summary.generatedBy },
-    { Metric: "Rôle Utilisateur", Valeur: payload.userRole || "Inconnu" },
-    { Metric: "Niveau de Confidentialité", Valeur: `Niveau ${payload.privacyLevel}` },
-    { Metric: "Portée Appliquée", Valeur: payload.appliedScope.userScopeDescription },
-    { Metric: "Total Événements de Santé", Valeur: payload.summary.totalEvents },
-    { Metric: "Cas Critiques (Urgence)", Valeur: payload.summary.criticalCount },
-    { Metric: "Cas Élevés", Valeur: payload.summary.highCount },
-    { Metric: "Cas Moyens", Valeur: payload.summary.mediumCount },
-    { Metric: "Cas Faibles", Valeur: payload.summary.lowCount },
-    { Metric: "Nombre d'Établissements Actifs", Valeur: payload.summary.totalFacilities },
-    { Metric: "Nombre de Médecins Déclarants", Valeur: payload.summary.totalDoctors },
-    { Metric: "Nombre de Patients Uniques", Valeur: payload.summary.totalPatients },
+    { Métrique: "Titre du Rapport", Valeur: "RAPPORT DE SYNTHÈSE SANITAIRE" },
+    { Métrique: "Wilaya d'Inspection", Valeur: `Wilaya ${wilayaObj.code} - ${wilayaObj.name}` },
+    { Métrique: "Période d'Analyse", Valeur: payload.summary.dateRangeLabel },
+    { Métrique: "Date de Génération", Valeur: payload.summary.generatedAt },
+    { Métrique: "Généré par", Valeur: payload.summary.generatedBy },
+    { Métrique: "Total Événements de Santé", Valeur: payload.summary.totalEvents },
+    { Métrique: "Cas Critiques", Valeur: payload.summary.criticalCount },
+    { Métrique: "Cas Élevés", Valeur: payload.summary.highCount },
+    { Métrique: "Cas Moyens", Valeur: payload.summary.mediumCount },
+    { Métrique: "Cas Faibles", Valeur: payload.summary.lowCount },
+    { Métrique: "Établissements Surveillés", Valeur: payload.summary.totalFacilities },
+    { Métrique: "Pathologies Déclarées", Valeur: payload.diseases.length },
   ];
-  const summarySheet = XLSX.utils.json_to_sheet(summaryData);
-  XLSX.utils.book_append_sheet(workbook, summarySheet, "SYNTHESE");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(summaryData), "SYNTHESE");
 
-  // SHEET 2: WILAYAS
-  const wilayaData = payload.wilayas.map((w) => ({
-    "Code Wilaya": w.code,
-    "Nom Wilaya (Français)": w.name,
-    "Nom Wilaya (Arabe)": w.nameAr,
-    "Événements Enregistrés": w.count,
-    "Pourcentage National (%)": w.percentage,
+  const severityData = payload.severities.map(s => ({
+    "Degré de Gravité": s.severity,
+    "Nombre de Cas": s.count,
+    "Pourcentage (%)": s.percentage
   }));
-  const wilayaSheet = XLSX.utils.json_to_sheet(wilayaData.length > 0 ? wilayaData : [{ Message: "Aucune donnée" }]);
-  XLSX.utils.book_append_sheet(workbook, wilayaSheet, "WILAYAS");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(severityData), "GRAVITE");
 
-  // SHEET 3: ETABLISSEMENTS
-  const facilityData = payload.facilities.map((f) => ({
-    "ID Établissement": f.id,
-    "Nom Établissement": f.name,
-    "Type d'Établissement": f.facilityType,
-    "Wilaya": f.wilaya,
-    "Nombre d'Événements": f.count,
-  }));
-  const facilitySheet = XLSX.utils.json_to_sheet(facilityData.length > 0 ? facilityData : [{ Message: "Aucune donnée" }]);
-  XLSX.utils.book_append_sheet(workbook, facilitySheet, "ETABLISSEMENTS");
-
-  // SHEET 4: MALADIES / PATHOLOGIES
-  const diseaseData = payload.diseases.map((d) => ({
-    "ID Pathologie": d.id,
-    "Nom de la Maladie": d.name,
+  const diseaseData = payload.diseases.map(d => ({
+    "Pathologie": d.name,
     "Cas Enregistrés": d.count,
-    "Part Nationale (%)": d.percentage,
+    "Part Relative (%)": d.percentage
   }));
-  const diseaseSheet = XLSX.utils.json_to_sheet(diseaseData.length > 0 ? diseaseData : [{ Message: "Aucune donnée" }]);
-  XLSX.utils.book_append_sheet(workbook, diseaseSheet, "MALADIES");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(diseaseData), "PATHOLOGIES");
 
-  // SHEET 5: DOCTEURS DECLARANTS
-  const doctorData = payload.doctors.map((doc) => ({
-    "ID Médecin": doc.id,
-    "Nom du Médecin": doc.name,
-    "Spécialité": doc.specialty,
-    "Établissement Attribué": doc.facilityName,
-    "Déclarations Effectuées": doc.count,
+  const facData = payload.facilities.map(f => ({
+    "Nom Établissement": f.name,
+    "Type Structure": f.facilityType,
+    "Wilaya": f.wilaya,
+    "Signalements": f.count
   }));
-  const doctorSheet = XLSX.utils.json_to_sheet(doctorData.length > 0 ? doctorData : [{ Message: "Aucune donnée" }]);
-  XLSX.utils.book_append_sheet(workbook, doctorSheet, "DOCTEURS");
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(facData), "ETABLISSEMENTS");
 
-  // SHEET 6: PATIENTS (Included only if authorized Level 3)
-  if (payload.privacyLevel >= 3) {
-    const patientMap: Record<string, { name: string; nin: string; dob: string; gender: string; bloodType: string; count: number }> = {};
-    payload.events.forEach((ev) => {
-      if (ev.patientNin) {
-        const pObj = patientMap[ev.patientNin];
-        if (!pObj) {
-          patientMap[ev.patientNin] = {
-            name: ev.patientName || "Anonyme",
-            nin: ev.patientNin,
-            dob: ev.patientDob || "-",
-            gender: ev.patientGender || "-",
-            bloodType: ev.patientBloodType || "-",
-            count: 1,
-          };
-        } else {
-          pObj.count += 1;
-        }
-      }
-    });
-
-    const patientData = Object.values(patientMap).map((p) => ({
-      "NIN Patient": p.nin,
-      "Nom & Prénom": p.name,
-      "Date de Naissance": p.dob,
-      "Sexe": p.gender,
-      "Groupe Sanguin": p.bloodType,
-      "Total Signalements": p.count,
-    }));
-
-    const patientSheet = XLSX.utils.json_to_sheet(patientData.length > 0 ? patientData : [{ Message: "Aucun patient répertorié" }]);
-    XLSX.utils.book_append_sheet(workbook, patientSheet, "PATIENTS");
-  }
-
-  // SHEET 7: DETAILED HEALTH EVENTS
-  const eventsData = payload.events.map((ev) => {
-    const baseRecord: Record<string, any> = {
-      "ID Événement": ev.id,
-      "Date de Création": ev.createdAt,
-      "Niveau de Gravité": ev.severity,
-      "Maladie / Diagnostic": ev.diseaseName,
-      "Établissement": ev.facilityName,
-      "Type Établissement": ev.facilityType,
-      "Wilaya": ev.wilayaName,
-      "Adresse Établissement": ev.address,
-      "Description": ev.description,
-    };
-
-    if (payload.privacyLevel >= 2) {
-      baseRecord["Médecin Déclarant"] = ev.doctorName || "Anonymisé";
-      baseRecord["Spécialité Médecin"] = ev.doctorSpecialty || "-";
-    }
-
-    if (payload.privacyLevel >= 3) {
-      baseRecord["NIN Médecin"] = ev.doctorNin || "-";
-      baseRecord["Téléphone Médecin"] = ev.doctorPhone || "-";
-      baseRecord["Nom Patient"] = ev.patientName || "Anonymisé";
-      baseRecord["NIN Patient"] = ev.patientNin || "-";
-      baseRecord["Date de Naissance Patient"] = ev.patientDob || "-";
-      baseRecord["Sexe Patient"] = ev.patientGender || "-";
-      baseRecord["Groupe Sanguin Patient"] = ev.patientBloodType || "-";
-      baseRecord["URL Preuve Médicale"] = ev.patientProofUrl || "Aucune preuve liée";
-    }
-
-    return baseRecord;
-  });
-
-  const eventsSheet = XLSX.utils.json_to_sheet(eventsData.length > 0 ? eventsData : [{ Message: "Aucun événement enregistré" }]);
-  XLSX.utils.book_append_sheet(workbook, eventsSheet, "EVENEMENTS");
-
-  // SHEET 8: TENDANCES TEMPORELLES
-  const trendData = payload.trends.map((t) => ({
-    "Date": t.date,
-    "Nombre d'Événements": t.count,
-  }));
-  const trendSheet = XLSX.utils.json_to_sheet(trendData.length > 0 ? trendData : [{ Message: "Aucune tendance disponible" }]);
-  XLSX.utils.book_append_sheet(workbook, trendSheet, "TENDANCES");
-
-  // Download Excel File
   const dateStr = new Date().toISOString().substring(0, 10);
-  const fileName = `RASED_Rapport_${payload.summary.reportTitle.replace(/[^a-zA-Z0-9]/g, "_")}_${dateStr}.xlsx`;
-  XLSX.writeFile(workbook, fileName);
+  XLSX.writeFile(workbook, `RASED_Synthese_Sanitaire_Wilaya_${wilayaObj.code}_${wilayaObj.name.replace(/\s+/g, "_")}_${dateStr}.xlsx`);
+}
+
+// 2. Par Établissement Excel
+export function exportFacilityExcel(payload: ReportPayload, wilayaInfo?: { code: string; name: string }): void {
+  const workbook = XLSX.utils.book_new();
+  const wilayaObj = getWilayaLabel(wilayaInfo?.code || payload.appliedScope.forcedWilaya);
+
+  const facData = payload.facilities.map(f => {
+    const facEvents = payload.events.filter(e => e.facilityName === f.name);
+    const crit = facEvents.filter(e => e.severity === "CRITICAL").length;
+    const high = facEvents.filter(e => e.severity === "HIGH").length;
+    const med = facEvents.filter(e => e.severity === "MEDIUM").length;
+    const low = facEvents.filter(e => e.severity === "LOW").length;
+
+    return {
+      "Nom Établissement": f.name,
+      "Type Structure": f.facilityType,
+      "Wilaya": f.wilaya || wilayaObj.code,
+      "Total Cas": f.count,
+      "Cas Critiques": crit,
+      "Cas Élevés": high,
+      "Cas Moyens": med,
+      "Cas Faibles": low
+    };
+  });
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(facData), "PAR_ETABLISSEMENT");
+
+  const dateStr = new Date().toISOString().substring(0, 10);
+  XLSX.writeFile(workbook, `RASED_Rapport_Par_Etablissement_Wilaya_${wilayaObj.code}_${wilayaObj.name.replace(/\s+/g, "_")}_${dateStr}.xlsx`);
+}
+
+// 3. Par Pathologie Excel
+export function exportPathologyExcel(payload: ReportPayload, wilayaInfo?: { code: string; name: string }): void {
+  const workbook = XLSX.utils.book_new();
+  const wilayaObj = getWilayaLabel(wilayaInfo?.code || payload.appliedScope.forcedWilaya);
+
+  const diseaseData = payload.diseases.map(d => {
+    const disEvents = payload.events.filter(e => e.diseaseName === d.name);
+    const affectedFacs = new Set(disEvents.map(e => e.facilityName)).size;
+    const critCount = disEvents.filter(e => e.severity === "CRITICAL").length;
+
+    return {
+      "Pathologie": d.name,
+      "Cas Confirmés": d.count,
+      "Part Relative (%)": d.percentage,
+      "Établissements Touchés": affectedFacs,
+      "Cas Critiques": critCount
+    };
+  });
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(diseaseData), "PAR_PATHOLOGIE");
+
+  const dateStr = new Date().toISOString().substring(0, 10);
+  XLSX.writeFile(workbook, `RASED_Rapport_Par_Pathologie_Wilaya_${wilayaObj.code}_${wilayaObj.name.replace(/\s+/g, "_")}_${dateStr}.xlsx`);
+}
+
+// 4. Par Gravité Excel
+export function exportSeverityExcel(payload: ReportPayload, wilayaInfo?: { code: string; name: string }): void {
+  const workbook = XLSX.utils.book_new();
+  const wilayaObj = getWilayaLabel(wilayaInfo?.code || payload.appliedScope.forcedWilaya);
+
+  const severityData = payload.severities.map(s => {
+    const sevEvents = payload.events.filter(e => e.severity === s.severity);
+    const affectedFacs = new Set(sevEvents.map(e => e.facilityName)).size;
+
+    return {
+      "Degré de Gravité": s.severity,
+      "Nombre de Cas": s.count,
+      "Pourcentage (%)": s.percentage,
+      "Établissements Touchés": affectedFacs
+    };
+  });
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(severityData), "PAR_GRAVITE");
+
+  const dateStr = new Date().toISOString().substring(0, 10);
+  XLSX.writeFile(workbook, `RASED_Rapport_Par_Gravite_Wilaya_${wilayaObj.code}_${wilayaObj.name.replace(/\s+/g, "_")}_${dateStr}.xlsx`);
+}
+
+// 5. Registre Détaillé Excel
+export function exportDetailedExcel(payload: ReportPayload, wilayaInfo?: { code: string; name: string }): void {
+  const workbook = XLSX.utils.book_new();
+  const wilayaObj = getWilayaLabel(wilayaInfo?.code || payload.appliedScope.forcedWilaya);
+
+  const eventsData = payload.events.map(ev => ({
+    "Réf. Cas": `#EV-${ev.id.substring(0, 8).toUpperCase()}`,
+    "Date & Heure": ev.createdAt,
+    "Pathologie": ev.diseaseName,
+    "Niveau Gravité": ev.severity,
+    "Établissement": ev.facilityName,
+    "Type Structure": ev.facilityType,
+    "Wilaya": ev.wilayaName || ev.wilaya,
+    "Médecin Déclarant": ev.doctorName || "Anonymisé",
+    "Spécialité Médecin": ev.doctorSpecialty || "-",
+    "Patient": ev.patientName || "Cas Anonymisé",
+    "NIN Patient": ev.patientNin || "-",
+    "Observations": ev.description || "Aucune",
+    "Preuve Médicale Attached": ev.patientProofUrl ? "Oui" : "Non"
+  }));
+
+  XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(eventsData.length > 0 ? eventsData : [{ Message: "Aucun événement" }]), "REGISTRE_DETAILE");
+
+  const dateStr = new Date().toISOString().substring(0, 10);
+  XLSX.writeFile(workbook, `RASED_Registre_Detaille_Wilaya_${wilayaObj.code}_${wilayaObj.name.replace(/\s+/g, "_")}_${dateStr}.xlsx`);
+}
+
+// MASTER ROUTER FOR EXCEL
+export function generateModelExcel(modelKey: ReportModelKey, payload: ReportPayload, wilayaInfo?: { code: string; name: string }): void {
+  switch (modelKey) {
+    case "synthesis":
+      return exportSynthesisExcel(payload, wilayaInfo);
+    case "facility":
+      return exportFacilityExcel(payload, wilayaInfo);
+    case "pathology":
+      return exportPathologyExcel(payload, wilayaInfo);
+    case "severity":
+      return exportSeverityExcel(payload, wilayaInfo);
+    case "detailed":
+      return exportDetailedExcel(payload, wilayaInfo);
+  }
+}
+
+// Legacy export fallback
+export function generateReportExcel(payload: ReportPayload): void {
+  exportSynthesisExcel(payload);
 }
