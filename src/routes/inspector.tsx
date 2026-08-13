@@ -95,8 +95,7 @@ function InspectorLayout() {
     { to: "/inspector/facilities", label: "Établissements", icon: Building2, exact: false },
     { to: "/inspector/doctors", label: "Médecins", icon: Stethoscope, exact: false },
     { to: "/inspector/health-events", label: "Événements de santé", icon: Activity, exact: false },
-    { to: "/inspector/reports", label: " Rapports", icon: BarChart3, exact: false },
-    { to: "/inspector/requests", label: "Demandes", icon: FileCheck, exact: false },
+    { to: "/inspector/reports", label: "Rapports", icon: BarChart3, exact: false },
     { to: "/inspector/history", label: "Historique", icon: History, exact: false },
   ];
 

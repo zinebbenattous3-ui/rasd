@@ -17,7 +17,10 @@ import {
   X, 
   FileText, 
   Calendar,
-  Image as ImageIcon
+  Image as ImageIcon,
+  RotateCcw,
+  Stethoscope,
+  User
 } from "lucide-react";
 
 export const Route = createFileRoute("/inspector/health-events")({
@@ -58,11 +61,29 @@ function formatDateTime(isoString?: string): string {
 export function InspectorHealthEventsPage() {
   const [loading, setLoading] = useState(true);
   const [inspectorWilaya, setInspectorWilaya] = useState<string | null>(null);
+  
+  // Database datasets
   const [events, setEvents] = useState<any[]>([]);
+  const [facilitiesList, setFacilitiesList] = useState<any[]>([]);
+  const [diseasesList, setDiseasesList] = useState<any[]>([]);
 
-  // Filter States
+  // Draft Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [severityFilter, setSeverityFilter] = useState("ALL");
+  const [selectedFacilityId, setSelectedFacilityId] = useState("");
+  const [selectedDiseaseId, setSelectedDiseaseId] = useState("");
+  const [selectedSeverity, setSelectedSeverity] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  // Applied Filters
+  const [appliedSearch, setAppliedSearch] = useState("");
+  const [appliedFacility, setAppliedFacility] = useState("");
+  const [appliedDisease, setAppliedDisease] = useState("");
+  const [appliedSeverity, setAppliedSeverity] = useState("");
+  const [appliedDateFrom, setAppliedDateFrom] = useState("");
+  const [appliedDateTo, setAppliedDateTo] = useState("");
+
+  // Modals state
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
@@ -82,23 +103,51 @@ export function InspectorHealthEventsPage() {
         setInspectorWilaya(inspRec.wilaya);
         const normCode = normalizeWilayaCode(inspRec.wilaya);
 
+        // Fetch facilities in Inspector's Wilaya
         const { data: facs } = await supabase
           .from("facilities")
-          .select("id")
-          .ilike("wilaya", `%${normCode}%`);
+          .select("id, name, facility_type, wilaya")
+          .ilike("wilaya", `%${normCode}%`)
+          .order("name");
 
-        const facIds = (facs || []).map(f => f.id);
+        const facList = facs || [];
+        setFacilitiesList(facList);
+
+        // Fetch reportable diseases list
+        const { data: diseases } = await supabase
+          .from("reportable_diseases")
+          .select("id, name, code")
+          .order("name");
+        setDiseasesList(diseases || []);
+
+        const facIds = facList.map(f => f.id);
 
         if (facIds.length > 0) {
+          // Fetch health_events joined with doctor, facility, patient, reportable_diseases
           const { data: evData } = await supabase
             .from("health_events")
             .select(`
-              *,
+              id,
+              doctor_id,
+              facility_id,
+              patient_id,
+              description,
+              severity,
+              patient_proof_url,
+              created_at,
+              updated_at,
+              reportable_disease_id,
               facility:facility_id (id, name, facility_type, wilaya),
-              reportable_diseases:reportable_disease_id (name, code),
+              reportable_diseases:reportable_disease_id (id, name, code),
               doctor:doctor_id (
+                id,
                 specialty,
                 users:user_id (first_name, last_name, email)
+              ),
+              patient:patient_id (
+                id,
+                first_name,
+                last_name
               )
             `)
             .in("facility_id", facIds)
@@ -120,68 +169,275 @@ export function InspectorHealthEventsPage() {
     loadData();
   }, []);
 
+  // Filter handlers
+  const handleApplyFilters = () => {
+    setAppliedSearch(searchQuery);
+    setAppliedFacility(selectedFacilityId);
+    setAppliedDisease(selectedDiseaseId);
+    setAppliedSeverity(selectedSeverity);
+    setAppliedDateFrom(dateFrom);
+    setAppliedDateTo(dateTo);
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setSelectedFacilityId("");
+    setSelectedDiseaseId("");
+    setSelectedSeverity("");
+    setDateFrom("");
+    setDateTo("");
+
+    setAppliedSearch("");
+    setAppliedFacility("");
+    setAppliedDisease("");
+    setAppliedSeverity("");
+    setAppliedDateFrom("");
+    setAppliedDateTo("");
+  };
+
+  // Filtered dataset logic
   const filteredEvents = events.filter((e) => {
     const diseaseName = e.reportable_diseases?.name || "";
     const facName = e.facility?.name || "";
+    const docName = e.doctor?.users ? `${e.doctor.users.first_name} ${e.doctor.users.last_name}` : "";
+    const description = e.description || "";
+
     const matchesSearch = 
-      diseaseName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      facName.toLowerCase().includes(searchQuery.toLowerCase());
+      !appliedSearch ||
+      diseaseName.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      facName.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      docName.toLowerCase().includes(appliedSearch.toLowerCase()) ||
+      description.toLowerCase().includes(appliedSearch.toLowerCase());
 
-    const matchesSeverity = severityFilter === "ALL" || e.severity === severityFilter;
+    const matchesFacility = !appliedFacility || e.facility_id === appliedFacility;
+    const matchesDisease = !appliedDisease || e.reportable_disease_id === appliedDisease;
+    const matchesSeverity = !appliedSeverity || e.severity === appliedSeverity;
 
-    return matchesSearch && matchesSeverity;
+    let matchesDateFrom = true;
+    if (appliedDateFrom) {
+      matchesDateFrom = new Date(e.created_at) >= new Date(appliedDateFrom);
+    }
+
+    let matchesDateTo = true;
+    if (appliedDateTo) {
+      const end = new Date(appliedDateTo);
+      end.setHours(23, 59, 59, 999);
+      matchesDateTo = new Date(e.created_at) <= end;
+    }
+
+    return matchesSearch && matchesFacility && matchesDisease && matchesSeverity && matchesDateFrom && matchesDateTo;
   });
 
+  // Active Filter Chips
+  const activeChips = [];
+  if (appliedSearch) {
+    activeChips.push({
+      key: "search",
+      label: `Recherche: "${appliedSearch}"`,
+      clear: () => { setSearchQuery(""); setAppliedSearch(""); }
+    });
+  }
+  if (appliedFacility) {
+    const facObj = facilitiesList.find(f => f.id === appliedFacility);
+    activeChips.push({
+      key: "facility",
+      label: `Établissement: ${facObj ? facObj.name : "Sélectionné"}`,
+      clear: () => { setSelectedFacilityId(""); setAppliedFacility(""); }
+    });
+  }
+  if (appliedDisease) {
+    const disObj = diseasesList.find(d => d.id === appliedDisease);
+    activeChips.push({
+      key: "disease",
+      label: `Pathologie: ${disObj ? disObj.name : "Sélectionnée"}`,
+      clear: () => { setSelectedDiseaseId(""); setAppliedDisease(""); }
+    });
+  }
+  if (appliedSeverity) {
+    const sevMap: Record<string, string> = { CRITICAL: "Critique", HIGH: "Élevée", MEDIUM: "Moyenne", LOW: "Faible" };
+    activeChips.push({
+      key: "severity",
+      label: `Gravité: ${sevMap[appliedSeverity] || appliedSeverity}`,
+      clear: () => { setSelectedSeverity(""); setAppliedSeverity(""); }
+    });
+  }
+  if (appliedDateFrom) {
+    activeChips.push({
+      key: "dateFrom",
+      label: `Depuis: ${appliedDateFrom}`,
+      clear: () => { setDateFrom(""); setAppliedDateFrom(""); }
+    });
+  }
+  if (appliedDateTo) {
+    activeChips.push({
+      key: "dateTo",
+      label: `Jusqu'à: ${appliedDateTo}`,
+      clear: () => { setDateTo(""); setAppliedDateTo(""); }
+    });
+  }
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       
       {/* HEADER */}
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px", backgroundColor: "white", padding: "24px", borderRadius: "18px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
         <div>
-          <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            Événements de Santé Signalés
-          </h1>
-          <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
-            Registre et surveillance épidémiologique des cas déclarés dans la Wilaya {inspectorWilaya || "—"}.
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+            <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
+              <Activity size={22} />
+            </div>
+            <h1 style={{ fontSize: "1.5rem", fontWeight: "900", color: COLORS.navy, margin: 0, letterSpacing: "-0.02em" }}>
+              Événements de Santé Signalés
+            </h1>
+          </div>
+          <p style={{ fontSize: "0.88rem", color: COLORS.muted, margin: 0 }}>
+            Registre de surveillance épidémiologique des cas déclarés dans la Wilaya {inspectorWilaya || "—"}.
           </p>
         </div>
 
-        <button onClick={loadData} disabled={loading} style={{ background: "white", border: `1px solid ${COLORS.border}`, padding: "10px", borderRadius: "14px", cursor: "pointer", color: COLORS.navy }}>
+        <button onClick={loadData} disabled={loading} style={{ background: "white", border: `1px solid ${COLORS.border}`, padding: "10px", borderRadius: "12px", cursor: "pointer", color: COLORS.navy }}>
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
         </button>
       </div>
 
-      {/* FILTERS */}
-      <div style={{ backgroundColor: "white", padding: "18px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
-        <div style={{ flex: 1, minWidth: "240px", position: "relative" }}>
-          <Search size={16} color={COLORS.muted} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)" }} />
-          <input
-            type="text"
-            placeholder="Rechercher par maladie, établissement..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ width: "100%", padding: "10px 14px 10px 40px", borderRadius: "12px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight }}
-          />
+      {/* UNIFIED RASED FILTER PANEL */}
+      <div style={{ backgroundColor: "white", padding: "24px", borderRadius: "18px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "16px", marginBottom: "20px" }}>
+          <Filter size={18} color={COLORS.teal} />
+          <h2 style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, margin: 0 }}>
+            Filtres & Critères de Surveillance
+          </h2>
         </div>
 
-        <select
-          value={severityFilter}
-          onChange={(e) => setSeverityFilter(e.target.value)}
-          style={{ padding: "10px 14px", borderRadius: "12px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
-        >
-          <option value="ALL">Toutes les gravités</option>
-          <option value="CRITICAL">Critique</option>
-          <option value="HIGH">Élevée</option>
-          <option value="MEDIUM">Moyenne</option>
-          <option value="LOW">Faible</option>
-        </select>
+        {/* ACTIVE FILTER CHIPS */}
+        {activeChips.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "18px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "700", color: COLORS.muted }}>Filtres actifs:</span>
+            {activeChips.map(chip => (
+              <span key={chip.key} style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, border: `1px solid ${COLORS.teal}40`, padding: "4px 10px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {chip.label}
+                <X size={14} style={{ cursor: "pointer" }} onClick={chip.clear} />
+              </span>
+            ))}
+          </div>
+        )}
 
-        <div style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "700", marginLeft: "auto" }}>
-          {filteredEvents.length} signalement(s)
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+          
+          {/* WILAYA (LOCKED) */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Wilaya (Verrouillée)
+            </label>
+            <div style={{ padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, backgroundColor: "#F1F5F9", color: COLORS.navy, fontWeight: "700", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Lock size={15} color="#B45309" />
+              <span>Wilaya {inspectorWilaya || "—"}</span>
+            </div>
+          </div>
+
+          {/* FACILITY FILTER */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Établissement
+            </label>
+            <select
+              value={selectedFacilityId}
+              onChange={(e) => setSelectedFacilityId(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Tous les établissements</option>
+              {facilitiesList.map((fac) => (
+                <option key={fac.id} value={fac.id}>{fac.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* DISEASE FILTER */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Pathologie
+            </label>
+            <select
+              value={selectedDiseaseId}
+              onChange={(e) => setSelectedDiseaseId(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Toutes les pathologies</option>
+              {diseasesList.map((dis) => (
+                <option key={dis.id} value={dis.id}>{dis.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* SEVERITY FILTER */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Niveau de Gravité
+            </label>
+            <select
+              value={selectedSeverity}
+              onChange={(e) => setSelectedSeverity(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Toutes les gravités</option>
+              <option value="CRITICAL">Critique</option>
+              <option value="HIGH">Élevée</option>
+              <option value="MEDIUM">Moyenne</option>
+              <option value="LOW">Faible</option>
+            </select>
+          </div>
+
+          {/* DATE FROM */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Date de début
+            </label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            />
+          </div>
+
+          {/* DATE TO */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Date de fin
+            </label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            />
+          </div>
+
+        </div>
+
+        {/* ACTION BAR */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", paddingTop: "16px", borderTop: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "700" }}>
+            {filteredEvents.length} signalement(s) trouvé(s)
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={handleResetFilters}
+              style={{ backgroundColor: "white", border: `1px solid ${COLORS.border}`, padding: "8px 16px", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "700", color: COLORS.navy, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <RotateCcw size={14} /> Réinitialiser
+            </button>
+            <button
+              onClick={handleApplyFilters}
+              style={{ backgroundColor: COLORS.navy, border: "none", padding: "8px 20px", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "800", color: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <Filter size={14} /> Appliquer les filtres
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* EVENTS TABLE / CARDS */}
+      {/* EVENTS TABLE */}
       {loading ? (
         <div style={{ padding: "60px", textAlign: "center", color: COLORS.navy }}>
           <RefreshCw size={32} className="animate-spin" style={{ margin: "0 auto 12px auto", color: COLORS.teal }} />
@@ -190,10 +446,11 @@ export function InspectorHealthEventsPage() {
       ) : filteredEvents.length === 0 ? (
         <div style={{ backgroundColor: "white", padding: "40px", borderRadius: "18px", border: `1px solid ${COLORS.border}`, textAlign: "center", color: COLORS.muted }}>
           <Activity size={40} color={COLORS.muted} style={{ margin: "0 auto 12px auto" }} />
-          <div style={{ fontSize: "1rem", fontWeight: "700", color: COLORS.navy }}>Aucun événement de santé répertorié</div>
+          <div style={{ fontSize: "1rem", fontWeight: "700", color: COLORS.navy }}>Aucun événement de santé trouvé</div>
+          <div style={{ fontSize: "0.85rem", marginTop: "4px" }}>Ajustez vos filtres de recherche.</div>
         </div>
       ) : (
-        <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, overflow: "hidden" }}>
+        <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
           <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.88rem" }}>
             <thead>
               <tr style={{ backgroundColor: COLORS.bgLight, borderBottom: `1px solid ${COLORS.border}`, color: COLORS.navy }}>
@@ -235,7 +492,7 @@ export function InspectorHealthEventsPage() {
                   <td style={{ padding: "14px 18px", textAlign: "right" }}>
                     <button
                       onClick={() => setSelectedEvent(ev)}
-                      style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "6px 12px", borderRadius: "8px", fontWeight: "700", fontSize: "0.8rem", cursor: "pointer" }}
+                      style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "6px 14px", borderRadius: "8px", fontWeight: "700", fontSize: "0.8rem", cursor: "pointer" }}
                     >
                       Consulter
                     </button>
@@ -250,7 +507,7 @@ export function InspectorHealthEventsPage() {
       {/* DETAIL MODAL */}
       {selectedEvent && (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
-          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "600px", width: "100%", overflow: "hidden" }}>
+          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "600px", width: "100%", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
             <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <h3 style={{ fontSize: "1.2rem", fontWeight: "800", margin: 0 }}>Fiche d'Événement #{selectedEvent.id.substring(0, 8)}</h3>
               <button onClick={() => setSelectedEvent(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={22} /></button>
@@ -259,12 +516,14 @@ export function InspectorHealthEventsPage() {
             <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "14px", fontSize: "0.9rem" }}>
               <div><strong>Pathologie:</strong> {selectedEvent.reportable_diseases?.name}</div>
               <div><strong>Gravité:</strong> {selectedEvent.severity}</div>
+              <div><strong>Description / Observations:</strong> {selectedEvent.description || "Aucune observation supplémentaire"}</div>
               <div><strong>Établissement:</strong> {selectedEvent.facility?.name} (Wilaya {selectedEvent.facility?.wilaya})</div>
               <div><strong>Médecin déclarant:</strong> Dr. {selectedEvent.doctor?.users?.first_name} {selectedEvent.doctor?.users?.last_name}</div>
+              <div><strong>Patient (Confidentiel):</strong> {selectedEvent.patient?.first_name ? `${selectedEvent.patient.first_name} ${selectedEvent.patient.last_name}` : "Cas Anonymisé"}</div>
               <div><strong>Date du signalement:</strong> {formatDateTime(selectedEvent.created_at)}</div>
-              {(selectedEvent.patient_proof_url || selectedEvent.proof_url) && (
+              {selectedEvent.patient_proof_url && (
                 <div>
-                  <button onClick={() => setSelectedProofUrl(selectedEvent.patient_proof_url || selectedEvent.proof_url)} style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <button onClick={() => setSelectedProofUrl(selectedEvent.patient_proof_url)} style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
                     <ImageIcon size={16} /> Consulter la Preuve Médicale Attachée
                   </button>
                 </div>

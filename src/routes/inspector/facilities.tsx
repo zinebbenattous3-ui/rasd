@@ -19,7 +19,11 @@ import {
   Clock, 
   Layers, 
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  Plus,
+  RotateCcw,
+  Check,
+  Send
 } from "lucide-react";
 
 export const Route = createFileRoute("/inspector/facilities")({
@@ -45,14 +49,28 @@ export function InspectorFacilitiesPage() {
   const [loading, setLoading] = useState(true);
   const [inspectorWilaya, setInspectorWilaya] = useState<string | null>(null);
   const [facilities, setFacilities] = useState<any[]>([]);
+  const [doctorsList, setDoctorsList] = useState<any[]>([]);
+
+  // Filter States
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState("");
+  const [appliedTypeFilter, setAppliedTypeFilter] = useState("ALL");
 
   // Selected Facility Detail View Modal
   const [selectedFacility, setSelectedFacility] = useState<any | null>(null);
   const [facilityDoctors, setFacilityDoctors] = useState<any[]>([]);
   const [facilityEvents, setFacilityEvents] = useState<any[]>([]);
   const [loadingDetails, setLoadingDetails] = useState(false);
+
+  // PRIVATE CLINIC ASSIGNMENT WIZARD STATE
+  const [showAssignModal, setShowAssignModal] = useState(false);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
+  const [selectedClinicId, setSelectedClinicId] = useState("");
+  const [selectedDoctorId, setSelectedDoctorId] = useState("");
+  const [assignReason, setAssignReason] = useState("");
+  const [submittingRequest, setSubmittingRequest] = useState(false);
+  const [assignErrorMsg, setAssignErrorMsg] = useState<string | null>(null);
 
   const loadFacilities = async () => {
     setLoading(true);
@@ -79,6 +97,20 @@ export function InspectorFacilitiesPage() {
           .order("name");
 
         const facList = facsData || [];
+
+        // Fetch Doctors in Inspector's Wilaya for assignment wizard
+        const facIds = facList.map(f => f.id);
+        if (facIds.length > 0) {
+          const { data: docsData } = await supabase
+            .from("doctors")
+            .select(`
+              *,
+              users:user_id (first_name, last_name, email),
+              facility:facility_id (name)
+            `)
+            .in("facility_id", facIds);
+          setDoctorsList(docsData || []);
+        }
 
         // Enrich facilities with doctor count and health event count
         const enriched = await Promise.all(
@@ -148,113 +180,249 @@ export function InspectorFacilitiesPage() {
     }
   };
 
+  // Submit Private Clinic Doctor Assignment Request
+  const handleSubmitAssignmentRequest = async () => {
+    if (!selectedClinicId || !selectedDoctorId) {
+      setAssignErrorMsg("Veuillez sélectionner à la fois la clinique et le médecin.");
+      return;
+    }
+
+    setSubmittingRequest(true);
+    setAssignErrorMsg(null);
+
+    try {
+      const authResult = await validateCurrentSession(["INSPECTOR"]);
+      if (!authResult.user) throw new Error("Session invalide");
+
+      const targetDoctorObj = doctorsList.find(d => d.id === selectedDoctorId);
+      const currentFacId = targetDoctorObj?.facility_id || null;
+
+      const { error } = await supabase
+        .from("doctor_facility_change_requests" as any)
+        .insert({
+          doctor_id: selectedDoctorId,
+          current_facility_id: currentFacId,
+          requested_facility_id: selectedClinicId,
+          reason: assignReason || "Affectation vers clinique privée (soumis par l'Inspecteur)",
+          status: "PENDING",
+          created_by: authResult.user.id
+        });
+
+      if (error) throw error;
+      setWizardStep(4);
+    } catch (err: any) {
+      console.error("Error submitting assignment request:", err);
+      setAssignErrorMsg(err?.message || "Échec de l'enregistrement de la demande.");
+    } finally {
+      setSubmittingRequest(false);
+    }
+  };
+
+  const handleApplyFiltres = () => {
+    setAppliedSearchQuery(searchQuery);
+    setAppliedTypeFilter(typeFilter);
+  };
+
+  const handleResetFiltres = () => {
+    setSearchQuery("");
+    setTypeFilter("ALL");
+    setAppliedSearchQuery("");
+    setAppliedTypeFilter("ALL");
+  };
+
   // Filter facilities
   const filteredFacilities = facilities.filter((fac) => {
     const matchesSearch = 
-      fac.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (fac.address && fac.address.toLowerCase().includes(searchQuery.toLowerCase()));
+      fac.name.toLowerCase().includes(appliedSearchQuery.toLowerCase()) ||
+      (fac.address && fac.address.toLowerCase().includes(appliedSearchQuery.toLowerCase()));
 
-    const matchesType = typeFilter === "ALL" || fac.facility_type === typeFilter;
+    const matchesType = appliedTypeFilter === "ALL" || fac.facility_type === appliedTypeFilter;
 
     return matchesSearch && matchesType;
   });
 
+  const activeChips = [];
+  if (appliedSearchQuery) {
+    activeChips.push({
+      key: "search",
+      label: `Recherche: "${appliedSearchQuery}"`,
+      clear: () => { setSearchQuery(""); setAppliedSearchQuery(""); }
+    });
+  }
+  if (appliedTypeFilter !== "ALL") {
+    activeChips.push({
+      key: "type",
+      label: `Type: ${appliedTypeFilter}`,
+      clear: () => { setTypeFilter("ALL"); setAppliedTypeFilter("ALL"); }
+    });
+  }
+
+  const targetClinicObj = facilities.find(f => f.id === selectedClinicId);
+  const targetDoctorObj = doctorsList.find(d => d.id === selectedDoctorId);
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
       
       {/* HEADER */}
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px", backgroundColor: "white", padding: "24px", borderRadius: "18px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
         <div>
-          <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            Annuaire des Établissements
-          </h1>
-          <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
-            Consultation et surveillance des structures de santé enregistrées dans votre territoire.
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "6px" }}>
+            <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
+              <Building2 size={22} />
+            </div>
+            <h1 style={{ fontSize: "1.5rem", fontWeight: "900", color: COLORS.navy, margin: 0, letterSpacing: "-0.02em" }}>
+              Annuaire des Établissements
+            </h1>
+          </div>
+          <p style={{ fontSize: "0.88rem", color: COLORS.muted, margin: 0 }}>
+            Consultation et surveillance des structures de santé enregistrées dans votre territoire d'inspection.
           </p>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-          <div style={{ backgroundColor: "white", padding: "10px 16px", borderRadius: "14px", border: `1px solid ${COLORS.border}`, display: "flex", alignItems: "center", gap: "8px" }}>
-            <MapPin size={16} color={COLORS.teal} />
-            <span style={{ fontSize: "0.88rem", fontWeight: "800", color: COLORS.navy }}>Wilaya {inspectorWilaya || "—"}</span>
-            <span style={{ fontSize: "0.72rem", backgroundColor: "#FEF3C7", color: "#B45309", padding: "2px 6px", borderRadius: "6px", fontWeight: "700", display: "flex", alignItems: "center", gap: "2px" }}>
-              <Lock size={10} /> Restreint
-            </span>
-          </div>
+        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "10px" }}>
+          {/* PRIVATE CLINIC DOCTOR ASSIGNMENT BUTTON */}
+          <button
+            onClick={() => {
+              setShowAssignModal(true);
+              setWizardStep(1);
+              setSelectedClinicId("");
+              setSelectedDoctorId("");
+              setAssignReason("");
+              setAssignErrorMsg(null);
+            }}
+            style={{
+              backgroundColor: COLORS.teal,
+              color: "white",
+              border: "none",
+              padding: "10px 18px",
+              borderRadius: "12px",
+              fontWeight: "800",
+              fontSize: "0.88rem",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              boxShadow: "0 4px 16px rgba(15, 162, 155, 0.25)"
+            }}
+          >
+            <Plus size={18} />
+            <span>Affecter à une clinique privée</span>
+          </button>
 
-          <button onClick={loadFacilities} disabled={loading} style={{ background: "white", border: `1px solid ${COLORS.border}`, padding: "10px", borderRadius: "14px", cursor: "pointer", color: COLORS.navy }}>
+          <button onClick={loadFacilities} disabled={loading} style={{ background: "white", border: `1px solid ${COLORS.border}`, padding: "10px", borderRadius: "12px", cursor: "pointer", color: COLORS.navy }}>
             <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
           </button>
         </div>
       </div>
 
-      {/* FILTER & SEARCH BAR */}
-      <div style={{ backgroundColor: "white", padding: "18px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "center" }}>
-        
-        {/* Search */}
-        <div style={{ flex: 1, minWidth: "240px", position: "relative" }}>
-          <Search size={16} color={COLORS.muted} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)" }} />
-          <input
-            type="text"
-            placeholder="Rechercher par nom d'établissement, adresse..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "10px 14px 10px 40px",
-              borderRadius: "12px",
-              border: `1px solid ${COLORS.border}`,
-              fontSize: "0.88rem",
-              outline: "none",
-              backgroundColor: COLORS.bgLight
-            }}
-          />
+      {/* UNIFIED RASED FILTER PANEL */}
+      <div style={{ backgroundColor: "white", padding: "24px", borderRadius: "18px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.03)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "16px", marginBottom: "20px" }}>
+          <Filter size={18} color={COLORS.teal} />
+          <h2 style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, margin: 0 }}>
+            Filtres & Critères de Recherche
+          </h2>
         </div>
 
-        {/* Facility Type Filter */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-          <Filter size={16} color={COLORS.teal} />
-          <select
-            value={typeFilter}
-            onChange={(e) => setTypeFilter(e.target.value)}
-            style={{
-              padding: "10px 14px",
-              borderRadius: "12px",
-              border: `1px solid ${COLORS.border}`,
-              fontSize: "0.88rem",
-              outline: "none",
-              backgroundColor: COLORS.bgLight,
-              color: COLORS.navy,
-              fontWeight: "600"
-            }}
-          >
-            <option value="ALL">Tous les types d'établissements</option>
-            <option value="HOSPITAL">Hôpital / CHU</option>
-            <option value="CLINIC">Clinique privée</option>
-            <option value="POLYCLINIC">Polyclinique / EPH</option>
-            <option value="HEALTH_CENTER">Centre de Santé</option>
-          </select>
+        {/* ACTIVE FILTER CHIPS */}
+        {activeChips.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "18px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "700", color: COLORS.muted }}>Filtres actifs:</span>
+            {activeChips.map(chip => (
+              <span key={chip.key} style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, border: `1px solid ${COLORS.teal}40`, padding: "4px 10px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {chip.label}
+                <X size={14} style={{ cursor: "pointer" }} onClick={chip.clear} />
+              </span>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
+          
+          {/* SEARCH */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Recherche textuelle
+            </label>
+            <div style={{ position: "relative" }}>
+              <Search size={16} color={COLORS.muted} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)" }} />
+              <input
+                type="text"
+                placeholder="Nom, adresse..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{ width: "100%", padding: "10px 14px 10px 40px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight }}
+              />
+            </div>
+          </div>
+
+          {/* FACILITY TYPE */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Type d'établissement
+            </label>
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="ALL">Tous les types d'établissements</option>
+              <option value="HOSPITAL">Hôpital (CHU / EPH)</option>
+              <option value="CLINIC">Clinique Privée</option>
+              <option value="DISPENSARY">Dispensaire / Polyclinique</option>
+              <option value="OTHER">Autre Structure</option>
+            </select>
+          </div>
+
+          {/* JURISDICTION WILAYA */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Wilaya (Verrouillée)
+            </label>
+            <div style={{ padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, backgroundColor: "#F1F5F9", color: COLORS.navy, fontWeight: "700", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "8px" }}>
+              <Lock size={15} color="#B45309" />
+              <span>Wilaya {inspectorWilaya || "—"}</span>
+            </div>
+          </div>
+
         </div>
 
-        <div style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "700", marginLeft: "auto" }}>
-          {filteredFacilities.length} structure(s) trouvée(s)
+        {/* ACTION BAR */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "20px", paddingTop: "16px", borderTop: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "700" }}>
+            {filteredFacilities.length} établissement(s) répertorié(s)
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={handleResetFiltres}
+              style={{ backgroundColor: "white", border: `1px solid ${COLORS.border}`, padding: "8px 16px", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "700", color: COLORS.navy, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <RotateCcw size={14} /> Réinitialiser
+            </button>
+            <button
+              onClick={handleApplyFiltres}
+              style={{ backgroundColor: COLORS.navy, border: "none", padding: "8px 20px", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "800", color: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <Filter size={14} /> Appliquer les filtres
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* FACILITIES GRID */}
+      {/* FACILITIES GRID CARDS */}
       {loading ? (
         <div style={{ padding: "60px", textAlign: "center", color: COLORS.navy }}>
           <RefreshCw size={32} className="animate-spin" style={{ margin: "0 auto 12px auto", color: COLORS.teal }} />
-          <div style={{ fontWeight: "700" }}>Chargement des établissements de la Wilaya {inspectorWilaya}...</div>
+          <div style={{ fontWeight: "700" }}>Chargement des établissements...</div>
         </div>
       ) : filteredFacilities.length === 0 ? (
         <div style={{ backgroundColor: "white", padding: "40px", borderRadius: "18px", border: `1px solid ${COLORS.border}`, textAlign: "center", color: COLORS.muted }}>
           <Building2 size={40} color={COLORS.muted} style={{ margin: "0 auto 12px auto" }} />
           <div style={{ fontSize: "1rem", fontWeight: "700", color: COLORS.navy }}>Aucun établissement trouvé</div>
-          <div style={{ fontSize: "0.85rem", marginTop: "4px" }}>Ajustez vos filtres ou effectuez une autre recherche.</div>
+          <div style={{ fontSize: "0.85rem", marginTop: "4px" }}>Ajustez vos filtres de recherche.</div>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "18px" }}>
           {filteredFacilities.map((fac) => (
             <div
               key={fac.id}
@@ -262,84 +430,49 @@ export function InspectorFacilitiesPage() {
                 backgroundColor: "white",
                 borderRadius: "18px",
                 border: `1px solid ${COLORS.border}`,
-                padding: "20px",
+                padding: "22px",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
                 gap: "16px",
-                boxShadow: "0 2px 10px rgba(0,0,0,0.02)",
-                transition: "all 0.15s ease"
+                boxShadow: "0 4px 16px rgba(0,0,0,0.02)",
+                transition: "all 0.2s ease"
               }}
             >
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "10px", marginBottom: "10px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{ padding: "10px", borderRadius: "12px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
-                      <Building2 size={20} />
-                    </div>
-                    <div>
-                      <h3 style={{ fontSize: "1.05rem", fontWeight: "800", color: COLORS.navy, margin: 0 }}>
-                        {fac.name}
-                      </h3>
-                      <span style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "600" }}>
-                        Type: {fac.facility_type || "Hôpital"}
-                      </span>
-                    </div>
-                  </div>
-
-                  <span style={{ backgroundColor: "#ECFDF5", color: "#047857", fontSize: "0.72rem", fontWeight: "800", padding: "3px 8px", borderRadius: "999px" }}>
-                    Actif
+                  <span style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: "4px 10px", borderRadius: "999px", fontSize: "0.72rem", fontWeight: "800", textTransform: "uppercase" }}>
+                    {fac.facility_type || "Établissement"}
+                  </span>
+                  <span style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700" }}>
+                    Wilaya {fac.wilaya}
                   </span>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "0.8rem", color: COLORS.muted, marginBottom: "14px" }}>
-                  <MapPin size={14} color={COLORS.teal} />
-                  <span>Wilaya {fac.wilaya || inspectorWilaya}</span>
-                  {fac.address && <span>• {fac.address}</span>}
-                </div>
-
-                {/* COUNTERS */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", backgroundColor: COLORS.bgLight, padding: "12px", borderRadius: "12px", border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Stethoscope size={16} color="#0284C7" />
-                    <div>
-                      <div style={{ fontSize: "0.7rem", color: COLORS.muted, fontWeight: "700" }}>MÉDECINS</div>
-                      <div style={{ fontSize: "0.95rem", fontWeight: "800", color: COLORS.navy }}>{fac.doctorCount}</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    <Activity size={16} color="#DC2626" />
-                    <div>
-                      <div style={{ fontSize: "0.7rem", color: COLORS.muted, fontWeight: "700" }}>ÉVÉNEMENTS</div>
-                      <div style={{ fontSize: "0.95rem", fontWeight: "800", color: COLORS.navy }}>{fac.eventCount}</div>
-                    </div>
-                  </div>
-                </div>
+                <h3 style={{ fontSize: "1.15rem", fontWeight: "900", color: COLORS.navy, margin: "0 0 6px 0", lineHeight: "1.3" }}>
+                  {fac.name}
+                </h3>
+                
+                <p style={{ fontSize: "0.82rem", color: COLORS.muted, margin: 0 }}>
+                  {fac.address || "Adresse non renseignée"}
+                </p>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: `1px solid ${COLORS.border}`, paddingTop: "12px" }}>
-                <span style={{ fontSize: "0.75rem", color: COLORS.muted, display: "flex", alignItems: "center", gap: "4px" }}>
-                  <Lock size={12} /> Lecture seule
-                </span>
+              <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: "14px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.8rem", color: COLORS.navy, fontWeight: "700" }}>
+                    <Stethoscope size={14} color={COLORS.teal} /> {fac.doctorCount} praticien(s)
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.8rem", color: COLORS.navy, fontWeight: "700" }}>
+                    <Activity size={14} color="#EA580C" /> {fac.eventCount} cas
+                  </div>
+                </div>
 
                 <button
                   onClick={() => handleOpenDetails(fac)}
-                  style={{
-                    backgroundColor: COLORS.navy,
-                    color: "white",
-                    border: "none",
-                    padding: "8px 14px",
-                    borderRadius: "10px",
-                    fontWeight: "700",
-                    fontSize: "0.82rem",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px"
-                  }}
+                  style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "6px 14px", borderRadius: "10px", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
                 >
-                  <Eye size={14} /> Voir détails
+                  <Eye size={14} /> Consulter
                 </button>
               </div>
             </div>
@@ -350,121 +483,285 @@ export function InspectorFacilitiesPage() {
       {/* FACILITY DETAIL MODAL */}
       {selectedFacility && (
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
-          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "800px", width: "100%", maxHeight: "90vh", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "680px", width: "100%", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
             
-            {/* MODAL HEADER */}
-            <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center", sticky: "top" }}>
               <div>
-                <div style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "800", textTransform: "uppercase", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Building2 size={14} /> Fiche Établissement de Santé • Wilaya {selectedFacility.wilaya}
-                </div>
-                <h2 style={{ fontSize: "1.4rem", fontWeight: "900", margin: "4px 0 0 0", color: "white" }}>
-                  {selectedFacility.name}
-                </h2>
+                <span style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "800", textTransform: "uppercase" }}>Fiche Structure Sanitaire</span>
+                <h3 style={{ fontSize: "1.25rem", fontWeight: "900", margin: "2px 0 0 0", color: "white" }}>{selectedFacility.name}</h3>
               </div>
-
               <button onClick={() => setSelectedFacility(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}>
                 <X size={24} />
               </button>
             </div>
 
-            {/* MODAL CONTENT */}
-            <div style={{ padding: "24px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "20px" }}>
-              
-              {/* READ-ONLY BANNER */}
-              <div style={{ backgroundColor: "#F1F5F9", border: `1px solid ${COLORS.border}`, padding: "10px 14px", borderRadius: "12px", display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: "0.82rem" }}>
-                <span style={{ fontWeight: "700", color: COLORS.navy, display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Lock size={14} color="#B45309" /> Document de consultation d'inspection régionale (Lecture Seule)
-                </span>
-                <span style={{ color: COLORS.muted }}>ID: #{selectedFacility.id.substring(0, 8)}</span>
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "20px" }}>
+              <div style={{ backgroundColor: COLORS.bgLight, padding: "16px", borderRadius: "14px", border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", gap: "8px", fontSize: "0.88rem" }}>
+                <div><strong>Type:</strong> {selectedFacility.facility_type || "Clinique / Établissement"}</div>
+                <div><strong>Wilaya:</strong> {selectedFacility.wilaya}</div>
+                <div><strong>Adresse:</strong> {selectedFacility.address || "Non spécifiée"}</div>
+                <div><strong>Téléphone:</strong> {selectedFacility.phone || "Non renseigné"}</div>
               </div>
 
-              {/* STATS OVERVIEW */}
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-                <div style={{ backgroundColor: COLORS.bgLight, padding: "14px", borderRadius: "12px", border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700" }}>TYPE D'ÉTABLISSEMENT</div>
-                  <div style={{ fontSize: "1.1rem", fontWeight: "800", color: COLORS.navy, marginTop: "2px" }}>{selectedFacility.facility_type || "Hôpital"}</div>
-                </div>
-
-                <div style={{ backgroundColor: COLORS.bgLight, padding: "14px", borderRadius: "12px", border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700" }}>EFFECTIF MÉDECINS</div>
-                  <div style={{ fontSize: "1.1rem", fontWeight: "800", color: COLORS.teal, marginTop: "2px" }}>{facilityDoctors.length} rattaché(s)</div>
-                </div>
-
-                <div style={{ backgroundColor: COLORS.bgLight, padding: "14px", borderRadius: "12px", border: `1px solid ${COLORS.border}` }}>
-                  <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700" }}>HISTORIQUE ÉVÉNEMENTS</div>
-                  <div style={{ fontSize: "1.1rem", fontWeight: "800", color: "#DC2626", marginTop: "2px" }}>{facilityEvents.length} signalement(s)</div>
-                </div>
-              </div>
-
-              {/* DOCTORS IN FACILITY */}
+              {/* DOCTORS LIST IN FACILITY */}
               <div>
-                <h3 style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Stethoscope size={16} color={COLORS.teal} /> Médecins rattachés à cet établissement
-                </h3>
-
-                {facilityDoctors.length === 0 ? (
-                  <div style={{ fontSize: "0.85rem", color: COLORS.muted, fontStyle: "italic" }}>
-                    Aucun médecin répertorié dans cette structure.
-                  </div>
+                <h4 style={{ fontSize: "0.95rem", fontWeight: "800", color: COLORS.navy, margin: "0 0 10px 0" }}>
+                  Corps Médical Rattaché ({facilityDoctors.length})
+                </h4>
+                {loadingDetails ? (
+                  <div style={{ fontSize: "0.85rem", color: COLORS.muted }}>Chargement des praticiens...</div>
+                ) : facilityDoctors.length === 0 ? (
+                  <div style={{ fontSize: "0.85rem", color: COLORS.muted }}>Aucun praticien enregistré dans cet établissement.</div>
                 ) : (
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "10px" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                     {facilityDoctors.map((doc) => (
-                      <div key={doc.id} style={{ padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, backgroundColor: "white" }}>
-                        <div style={{ fontWeight: "800", fontSize: "0.88rem", color: COLORS.navy }}>
-                          Dr. {doc.users?.first_name || ""} {doc.users?.last_name || "Anonyme"}
+                      <div key={doc.id} style={{ backgroundColor: "white", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <strong>Dr. {doc.users?.first_name} {doc.users?.last_name}</strong>
+                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>Spécialité: {doc.specialty || "Généraliste"}</div>
                         </div>
-                        <div style={{ fontSize: "0.78rem", color: COLORS.teal, fontWeight: "600" }}>
-                          Spécialité: {doc.specialty || "Médecine Générale"}
-                        </div>
+                        <span style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "700" }}>{doc.users?.email}</span>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* HEALTH EVENTS IN FACILITY */}
+              {/* RECENT HEALTH EVENTS IN FACILITY */}
               <div>
-                <h3 style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <Activity size={16} color="#DC2626" /> Historique des événements de santé signalés
-                </h3>
-
-                {facilityEvents.length === 0 ? (
-                  <div style={{ fontSize: "0.85rem", color: COLORS.muted, fontStyle: "italic" }}>
-                    Aucun événement de santé enregistré pour cet établissement.
-                  </div>
+                <h4 style={{ fontSize: "0.95rem", fontWeight: "800", color: COLORS.navy, margin: "0 0 10px 0" }}>
+                  Derniers Signalements Sanitaires ({facilityEvents.length})
+                </h4>
+                {loadingDetails ? (
+                  <div style={{ fontSize: "0.85rem", color: COLORS.muted }}>Chargement des signalements...</div>
+                ) : facilityEvents.length === 0 ? (
+                  <div style={{ fontSize: "0.85rem", color: COLORS.muted }}>Aucun événement de santé répertorié.</div>
                 ) : (
                   <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                     {facilityEvents.slice(0, 5).map((ev) => (
-                      <div key={ev.id} style={{ padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, backgroundColor: COLORS.bgLight, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div key={ev.id} style={{ backgroundColor: "white", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
-                          <div style={{ fontWeight: "800", fontSize: "0.85rem", color: COLORS.navy }}>
-                            {ev.reportable_diseases?.name || "Événement de santé"}
-                          </div>
-                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>
-                            Déclaré le {new Date(ev.created_at).toLocaleDateString("fr-FR")}
-                          </div>
+                          <strong>{ev.reportable_diseases?.name || "Pathologie"}</strong>
+                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>Gravité: {ev.severity}</div>
                         </div>
-
-                        <span style={{ backgroundColor: ev.severity === "CRITICAL" ? "#FEE2E2" : COLORS.lightTeal, color: ev.severity === "CRITICAL" ? "#DC2626" : COLORS.teal, padding: "2px 8px", borderRadius: "999px", fontSize: "0.72rem", fontWeight: "800" }}>
-                          {ev.severity}
-                        </span>
+                        <span style={{ fontSize: "0.75rem", color: COLORS.muted }}>{new Date(ev.created_at).toLocaleDateString("fr-FR")}</span>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
+            </div>
+
+            <div style={{ padding: "14px 24px", borderTop: `1px solid ${COLORS.border}`, backgroundColor: COLORS.bgLight, display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={() => setSelectedFacility(null)} style={{ backgroundColor: COLORS.navy, color: "white", padding: "8px 18px", borderRadius: "10px", fontWeight: "700", border: "none", cursor: "pointer" }}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PRIVATE CLINIC DOCTOR ASSIGNMENT WIZARD MODAL */}
+      {showAssignModal && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
+          <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "600px", width: "100%", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+            
+            {/* WIZARD HEADER */}
+            <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "800", textTransform: "uppercase" }}>
+                  Procédure d'Affectation • Clinique Privée
+                </div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "900", margin: "4px 0 0 0", color: "white" }}>
+                  Étape {wizardStep} / 4 — {wizardStep === 1 ? "Sélectionner la clinique" : wizardStep === 2 ? "Identifier le médecin" : wizardStep === 3 ? "Vérification" : "Soumission"}
+                </h3>
+              </div>
+
+              <button onClick={() => setShowAssignModal(false)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}>
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* WIZARD BODY */}
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              
+              {assignErrorMsg && (
+                <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FCA5A5", color: "#991B1B", padding: "10px 14px", borderRadius: "12px", fontSize: "0.85rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <AlertTriangle size={16} color="#DC2626" /> {assignErrorMsg}
+                </div>
+              )}
+
+              {/* STEP 1: SELECT CLINIC */}
+              {wizardStep === 1 && (
+                <div>
+                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "8px" }}>
+                    Étape 1: Sélectionner la clinique privée (Wilaya {inspectorWilaya})
+                  </label>
+                  <div style={{ maxHeight: "240px", overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {facilities.map((fac) => (
+                      <div
+                        key={fac.id}
+                        onClick={() => setSelectedClinicId(fac.id)}
+                        style={{
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          cursor: "pointer",
+                          backgroundColor: selectedClinicId === fac.id ? COLORS.lightTeal : "white",
+                          border: selectedClinicId === fac.id ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.9rem" }}>{fac.name}</div>
+                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>Type: {fac.facility_type || "Clinique"} • Wilaya {fac.wilaya}</div>
+                        </div>
+                        {selectedClinicId === fac.id && <Check size={18} color={COLORS.teal} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: SELECT DOCTOR */}
+              {wizardStep === 2 && (
+                <div>
+                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "8px" }}>
+                    Étape 2: Identifier le médecin à affecter
+                  </label>
+                  <div style={{ maxHeight: "240px", overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {doctorsList.map((doc) => (
+                      <div
+                        key={doc.id}
+                        onClick={() => setSelectedDoctorId(doc.id)}
+                        style={{
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          cursor: "pointer",
+                          backgroundColor: selectedDoctorId === doc.id ? COLORS.lightTeal : "white",
+                          border: selectedDoctorId === doc.id ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center"
+                        }}
+                      >
+                        <div>
+                          <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.9rem" }}>
+                            Dr. {doc.users?.first_name} {doc.users?.last_name}
+                          </div>
+                          <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>
+                            Spécialité: {doc.specialty || "Généraliste"} • Établissement actuel: {doc.facility?.name}
+                          </div>
+                        </div>
+                        {selectedDoctorId === doc.id && <Check size={18} color={COLORS.teal} />}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: REVIEW & REASON */}
+              {wizardStep === 3 && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                  <label style={{ fontSize: "0.85rem", fontWeight: "800", color: COLORS.navy }}>
+                    Étape 3: Vérification du dossier d'affectation
+                  </label>
+
+                  <div style={{ backgroundColor: COLORS.bgLight, padding: "14px", borderRadius: "12px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div><strong>Médecin:</strong> Dr. {targetDoctorObj?.users?.first_name} {targetDoctorObj?.users?.last_name}</div>
+                    <div><strong>Spécialité:</strong> {targetDoctorObj?.specialty}</div>
+                    <div><strong>Clinique Privée cible:</strong> {targetClinicObj?.name}</div>
+                    <div><strong>Wilaya:</strong> {inspectorWilaya}</div>
+                  </div>
+
+                  <div>
+                    <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+                      Motif / Justificatif administratif
+                    </label>
+                    <textarea
+                      rows={3}
+                      placeholder="Indiquez la raison officielle de cette affectation..."
+                      value={assignReason}
+                      onChange={(e) => setAssignReason(e.target.value)}
+                      style={{ width: "100%", padding: "10px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none" }}
+                    />
+                  </div>
+
+                  {/* ADMINISTRATIVE VALIDATION WARNING */}
+                  <div style={{ backgroundColor: "#FEF3C7", border: "1px solid #FCD34D", color: "#B45309", padding: "12px 14px", borderRadius: "12px", fontSize: "0.82rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+                    <Lock size={16} />
+                    <span>Cette opération nécessite une validation administrative préalable par le Superadmin.</span>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: SUBMISSION & CONFIRMATION */}
+              {wizardStep === 4 && (
+                <div style={{ textAlign: "center", padding: "20px 10px" }}>
+                  <CheckCircle2 size={48} color="#059669" style={{ margin: "0 auto 12px auto" }} />
+                  <h4 style={{ fontSize: "1.2rem", fontWeight: "900", color: COLORS.navy, margin: 0 }}>
+                    Demande transmise avec succès !
+                  </h4>
+                  <p style={{ fontSize: "0.88rem", color: COLORS.muted, marginTop: "6px" }}>
+                    Votre demande d'affectation pour <strong>Dr. {targetDoctorObj?.users?.last_name}</strong> vers <strong>{targetClinicObj?.name}</strong> a été enregistrée. Elle est actuellement soumise à la validation administrative.
+                  </p>
+                </div>
+              )}
 
             </div>
 
-            {/* MODAL FOOTER */}
-            <div style={{ padding: "14px 24px", borderTop: `1px solid ${COLORS.border}`, backgroundColor: COLORS.bgLight, display: "flex", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setSelectedFacility(null)}
-                style={{ backgroundColor: COLORS.navy, color: "white", padding: "8px 18px", borderRadius: "10px", fontWeight: "700", border: "none", cursor: "pointer", fontSize: "0.85rem" }}
-              >
-                Fermer
-              </button>
+            {/* WIZARD FOOTER */}
+            <div style={{ padding: "14px 24px", borderTop: `1px solid ${COLORS.border}`, backgroundColor: COLORS.bgLight, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              {wizardStep > 1 && wizardStep < 4 ? (
+                <button
+                  onClick={() => setWizardStep((wizardStep - 1) as any)}
+                  style={{ backgroundColor: "white", border: `1px solid ${COLORS.border}`, padding: "8px 16px", borderRadius: "10px", fontWeight: "700", fontSize: "0.85rem", cursor: "pointer" }}
+                >
+                  Précédent
+                </button>
+              ) : <div />}
+
+              {wizardStep === 1 && (
+                <button
+                  onClick={() => {
+                    if (!selectedClinicId) setAssignErrorMsg("Veuillez sélectionner une clinique.");
+                    else { setAssignErrorMsg(null); setWizardStep(2); }
+                  }}
+                  style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 18px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer" }}
+                >
+                  Suivant (Médecin)
+                </button>
+              )}
+
+              {wizardStep === 2 && (
+                <button
+                  onClick={() => {
+                    if (!selectedDoctorId) setAssignErrorMsg("Veuillez sélectionner un médecin.");
+                    else { setAssignErrorMsg(null); setWizardStep(3); }
+                  }}
+                  style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 18px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer" }}
+                >
+                  Suivant (Vérification)
+                </button>
+              )}
+
+              {wizardStep === 3 && (
+                <button
+                  onClick={handleSubmitAssignmentRequest}
+                  disabled={submittingRequest}
+                  style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "8px 20px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+                >
+                  <Send size={14} /> Soumettre la demande
+                </button>
+              )}
+
+              {wizardStep === 4 && (
+                <button
+                  onClick={() => setShowAssignModal(false)}
+                  style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "8px 20px", borderRadius: "10px", fontWeight: "800", fontSize: "0.85rem", cursor: "pointer" }}
+                >
+                  Fermer
+                </button>
+              )}
             </div>
 
           </div>
