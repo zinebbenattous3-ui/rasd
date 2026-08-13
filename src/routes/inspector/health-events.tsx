@@ -539,7 +539,7 @@ export function InspectorHealthEventsPage() {
 
       {/* PROOF VIEWER MODAL */}
       <MedicalProofModal
-        proofUrl={selectedProofUrl}
+        proofPath={selectedProofUrl}
         onClose={() => setSelectedProofUrl(null)}
       />
 
