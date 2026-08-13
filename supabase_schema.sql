@@ -125,3 +125,26 @@ CREATE TABLE public.doctor_facility_change_requests (
   CONSTRAINT doctor_facility_change_requests_requested_facility_fkey FOREIGN KEY (requested_facility_id) REFERENCES public.facilities(id),
   CONSTRAINT doctor_facility_change_requests_reviewer_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
 );
+
+-- ==================================================
+-- STORAGE BUCKET & POLICIES FOR patient-proofs
+-- ==================================================
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('patient-proofs', 'patient-proofs', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
+
+CREATE POLICY "patient_proofs_select" ON storage.objects
+FOR SELECT TO authenticated
+USING (bucket_id = 'patient-proofs');
+
+CREATE POLICY "patient_proofs_insert" ON storage.objects
+FOR INSERT TO authenticated
+WITH CHECK (bucket_id = 'patient-proofs');
+
+CREATE POLICY "patient_proofs_update" ON storage.objects
+FOR UPDATE TO authenticated
+USING (bucket_id = 'patient-proofs');
+
+CREATE POLICY "patient_proofs_delete" ON storage.objects
+FOR DELETE TO authenticated
+USING (bucket_id = 'patient-proofs');

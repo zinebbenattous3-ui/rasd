@@ -191,29 +191,24 @@ export const getReportDataServer = createServerFn({ method: "POST" })
         userScopeDescription = "Toutes les Wilayas (Accès Observatoire National)";
       } else if (role === "HEALTH_AUTHORITY") {
         privacyLevel = 3;
-        // Fetch authorized facilities linked to this Health Authority by created_by
-        const { data: userFacs, error: facErr } = await supabase
+        // Health Authority has full supervisory scope over facilities across authorized wilayas
+        const { data: allFacs } = await supabase
           .from("facilities")
-          .select("id, name, wilaya, facility_type")
-          .eq("created_by", userRec.id);
+          .select("id, name, wilaya, facility_type");
 
-        if (facErr || !userFacs || userFacs.length === 0) {
-          // Fallback: If authority has not explicitly created facilities, check all facilities
-          const { data: allFacs } = await supabase.from("facilities").select("id, name, wilaya, facility_type");
-          authFacIds = (allFacs || []).map((f) => f.id);
-        } else {
-          authFacIds = userFacs.map((f) => f.id);
-        }
+        authFacIds = (allFacs || []).map((f) => f.id);
 
-        // Verify requested facilityId against authorized list
+        // Verify requested facilityId
         if (data.facilityId) {
-          if (authFacIds.length > 0 && !authFacIds.includes(data.facilityId)) {
-            return { ...defaultPayload, error: "Accès refusé : Vous n'êtes pas autorisé à consulter cet établissement." };
-          }
           forcedFacilityId = data.facilityId;
         }
 
-        userScopeDescription = `Établissements sous gestion (${authFacIds.length} structure(s) autorisée(s))`;
+        if (data.wilaya) {
+          const normCode = normalizeWilayaCode(data.wilaya) || data.wilaya;
+          userScopeDescription = `Wilaya ${normCode} (Portée Autorité de Santé)`;
+        } else {
+          userScopeDescription = `Toutes les Wilayas (${authFacIds.length} structure(s) surveillée(s))`;
+        }
       } else if (role === "INSPECTOR") {
         privacyLevel = 3;
         const { data: inspRec } = await supabase

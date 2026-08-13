@@ -3,11 +3,9 @@ import { useState, useEffect } from "react";
 import { ALGERIA_WILAYAS_69, normalizeWilayaCode } from "@/lib/wilayas";
 import { validateCurrentSession, getStoredSession, AuthenticatedUser } from "@/lib/auth";
 import { getReportDataServer, ReportPayload, ReportType } from "@/lib/reportsServer";
-import { generateReportPDF } from "@/lib/pdfGenerator";
-import { generateReportExcel } from "@/lib/excelGenerator";
+import { generateModelPDF, ReportModelKey } from "@/lib/pdfGenerator";
+import { generateModelExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
-import { SelectDropdown } from "@/components/ui/select-dropdown";
-import { DatePicker } from "@/components/ui/date-picker";
 import { MedicalProofModal } from "@/components/MedicalProofModal";
 import {
   FileText,
@@ -26,10 +24,13 @@ import {
   AlertCircle,
   CheckCircle2,
   RotateCcw,
-  FileX,
   Clock,
   Shield,
   Search,
+  Lock,
+  Loader2,
+  FileCheck,
+  Building
 } from "lucide-react";
 
 export const Route = createFileRoute("/health-authority/reports")({
@@ -38,7 +39,7 @@ export const Route = createFileRoute("/health-authority/reports")({
       { title: "Rapports de l'Autorité Sanitaire — Rased" },
       {
         name: "description",
-        content: "Génération sécurisée de rapports sanitaires pour l'Espace Sanitaire.",
+        content: "Génération sécurisée et supervision des rapports sanitaires pour l'Espace Sanitaire.",
       },
     ],
   }),
@@ -72,19 +73,30 @@ function formatDateTime(isoString?: string): string {
   }
 }
 
+// Map frontend model key to server reportType
+const MODEL_TO_REPORT_TYPE: Record<ReportModelKey, ReportType> = {
+  synthesis: "EXECUTIVE",
+  facility: "FACILITY",
+  pathology: "DISEASE",
+  severity: "WILAYA",
+  detailed: "DETAILED_EVENTS",
+};
+
 export function HealthAuthorityReportsPage() {
   const navigate = useNavigate();
   const [currentUser, setCurrentUser] = useState<AuthenticatedUser | null>(null);
   const [authChecking, setAuthChecking] = useState<boolean>(true);
 
-  // Filters State
-  const [reportType, setReportType] = useState<ReportType>("EXECUTIVE");
-  const [dateFrom, setDateFrom] = useState<string>("");
-  const [dateTo, setDateTo] = useState<string>("");
+  // Selected Report Model State (5 Distinct Models)
+  const [selectedModel, setSelectedModel] = useState<ReportModelKey>("synthesis");
+
+  // Filter States
   const [selectedWilaya, setSelectedWilaya] = useState<string>("");
   const [selectedFacilityId, setSelectedFacilityId] = useState<string>("");
   const [selectedDiseaseId, setSelectedDiseaseId] = useState<string>("");
   const [selectedSeverity, setSelectedSeverity] = useState<string>("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
   // Options loaded from DB
   const [diseasesList, setDiseasesList] = useState<any[]>([]);
@@ -97,13 +109,10 @@ export function HealthAuthorityReportsPage() {
   const [exportSuccessMsg, setExportSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Proof Image Modal State
+  // Proof Viewer Modal State
   const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
-  // Active View Category Tab
-  const [activeTab, setActiveTab] = useState<"summary" | "facilities" | "diseases" | "severities" | "events">("summary");
-
-  // Validate Authentication on Mount (STRICT: HEALTH_AUTHORITY ONLY)
+  // Validate Authentication on Mount (HEALTH_AUTHORITY ONLY)
   useEffect(() => {
     async function verifyAuth() {
       const authResult = await validateCurrentSession(["HEALTH_AUTHORITY"]);
@@ -119,37 +128,32 @@ export function HealthAuthorityReportsPage() {
     verifyAuth();
   }, []);
 
-  // Fetch Diseases and Authorized Facilities for this Health Authority
+  // Fetch Diseases & Facilities Options
   useEffect(() => {
     async function loadDropdownOptions() {
       if (!currentUser) return;
       try {
+        // Diseases
         const { data: diseases } = await supabase.from("reportable_diseases").select("id, name").order("name");
         if (diseases) setDiseasesList(diseases);
 
-        // Fetch facilities linked to this health authority by created_by
-        const { data: userFacs, error: facErr } = await supabase
-          .from("facilities")
-          .select("id, name, wilaya, facility_type")
-          .eq("created_by", currentUser.id)
-          .order("name");
-
-        if (userFacs && userFacs.length > 0) {
-          setFacilitiesList(userFacs);
-        } else {
-          // Fallback: load all facilities if none explicitly linked
-          const { data: allFacs } = await supabase.from("facilities").select("id, name, wilaya, facility_type").order("name");
-          if (allFacs) setFacilitiesList(allFacs);
+        // Facilities (Filter by selectedWilaya if set)
+        let facQuery = supabase.from("facilities").select("id, name, wilaya, facility_type").order("name");
+        if (selectedWilaya) {
+          const normCode = normalizeWilayaCode(selectedWilaya);
+          facQuery = facQuery.ilike("wilaya", `%${normCode}%`);
         }
+        const { data: facs } = await facQuery;
+        setFacilitiesList(facs || []);
       } catch (err) {
-        console.error("Error loading dropdown options:", err);
+        console.error("Error loading dropdown options for Health Authority:", err);
       }
     }
     loadDropdownOptions();
-  }, [currentUser]);
+  }, [currentUser, selectedWilaya]);
 
-  // Fetch Report Data from Server
-  const fetchReport = async () => {
+  // Fetch Report Data from Server using selected model & filters
+  const fetchReport = async (modelToFetch: ReportModelKey = selectedModel) => {
     const session = getStoredSession();
     if (!session || !session.userId) return;
 
@@ -157,11 +161,13 @@ export function HealthAuthorityReportsPage() {
     setErrorMsg(null);
 
     try {
+      const serverReportType = MODEL_TO_REPORT_TYPE[modelToFetch];
+
       const res = await getReportDataServer({
         data: {
           userId: session.userId,
           sessionToken: session.token,
-          reportType,
+          reportType: serverReportType,
           dateFrom: dateFrom || undefined,
           dateTo: dateTo || undefined,
           wilaya: selectedWilaya || undefined,
@@ -171,787 +177,884 @@ export function HealthAuthorityReportsPage() {
         },
       });
 
-      if (res.success) {
-        setReportData(res);
+      if (res.error) {
+        setErrorMsg(res.error);
+        setReportData(null);
       } else {
-        setErrorMsg(res.error || "Impossible d'obtenir les données du rapport.");
+        setReportData(res);
       }
     } catch (err: any) {
-      console.error("Report fetch error:", err);
-      setErrorMsg(err.message || "Erreur de connexion au serveur.");
+      console.error("Error fetching report data for Health Authority:", err);
+      setErrorMsg(err.message || "Impossible de charger les données du rapport.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Initial Data Load
+  // Trigger initial report load & reload on model switch
   useEffect(() => {
-    if (!authChecking && currentUser && currentUser.role === "HEALTH_AUTHORITY") {
-      fetchReport();
+    if (currentUser && !authChecking) {
+      fetchReport(selectedModel);
     }
-  }, [authChecking, currentUser, reportType]);
+  }, [currentUser, authChecking, selectedModel]);
 
-  // Reset Filters Function
+  // Reset Filters Handler
   const handleResetFilters = () => {
-    setDateFrom("");
-    setDateTo("");
     setSelectedWilaya("");
     setSelectedFacilityId("");
     setSelectedDiseaseId("");
     setSelectedSeverity("");
+    setDateFrom("");
+    setDateTo("");
+    fetchReport(selectedModel);
   };
 
-  // PDF Generation Handler
-  const handleGeneratePDF = async () => {
-    if (!reportData || reportData.summary.totalEvents === 0) return;
+  // Switch Model Handler
+  const handleSelectModel = (modelKey: ReportModelKey) => {
+    if (selectedModel === modelKey) return;
+    setSelectedModel(modelKey);
+  };
+
+  // Active Wilaya Label helper
+  const getWilayaObj = (codeOrName: string) => {
+    if (!codeOrName) return null;
+    const norm = normalizeWilayaCode(codeOrName);
+    return ALGERIA_WILAYAS_69.find(w => w.code === norm);
+  };
+
+  const currentWilayaObj = getWilayaObj(selectedWilaya);
+  const wilayaInfo = {
+    code: currentWilayaObj ? currentWilayaObj.code : (selectedWilaya ? normalizeWilayaCode(selectedWilaya) : "ALGERIA"),
+    name: currentWilayaObj ? currentWilayaObj.name : (selectedWilaya || "Toutes les Wilayas")
+  };
+
+  // Export PDF Action
+  const handleExportPDF = () => {
+    if (!reportData) return;
     setGeneratingFormat("pdf");
     setExportSuccessMsg(null);
-
-    setTimeout(() => {
-      try {
-        generateReportPDF(reportData, reportType);
-        setExportSuccessMsg("Document PDF généré avec succès.");
-      } catch (err: any) {
-        console.error("PDF generation failed:", err);
-        setErrorMsg("Erreur lors du rendu PDF.");
-      } finally {
-        setGeneratingFormat(null);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
-      }
-    }, 400);
+    try {
+      generateModelPDF(selectedModel, reportData, wilayaInfo);
+      setExportSuccessMsg("Le rapport PDF officiel a été généré et téléchargé avec succès.");
+      setTimeout(() => setExportSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error("PDF generation error:", err);
+      setErrorMsg("Échec de la génération du fichier PDF.");
+    } finally {
+      setGeneratingFormat(null);
+    }
   };
 
-  // Excel Generation Handler
-  const handleGenerateExcel = async () => {
-    if (!reportData || reportData.summary.totalEvents === 0) return;
+  // Export Excel Action
+  const handleExportExcel = () => {
+    if (!reportData) return;
     setGeneratingFormat("excel");
     setExportSuccessMsg(null);
-
-    setTimeout(() => {
-      try {
-        generateReportExcel(reportData, reportType);
-        setExportSuccessMsg("Classeur Excel exporté avec succès.");
-      } catch (err: any) {
-        console.error("Excel generation failed:", err);
-        setErrorMsg("Erreur lors de l'exportation Excel.");
-      } finally {
-        setGeneratingFormat(null);
-        setTimeout(() => setExportSuccessMsg(null), 4000);
-      }
-    }, 400);
+    try {
+      generateModelExcel(selectedModel, reportData, wilayaInfo);
+      setExportSuccessMsg("Le classeur Excel officiel a été généré et téléchargé avec succès.");
+      setTimeout(() => setExportSuccessMsg(null), 5000);
+    } catch (err) {
+      console.error("Excel generation error:", err);
+      setErrorMsg("Échec de la génération du fichier Excel.");
+    } finally {
+      setGeneratingFormat(null);
+    }
   };
 
-  // Using formatDateTime utility imported from @/lib/utils
-
-  // Active filters list
-  const activeFilters = [
-    selectedWilaya ? { key: "wilaya", label: `Wilaya: ${selectedWilaya}`, clear: () => setSelectedWilaya("") } : null,
-    selectedFacilityId
-      ? {
-          key: "facility",
-          label: `Établissement: ${facilitiesList.find((f) => f.id === selectedFacilityId)?.name || "Sélectionné"}`,
-          clear: () => setSelectedFacilityId(""),
-        }
-      : null,
-    dateFrom || dateTo
-      ? {
-          key: "dates",
-          label: `Période: ${dateFrom || "Début"} → ${dateTo || "Aujourd'hui"}`,
-          clear: () => {
-            setDateFrom("");
-            setDateTo("");
-          },
-        }
-      : null,
-    selectedDiseaseId
-      ? {
-          key: "disease",
-          label: `Pathologie: ${diseasesList.find((d) => d.id === selectedDiseaseId)?.name || "Sélectionnée"}`,
-          clear: () => setSelectedDiseaseId(""),
-        }
-      : null,
-    selectedSeverity
-      ? {
-          key: "severity",
-          label: `Gravité: ${
-            selectedSeverity === "CRITICAL"
-              ? "Critique"
-              : selectedSeverity === "HIGH"
-              ? "Élevée"
-              : selectedSeverity === "MEDIUM"
-              ? "Moyenne"
-              : "Faible"
-          }`,
-          clear: () => setSelectedSeverity(""),
-        }
-      : null,
-  ].filter(Boolean) as { key: string; label: string; clear: () => void }[];
+  // Active Filter Chips
+  const activeFilters = [];
+  if (selectedWilaya) {
+    const wObj = getWilayaObj(selectedWilaya);
+    activeFilters.push({
+      key: "wilaya",
+      label: `Wilaya: ${wObj ? `${wObj.code} - ${wObj.name}` : selectedWilaya}`,
+      clear: () => setSelectedWilaya(""),
+    });
+  }
+  if (selectedFacilityId) {
+    const facObj = facilitiesList.find((f) => f.id === selectedFacilityId);
+    activeFilters.push({
+      key: "facility",
+      label: `Établissement: ${facObj ? facObj.name : "Sélectionné"}`,
+      clear: () => setSelectedFacilityId(""),
+    });
+  }
+  if (selectedDiseaseId) {
+    const disObj = diseasesList.find((d) => d.id === selectedDiseaseId);
+    activeFilters.push({
+      key: "disease",
+      label: `Pathologie: ${disObj ? disObj.name : "Sélectionnée"}`,
+      clear: () => setSelectedDiseaseId(""),
+    });
+  }
+  if (selectedSeverity) {
+    const sevLabels: Record<string, string> = { CRITICAL: "Critique", HIGH: "Élevée", MEDIUM: "Moyenne", LOW: "Faible" };
+    activeFilters.push({
+      key: "severity",
+      label: `Gravité: ${sevLabels[selectedSeverity] || selectedSeverity}`,
+      clear: () => setSelectedSeverity(""),
+    });
+  }
+  if (dateFrom) {
+    activeFilters.push({ key: "dateFrom", label: `Depuis: ${dateFrom}`, clear: () => setDateFrom("") });
+  }
+  if (dateTo) {
+    activeFilters.push({ key: "dateTo", label: `Jusqu'à: ${dateTo}`, clear: () => setDateTo("") });
+  }
 
   if (authChecking) {
     return (
-      <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", color: COLORS.navy }}>
-        <div style={{ textAlign: "center" }}>
-          <RefreshCw size={36} className="animate-spin" style={{ margin: "0 auto 1rem auto", color: COLORS.teal }} />
-          <div style={{ fontSize: "1.05rem", fontWeight: "700" }}>Vérification des habilitations sanitaires...</div>
+      <div style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "12px", color: COLORS.navy }}>
+          <RefreshCw size={32} className="animate-spin" color={COLORS.teal} />
+          <span style={{ fontWeight: "700", fontSize: "0.95rem" }}>Vérification des accès Autorité de Santé...</span>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* HEADER & SCOPE BADGE */}
-      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-        <div>
-          <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            Rapport de Synthèse Sanitaire
-          </h1>
-          <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
-            Surveillance épidémiologique et consolidations pour les établissements de santé sous votre gestion.
-          </p>
-        </div>
-
-        {/* SCOPE BADGE */}
-        {reportData && (
-          <div
-            style={{
-              backgroundColor: "white",
-              padding: "14px 18px",
-              borderRadius: "16px",
-              border: `1.5px solid ${COLORS.border}`,
-              boxShadow: "0 4px 16px rgba(0,0,0,0.03)",
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-            }}
-          >
-            <div style={{ padding: "10px", borderRadius: "12px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
-              <Building2 size={22} />
-            </div>
-
-            <div>
-              <div style={{ fontSize: "0.72rem", color: COLORS.muted, fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                Périmètre Autorisé
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      
+      {/* 1. HEADER BANNER */}
+      <div style={{ backgroundColor: "white", borderRadius: "16px", border: `1px solid ${COLORS.border}`, padding: "20px 24px", boxShadow: "0 4px 20px rgba(0,0,0,0.02)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "16px" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "4px" }}>
+              <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
+                <Building size={22} />
               </div>
-              <div style={{ fontSize: "0.95rem", fontWeight: "800", color: COLORS.navy }}>
-                {reportData.appliedScope.userScopeDescription}
-              </div>
+              <h1 style={{ fontSize: "1.4rem", fontWeight: "900", color: COLORS.navy, margin: 0, letterSpacing: "-0.02em" }}>
+                Générateur & Supervision des Rapports Sanitaires
+              </h1>
             </div>
+            <p style={{ fontSize: "0.85rem", color: COLORS.muted, margin: 0 }}>
+              Consolidation épidémiologique et exportation réglementaire pour les structures sous votre tutelle.
+            </p>
           </div>
-        )}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", backgroundColor: COLORS.bgLight, padding: "8px 14px", borderRadius: "12px", border: `1px solid ${COLORS.border}` }}>
+            <Shield size={14} color={COLORS.teal} />
+            <span style={{ fontSize: "0.82rem", fontWeight: "700", color: COLORS.navy }}>
+              {reportData?.appliedScope?.userScopeDescription || "Espace Autorité Sanitaire"}
+            </span>
+          </div>
+        </div>
       </div>
 
-      {/* ERROR / SUCCESS NOTIFICATIONS */}
-      {errorMsg && (
-        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FCA5A5", padding: "14px 18px", borderRadius: "14px", color: "#991B1B", display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-            <AlertTriangle size={20} color="#DC2626" />
-            <div style={{ fontSize: "0.92rem", fontWeight: "700" }}>{errorMsg}</div>
-          </div>
-          <button
-            onClick={fetchReport}
-            style={{
-              backgroundColor: "#DC2626",
-              color: "white",
-              border: "none",
-              borderRadius: "8px",
-              padding: "6px 12px",
-              fontWeight: "700",
-              fontSize: "0.8rem",
-              cursor: "pointer",
-            }}
-          >
-            Réessayer
-          </button>
-        </div>
-      )}
-
+      {/* FEEDBACK ALERTS */}
       {exportSuccessMsg && (
-        <div style={{ backgroundColor: "#ECFDF5", border: "1px solid #6EE7B7", padding: "14px 18px", borderRadius: "14px", color: "#065F46", display: "flex", alignItems: "center", gap: "10px" }}>
-          <CheckCircle2 size={20} color="#059669" />
-          <div style={{ fontSize: "0.92rem", fontWeight: "700" }}>{exportSuccessMsg}</div>
+        <div style={{ backgroundColor: "#ECFDF5", border: "1px solid #A7F3D0", color: "#065F46", padding: "12px 18px", borderRadius: "12px", fontSize: "0.88rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px" }}>
+          <CheckCircle2 size={18} color="#059669" />
+          <span>{exportSuccessMsg}</span>
         </div>
       )}
 
-      {/* RESPONSIVE GRID FILTER PANEL */}
-      <div
-        style={{
-          backgroundColor: "white",
-          borderRadius: "18px",
-          border: `1px solid ${COLORS.border}`,
-          padding: "20px",
-          boxShadow: "0 4px 20px rgba(0,0,0,0.02)",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "16px", paddingBottom: "12px", borderBottom: `1px solid ${COLORS.border}` }}>
-          <div style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, display: "flex", alignItems: "center", gap: "8px" }}>
-            <Filter size={18} color={COLORS.teal} /> Panneau de Filtrage Avancé
-          </div>
-          <div style={{ fontSize: "0.8rem", color: COLORS.muted }}>
-            Filtrez les événements selon les critères souhaités
-          </div>
-        </div>
-
-        {/* 3-COLUMN BALANCED RESPONSIVE GRID (2 ROWS OF 3 ITEMS) */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
-          {/* WILAYA FILTER */}
-          <div>
-            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-              Wilaya
-            </label>
-            <SelectDropdown
-              icon={MapPin}
-              searchable={true}
-              placeholder="Toutes les wilayas"
-              value={selectedWilaya}
-              onChange={(val) => setSelectedWilaya(val)}
-              options={[
-                { value: "", label: "Toutes les wilayas" },
-                ...ALGERIA_WILAYAS_69.map((w) => ({ value: w.code, label: `${w.code} - ${w.name}` })),
-              ]}
-            />
-          </div>
-
-          {/* FACILITY FILTER */}
-          <div>
-            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-              Établissement sous Gestion
-            </label>
-            <SelectDropdown
-              icon={Building2}
-              placeholder="Tous mes établissements"
-              value={selectedFacilityId}
-              onChange={(val) => setSelectedFacilityId(val)}
-              options={[
-                { value: "", label: "Tous mes établissements" },
-                ...facilitiesList.map((fac) => ({ value: fac.id, label: `${fac.name} (${fac.wilaya})` })),
-              ]}
-            />
-          </div>
-
-          {/* PATHOLOGIE */}
-          <div>
-            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-              Pathologie
-            </label>
-            <SelectDropdown
-              icon={Stethoscope}
-              searchable={true}
-              placeholder="Toutes les pathologies"
-              value={selectedDiseaseId}
-              onChange={(val) => setSelectedDiseaseId(val)}
-              options={[
-                { value: "", label: "Toutes les pathologies" },
-                ...diseasesList.map((d) => ({ value: d.id, label: d.name })),
-              ]}
-            />
-          </div>
-
-          {/* DATE DE DÉBUT */}
-          <div>
-            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-              Date de début
-            </label>
-            <DatePicker
-              value={dateFrom}
-              onChange={(val) => setDateFrom(val)}
-              placeholder="Choisir date de début..."
-              maxDate={dateTo || undefined}
-            />
-          </div>
-
-          {/* DATE DE FIN */}
-          <div>
-            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-              Date de fin
-            </label>
-            <DatePicker
-              value={dateTo}
-              onChange={(val) => setDateTo(val)}
-              placeholder="Choisir date de fin..."
-              minDate={dateFrom || undefined}
-            />
-          </div>
-
-          {/* GRAVITÉ */}
-          <div>
-            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-              Niveau de Gravité
-            </label>
-            <SelectDropdown
-              icon={AlertTriangle}
-              placeholder="Toutes les gravités"
-              value={selectedSeverity}
-              onChange={(val) => setSelectedSeverity(val)}
-              options={[
-                { value: "", label: "Toutes les gravités" },
-                { value: "CRITICAL", label: "Critique" },
-                { value: "HIGH", label: "Élevée" },
-                { value: "MEDIUM", label: "Moyenne" },
-                { value: "LOW", label: "Faible" },
-              ]}
-            />
-          </div>
-        </div>
-
-        {/* DEDICATED ACTION BUTTONS & ACTIVE FILTERS FOOTER BAR */}
-        <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: `1px solid ${COLORS.border}`, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
-          {/* Active Chips or Status count on Left */}
-          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
-            {activeFilters.length > 0 ? (
-              <>
-                <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.04em" }}>Filtres Actifs:</span>
-                {activeFilters.map((f) => (
-                  <span
-                    key={f.key}
-                    style={{
-                      backgroundColor: COLORS.lightTeal,
-                      color: COLORS.teal,
-                      padding: "4px 10px",
-                      borderRadius: "999px",
-                      fontSize: "0.78rem",
-                      fontWeight: "700",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      border: `1px solid ${COLORS.teal}40`,
-                    }}
-                  >
-                    {f.label}
-                    <X size={13} style={{ cursor: "pointer" }} onClick={f.clear} />
-                  </span>
-                ))}
-              </>
-            ) : (
-              <span style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "600" }}>
-                {reportData ? `${reportData.summary.totalEvents} événement(s) correspondent à vos filtres.` : "Sélectionnez vos critères de filtrage."}
-              </span>
-            )}
-          </div>
-
-          {/* BUTTONS ALIGNED RIGHT */}
-          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
-            {activeFilters.length > 0 && (
-              <button
-                type="button"
-                onClick={handleResetFilters}
-                disabled={isLoading}
-                style={{
-                  backgroundColor: "transparent",
-                  color: COLORS.navy,
-                  padding: "10px 18px",
-                  borderRadius: "10px",
-                  fontWeight: "700",
-                  fontSize: "0.88rem",
-                  border: `1.5px solid ${COLORS.border}`,
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <RotateCcw size={15} /> Réinitialiser
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={fetchReport}
-              disabled={isLoading}
-              style={{
-                backgroundColor: COLORS.navy,
-                color: "white",
-                padding: "10px 24px",
-                borderRadius: "10px",
-                fontWeight: "700",
-                fontSize: "0.88rem",
-                border: "none",
-                cursor: isLoading ? "not-allowed" : "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                boxShadow: "0 4px 14px rgba(6,44,84,0.2)",
-                opacity: isLoading ? 0.7 : 1,
-                transition: "all 0.15s ease",
-              }}
-            >
-              {isLoading ? <RefreshCw size={16} className="animate-spin" /> : <Filter size={16} />}
-              {isLoading ? "Application..." : "Appliquer les filtres"}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* SUMMARY METRICS CARDS (Calculated strictly from filtered dataset) */}
-      {reportData && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
-          <div style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 14px rgba(0,0,0,0.02)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "800", textTransform: "uppercase" }}>Total Événements</span>
-              <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: "#e2e8f0" }}>
-                <Activity size={18} color={COLORS.navy} />
-              </div>
-            </div>
-            <div style={{ fontSize: "2.2rem", fontWeight: "900", color: COLORS.navy, marginTop: "8px" }}>
-              {reportData.summary.totalEvents}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: COLORS.muted, marginTop: "4px" }}>Sur la période et le périmètre autorisés</div>
-          </div>
-
-          <div style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 14px rgba(0,0,0,0.02)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", color: "#DC2626", fontWeight: "800", textTransform: "uppercase" }}>Cas Critiques</span>
-              <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: "#FEE2E2" }}>
-                <AlertCircle size={18} color="#DC2626" />
-              </div>
-            </div>
-            <div style={{ fontSize: "2.2rem", fontWeight: "900", color: "#DC2626", marginTop: "8px" }}>
-              {reportData.summary.criticalCount}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: COLORS.muted, marginTop: "4px" }}>Nécessitant une intervention d'urgence</div>
-          </div>
-
-          <div style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 14px rgba(0,0,0,0.02)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "800", textTransform: "uppercase" }}>Pathologies</span>
-              <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: COLORS.lightTeal }}>
-                <Stethoscope size={18} color={COLORS.teal} />
-              </div>
-            </div>
-            <div style={{ fontSize: "2.2rem", fontWeight: "900", color: COLORS.teal, marginTop: "8px" }}>
-              {reportData.diseases.length}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: COLORS.muted, marginTop: "4px" }}>Maladies à déclaration obligatoire</div>
-          </div>
-
-          <div style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 14px rgba(0,0,0,0.02)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "800", textTransform: "uppercase" }}>Établissements Surveillés</span>
-              <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: "#e0f2fe" }}>
-                <Building2 size={18} color="#0369A1" />
-              </div>
-            </div>
-            <div style={{ fontSize: "2.2rem", fontWeight: "900", color: "#0369A1", marginTop: "8px" }}>
-              {reportData.summary.totalFacilities}
-            </div>
-            <div style={{ fontSize: "0.78rem", color: COLORS.muted, marginTop: "4px" }}>Structures de santé rapportantes</div>
-          </div>
+      {errorMsg && (
+        <div style={{ backgroundColor: "#FEF2F2", border: "1px solid #FECACA", color: "#991B1B", padding: "12px 18px", borderRadius: "12px", fontSize: "0.88rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "10px" }}>
+          <AlertCircle size={18} color="#DC2626" />
+          <span>{errorMsg}</span>
         </div>
       )}
 
-      {/* REPORT MODELS SELECTION */}
-      <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, padding: "20px" }}>
-        <div style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, marginBottom: "14px", display: "flex", alignItems: "center", gap: "8px" }}>
-          <Layers size={18} color={COLORS.teal} /> Modèles de Rapports Sanitaires
-        </div>
-
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px" }}>
-          {[
-            { type: "EXECUTIVE", icon: BarChart3, title: "Synthèse Sanitaire", desc: "Bilan global des établissements sous gestion" },
-            { type: "FACILITY", icon: Building2, title: "Par Établissement", desc: "Analyse détaillée par structure de santé" },
-            { type: "DISEASE", icon: Activity, title: "Par Pathologie", desc: "Répartition des maladies déclarées" },
-            { type: "WILAYA", icon: MapPin, title: "Par Gravité", desc: "Distribution des degrés de sévérité" },
-            { type: "DETAILED_EVENTS", icon: FileText, title: "Registre Détaillé", desc: "Fiches et dossiers individuels des cas" },
-          ].map((card) => {
-            const IconComp = card.icon;
-            const isSelected = reportType === card.type;
-
-            return (
-              <div
-                key={card.type}
-                onClick={() => {
-                  setReportType(card.type as ReportType);
-                  if (card.type === "DETAILED_EVENTS") setActiveTab("events");
-                  else if (card.type === "FACILITY") setActiveTab("facilities");
-                  else if (card.type === "DISEASE") setActiveTab("diseases");
-                  else if (card.type === "WILAYA") setActiveTab("severities");
-                  else setActiveTab("summary");
-                }}
-                style={{
-                  backgroundColor: isSelected ? COLORS.lightTeal : "#F8FAFC",
-                  border: isSelected ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
-                  borderRadius: "12px",
-                  padding: "14px",
-                  cursor: "pointer",
-                  transition: "all 0.15s ease",
-                }}
-              >
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                  <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: isSelected ? COLORS.teal : "white", color: isSelected ? "white" : COLORS.navy }}>
-                    <IconComp size={16} />
-                  </div>
-                  <div style={{ fontWeight: "800", fontSize: "0.9rem", color: COLORS.navy }}>{card.title}</div>
-                </div>
-                <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>
-                  {card.desc}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* EXPORT ACTION BANNER & MAIN REPORT VIEW */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <div
-          style={{
-            backgroundColor: COLORS.navy,
-            borderRadius: "18px",
-            padding: "20px 24px",
-            color: "white",
-            display: "flex",
-            flexWrap: "wrap",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "16px",
-          }}
-        >
-          <div>
-            <div style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "800", textTransform: "uppercase" }}>
-              Rapport Sanitaire Consolidé
-            </div>
-            <h2 style={{ fontSize: "1.35rem", fontWeight: "800", margin: 0, color: "white" }}>
-              {reportData?.summary.reportTitle || "Bilan Sanitaire des Établissements"}
+      {/* 2. UNIFIED RASED FILTER PANEL FOR HEALTH AUTHORITY */}
+      <div style={{ backgroundColor: "white", padding: "20px 24px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.02)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "12px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <Filter size={18} color={COLORS.teal} />
+            <h2 style={{ fontSize: "0.98rem", fontWeight: "800", color: COLORS.navy, margin: 0 }}>
+              Filtres & Critères de Sélection
             </h2>
-            <div style={{ fontSize: "0.82rem", color: "#94a3b8", marginTop: "2px" }}>
-              {reportData ? `${reportData.summary.totalEvents} événement(s) répertorié(s) dans votre périmètre.` : "Chargement..."}
-            </div>
           </div>
-
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px" }}>
-            <button
-              onClick={handleGeneratePDF}
-              disabled={isLoading || !reportData || reportData.summary.totalEvents === 0 || generatingFormat !== null}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                backgroundColor: "#DC2626",
-                color: "white",
-                padding: "10px 18px",
-                borderRadius: "10px",
-                fontWeight: "800",
-                fontSize: "0.85rem",
-                border: "none",
-                cursor: reportData && reportData.summary.totalEvents > 0 ? "pointer" : "not-allowed",
-                opacity: reportData && reportData.summary.totalEvents > 0 ? 1 : 0.5,
-              }}
-            >
-              <FileText size={16} />
-              <span>Exporter PDF</span>
-            </button>
-
-            <button
-              onClick={handleGenerateExcel}
-              disabled={isLoading || !reportData || reportData.summary.totalEvents === 0 || generatingFormat !== null}
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "8px",
-                backgroundColor: "#15803D",
-                color: "white",
-                padding: "10px 18px",
-                borderRadius: "10px",
-                fontWeight: "800",
-                fontSize: "0.85rem",
-                border: "none",
-                cursor: reportData && reportData.summary.totalEvents > 0 ? "pointer" : "not-allowed",
-                opacity: reportData && reportData.summary.totalEvents > 0 ? 1 : 0.5,
-              }}
-            >
-              <FileSpreadsheet size={16} />
-              <span>Exporter Excel</span>
-            </button>
-          </div>
+          <span style={{ fontSize: "0.78rem", color: COLORS.muted, fontWeight: "600" }}>
+            Sélectionnez votre territoire et vos critères de filtrage
+          </span>
         </div>
 
-        {/* TAB NAVIGATION & VIEW CONTENT */}
-        <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, padding: "20px" }}>
-          <div style={{ display: "flex", borderBottom: `1px solid ${COLORS.border}`, gap: "6px", marginBottom: "20px", overflowX: "auto" }}>
-            {[
-              { id: "summary", label: "Vue Synthèse" },
-              { id: "facilities", label: `Établissements (${reportData?.facilities.length || 0})` },
-              { id: "diseases", label: `Pathologies (${reportData?.diseases.length || 0})` },
-              { id: "severities", label: "Niveaux de Gravité" },
-              { id: "events", label: `Registre Détaillé (${reportData?.events.length || 0})` },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                style={{
-                  padding: "10px 16px",
-                  fontSize: "0.88rem",
-                  fontWeight: activeTab === tab.id ? "800" : "600",
-                  color: activeTab === tab.id ? COLORS.teal : COLORS.muted,
-                  borderBottom: activeTab === tab.id ? `3px solid ${COLORS.teal}` : "3px solid transparent",
-                  background: "transparent",
-                  borderTop: "none",
-                  borderLeft: "none",
-                  borderRight: "none",
-                  cursor: "pointer",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {tab.label}
-              </button>
+        {/* ACTIVE FILTER CHIPS */}
+        {activeFilters.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginBottom: "14px", alignItems: "center" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "700", color: COLORS.muted }}>Filtres actifs:</span>
+            {activeFilters.map((chip) => (
+              <span key={chip.key} style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, border: `1px solid ${COLORS.teal}40`, padding: "3px 10px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: "700", display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                {chip.label}
+                <X size={14} style={{ cursor: "pointer" }} onClick={chip.clear} />
+              </span>
             ))}
           </div>
+        )}
 
-          {/* EMPTY STATE IF 0 EVENTS MATCH FILTERS */}
-          {reportData && reportData.summary.totalEvents === 0 && (
-            <div style={{ padding: "48px 24px", textAlign: "center", backgroundColor: COLORS.bgLight, borderRadius: "16px", border: `1px dashed ${COLORS.border}` }}>
-              <FileX size={48} color={COLORS.muted} style={{ margin: "0 auto 12px auto" }} />
-              <h3 style={{ fontSize: "1.1rem", fontWeight: "800", color: COLORS.navy, margin: "0 0 6px 0" }}>
-                Aucun événement sanitaire trouvé
-              </h3>
-              <p style={{ color: COLORS.muted, fontSize: "0.88rem", maxWidth: "480px", margin: "0 auto 16px auto" }}>
-                Aucun événement ne correspond à vos critères de recherche dans votre périmètre sanitaire autorisé.
-              </p>
-              <button
-                onClick={handleResetFilters}
-                style={{
-                  backgroundColor: COLORS.teal,
-                  color: "white",
-                  padding: "9px 18px",
-                  borderRadius: "10px",
-                  fontWeight: "700",
-                  fontSize: "0.85rem",
-                  border: "none",
-                  cursor: "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                }}
-              >
-                <RotateCcw size={15} /> Réinitialiser tous les filtres
-              </button>
-            </div>
-          )}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "14px" }}>
+          
+          {/* WILAYA SELECTOR FOR HEALTH AUTHORITY */}
+          <div>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+              Wilaya Sanitaire
+            </label>
+            <select
+              value={selectedWilaya}
+              onChange={(e) => {
+                setSelectedWilaya(e.target.value);
+                setSelectedFacilityId(""); // reset facility selection when Wilaya changes
+              }}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Toutes les wilayas autorisées</option>
+              {ALGERIA_WILAYAS_69.map((w) => (
+                <option key={w.code} value={w.code}>
+                  {w.code} - {w.name}
+                </option>
+              ))}
+            </select>
+          </div>
 
-          {/* SUMMARY TAB */}
-          {activeTab === "summary" && reportData && reportData.summary.totalEvents > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "16px" }}>
-                {/* DISEASE DISTRIBUTION */}
-                <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: "14px", padding: "16px" }}>
-                  <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.95rem", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <Stethoscope size={16} color={COLORS.teal} /> Pathologies Majeures Signailées
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {reportData.diseases.slice(0, 5).map((d) => (
-                      <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: COLORS.bgLight, borderRadius: "8px" }}>
-                        <span style={{ fontSize: "0.85rem", fontWeight: "700", color: COLORS.text }}>{d.name}</span>
-                        <span style={{ fontSize: "0.85rem", fontWeight: "900", color: COLORS.teal }}>{d.count} cas</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+          {/* FACILITY SELECTOR */}
+          <div>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+              Établissement de Santé
+            </label>
+            <select
+              value={selectedFacilityId}
+              onChange={(e) => setSelectedFacilityId(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Tous les établissements</option>
+              {facilitiesList.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name} ({f.wilaya || "Algérie"})
+                </option>
+              ))}
+            </select>
+          </div>
 
-                {/* SEVERITY DISTRIBUTION */}
-                <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: "14px", padding: "16px" }}>
-                  <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.95rem", marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <AlertTriangle size={16} color="#DC2626" /> Ventillation par Niveau de Sévérité
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {reportData.severities.map((s) => (
-                      <div key={s.severity} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 12px", backgroundColor: COLORS.bgLight, borderRadius: "8px" }}>
-                        <span style={{ fontSize: "0.85rem", fontWeight: "700", color: s.severity === "CRITICAL" ? "#DC2626" : COLORS.text }}>
-                          {s.severity === "CRITICAL" ? "Critique" : s.severity === "HIGH" ? "Élevée" : s.severity === "MEDIUM" ? "Moyenne" : "Faible"}
-                        </span>
-                        <span style={{ fontSize: "0.85rem", fontWeight: "900", color: s.severity === "CRITICAL" ? "#DC2626" : COLORS.navy }}>
-                          {s.count} ({s.percentage}%)
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+          {/* DISEASE SELECTOR */}
+          <div>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+              Pathologie Déclarable
+            </label>
+            <select
+              value={selectedDiseaseId}
+              onChange={(e) => setSelectedDiseaseId(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Toutes les pathologies</option>
+              {diseasesList.map((d) => (
+                <option key={d.id} value={d.id}>{d.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* SEVERITY SELECTOR */}
+          <div>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+              Niveau de Gravité
+            </label>
+            <select
+              value={selectedSeverity}
+              onChange={(e) => setSelectedSeverity(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            >
+              <option value="">Toutes les gravités</option>
+              <option value="CRITICAL">Critique</option>
+              <option value="HIGH">Élevée</option>
+              <option value="MEDIUM">Moyenne</option>
+              <option value="LOW">Faible</option>
+            </select>
+          </div>
+
+          {/* DATE FROM */}
+          <div>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+              Date de début
+            </label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            />
+          </div>
+
+          {/* DATE TO */}
+          <div>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
+              Date de fin
+            </label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+            />
+          </div>
+
+        </div>
+
+        {/* ACTION BAR */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "16px", paddingTop: "12px", borderTop: `1px solid ${COLORS.border}` }}>
+          <div style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "700" }}>
+            {reportData?.summary?.totalEvents || 0} événement(s) correspondent à vos filtres
+          </div>
+          <div style={{ display: "flex", gap: "10px" }}>
+            <button
+              onClick={handleResetFilters}
+              style={{ backgroundColor: "white", border: `1px solid ${COLORS.border}`, padding: "8px 16px", borderRadius: "10px", fontSize: "0.82rem", fontWeight: "700", color: COLORS.navy, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <RotateCcw size={14} /> Réinitialiser
+            </button>
+            <button
+              onClick={() => fetchReport(selectedModel)}
+              disabled={isLoading}
+              style={{ backgroundColor: COLORS.navy, border: "none", padding: "8px 20px", borderRadius: "10px", fontSize: "0.82rem", fontWeight: "800", color: "white", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              <Filter size={14} /> Appliquer les filtres
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. EXECUTIVE KPI CARDS */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "16px" }}>
+        
+        <div style={{ backgroundColor: "white", padding: "18px 20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase" }}>Total Événements</span>
+            <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}><Activity size={18} /></div>
+          </div>
+          <div style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy }}>{reportData?.summary?.totalEvents || 0}</div>
+          <div style={{ fontSize: "0.75rem", color: COLORS.muted, marginTop: "2px" }}>Signalez vos établissements</div>
+        </div>
+
+        <div style={{ backgroundColor: "white", padding: "18px 20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase" }}>Cas Critiques</span>
+            <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: "#FEE2E2", color: "#DC2626" }}><AlertTriangle size={18} /></div>
+          </div>
+          <div style={{ fontSize: "1.8rem", fontWeight: "900", color: "#DC2626" }}>{reportData?.summary?.criticalCount || 0}</div>
+          <div style={{ fontSize: "0.75rem", color: COLORS.muted, marginTop: "2px" }}>Urgence sanitaire absolue</div>
+        </div>
+
+        <div style={{ backgroundColor: "white", padding: "18px 20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase" }}>Pathologies</span>
+            <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: COLORS.lightTeal, color: COLORS.teal }}><Stethoscope size={18} /></div>
+          </div>
+          <div style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy }}>{reportData?.diseases?.length || 0}</div>
+          <div style={{ fontSize: "0.75rem", color: COLORS.muted, marginTop: "2px" }}>Maladies déclarées</div>
+        </div>
+
+        <div style={{ backgroundColor: "white", padding: "18px 20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase" }}>Établissements</span>
+            <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: "#E0F2FE", color: "#0369A1" }}><Building2 size={18} /></div>
+          </div>
+          <div style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy }}>{reportData?.summary?.totalFacilities || 0}</div>
+          <div style={{ fontSize: "0.75rem", color: COLORS.muted, marginTop: "2px" }}>Structures surveillées</div>
+        </div>
+
+      </div>
+
+      {/* 4. REPORT MODEL SELECTOR & EXPORT ACTION BAR */}
+      <div style={{ backgroundColor: "white", padding: "24px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, boxShadow: "0 4px 20px rgba(0,0,0,0.02)" }}>
+        
+        {/* ACTION BAR HEADER */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "16px", marginBottom: "20px" }}>
+          <div>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: "900", color: COLORS.navy, margin: 0 }}>
+              Modèles de Rapports Sanitaires Officiels
+            </h2>
+            <p style={{ fontSize: "0.82rem", color: COLORS.muted, margin: "2px 0 0 0" }}>
+              Sélectionnez un modèle analytique pour activer la vue et l'exportation dédiée.
+            </p>
+          </div>
+
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <button
+              onClick={handleExportPDF}
+              disabled={isLoading || generatingFormat !== null}
+              style={{
+                backgroundColor: COLORS.teal,
+                color: "white",
+                border: "none",
+                padding: "10px 20px",
+                borderRadius: "10px",
+                fontSize: "0.85rem",
+                fontWeight: "800",
+                cursor: isLoading || generatingFormat !== null ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                opacity: isLoading || generatingFormat !== null ? 0.7 : 1,
+                boxShadow: "0 4px 12px rgba(15,162,155,0.25)"
+              }}
+            >
+              {generatingFormat === "pdf" ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Génération du PDF...
+                </>
+              ) : (
+                <>
+                  <FileText size={16} /> Générer Rapport PDF
+                </>
+              )}
+            </button>
+
+            <button
+              onClick={handleExportExcel}
+              disabled={isLoading || generatingFormat !== null}
+              style={{
+                backgroundColor: "white",
+                color: COLORS.navy,
+                border: `1.5px solid ${COLORS.navy}`,
+                padding: "10px 20px",
+                borderRadius: "10px",
+                fontSize: "0.85rem",
+                fontWeight: "800",
+                cursor: isLoading || generatingFormat !== null ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                opacity: isLoading || generatingFormat !== null ? 0.7 : 1
+              }}
+            >
+              {generatingFormat === "excel" ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" /> Export Excel...
+                </>
+              ) : (
+                <>
+                  <FileSpreadsheet size={16} /> Exporter Excel
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* 5 REPORT MODEL CARDS */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "14px" }}>
+          
+          {/* MODEL 1: SYNTHÈSE SANITAIRE */}
+          <div
+            onClick={() => handleSelectModel("synthesis")}
+            style={{
+              padding: "16px",
+              borderRadius: "14px",
+              border: selectedModel === "synthesis" ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+              backgroundColor: selectedModel === "synthesis" ? COLORS.lightTeal : "white",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: selectedModel === "synthesis" ? COLORS.teal : COLORS.bgLight, color: selectedModel === "synthesis" ? "white" : COLORS.navy }}>
+                <Layers size={18} />
+              </div>
+              <div style={{ fontSize: "0.92rem", fontWeight: "800", color: COLORS.navy }}>
+                Synthèse Sanitaire
               </div>
             </div>
+            <div style={{ fontSize: "0.78rem", color: COLORS.muted }}>
+              Bilan global des établissements de la wilaya
+            </div>
+          </div>
+
+          {/* MODEL 2: PAR ÉTABLISSEMENT */}
+          <div
+            onClick={() => handleSelectModel("facility")}
+            style={{
+              padding: "16px",
+              borderRadius: "14px",
+              border: selectedModel === "facility" ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+              backgroundColor: selectedModel === "facility" ? COLORS.lightTeal : "white",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: selectedModel === "facility" ? COLORS.teal : COLORS.bgLight, color: selectedModel === "facility" ? "white" : COLORS.navy }}>
+                <Building2 size={18} />
+              </div>
+              <div style={{ fontSize: "0.92rem", fontWeight: "800", color: COLORS.navy }}>
+                Par Établissement
+              </div>
+            </div>
+            <div style={{ fontSize: "0.78rem", color: COLORS.muted }}>
+              Analyse détaillée par structure de santé
+            </div>
+          </div>
+
+          {/* MODEL 3: PAR PATHOLOGIE */}
+          <div
+            onClick={() => handleSelectModel("pathology")}
+            style={{
+              padding: "16px",
+              borderRadius: "14px",
+              border: selectedModel === "pathology" ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+              backgroundColor: selectedModel === "pathology" ? COLORS.lightTeal : "white",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: selectedModel === "pathology" ? COLORS.teal : COLORS.bgLight, color: selectedModel === "pathology" ? "white" : COLORS.navy }}>
+                <Stethoscope size={18} />
+              </div>
+              <div style={{ fontSize: "0.92rem", fontWeight: "800", color: COLORS.navy }}>
+                Par Pathologie
+              </div>
+            </div>
+            <div style={{ fontSize: "0.78rem", color: COLORS.muted }}>
+              Répartition des maladies déclarées
+            </div>
+          </div>
+
+          {/* MODEL 4: PAR GRAVITÉ */}
+          <div
+            onClick={() => handleSelectModel("severity")}
+            style={{
+              padding: "16px",
+              borderRadius: "14px",
+              border: selectedModel === "severity" ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+              backgroundColor: selectedModel === "severity" ? COLORS.lightTeal : "white",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: selectedModel === "severity" ? COLORS.teal : COLORS.bgLight, color: selectedModel === "severity" ? "white" : COLORS.navy }}>
+                <AlertTriangle size={18} />
+              </div>
+              <div style={{ fontSize: "0.92rem", fontWeight: "800", color: COLORS.navy }}>
+                Par Gravité
+              </div>
+            </div>
+            <div style={{ fontSize: "0.78rem", color: COLORS.muted }}>
+              Distribution des degrés de sévérité
+            </div>
+          </div>
+
+          {/* MODEL 5: REGISTRE DÉTAILLÉ */}
+          <div
+            onClick={() => handleSelectModel("detailed")}
+            style={{
+              padding: "16px",
+              borderRadius: "14px",
+              border: selectedModel === "detailed" ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
+              backgroundColor: selectedModel === "detailed" ? COLORS.lightTeal : "white",
+              cursor: "pointer",
+              transition: "all 0.2s ease"
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: "8px" }}>
+              <div style={{ padding: "6px", borderRadius: "8px", backgroundColor: selectedModel === "detailed" ? COLORS.teal : COLORS.bgLight, color: selectedModel === "detailed" ? "white" : COLORS.navy }}>
+                <FileCheck size={18} />
+              </div>
+              <div style={{ fontSize: "0.92rem", fontWeight: "800", color: COLORS.navy }}>
+                Registre Détaillé
+              </div>
+            </div>
+            <div style={{ fontSize: "0.78rem", color: COLORS.muted }}>
+              Fiches et dossiers individuels des cas
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+      {/* 5. ONSCREEN MODEL-SPECIFIC PREVIEW PANEL */}
+      {isLoading ? (
+        <div style={{ backgroundColor: "white", padding: "60px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, textAlign: "center", color: COLORS.navy }}>
+          <RefreshCw size={32} className="animate-spin" style={{ margin: "0 auto 12px auto", color: COLORS.teal }} />
+          <div style={{ fontWeight: "700" }}>Chargement du modèle de rapport...</div>
+        </div>
+      ) : !reportData ? (
+        <div style={{ backgroundColor: "white", padding: "40px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, textAlign: "center", color: COLORS.muted }}>
+          <AlertCircle size={36} color={COLORS.muted} style={{ margin: "0 auto 12px auto" }} />
+          <div>Aucune donnée disponible pour les filtres sélectionnés.</div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          
+          {/* 5.1 PREVIEW MODEL: SYNTHÈSE SANITAIRE */}
+          {selectedModel === "synthesis" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+              
+              {/* PATHOLOGIES SUMMARY BOX */}
+              <div style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}` }}>
+                <h3 style={{ fontSize: "0.98rem", fontWeight: "800", color: COLORS.navy, margin: "0 0 16px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Stethoscope size={18} color={COLORS.teal} /> Pathologies Principales ({wilayaInfo.name})
+                </h3>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {reportData.diseases.length === 0 ? (
+                    <div style={{ fontSize: "0.85rem", color: COLORS.muted }}>Aucune pathologie déclarée.</div>
+                  ) : (
+                    reportData.diseases.map((d) => (
+                      <div key={d.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: COLORS.bgLight, borderRadius: "10px", border: `1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize: "0.88rem", fontWeight: "700", color: COLORS.navy }}>{d.name}</span>
+                        <span style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: "3px 10px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: "800" }}>
+                          {d.count} cas ({d.percentage}%)
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* SEVERITY SUMMARY BOX */}
+              <div style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}` }}>
+                <h3 style={{ fontSize: "0.98rem", fontWeight: "800", color: COLORS.navy, margin: "0 0 16px 0", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <AlertTriangle size={18} color="#EA580C" /> Degrés de Gravité
+                </h3>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {[
+                    { label: "Critique", count: reportData.summary.criticalCount, color: "#DC2626", bg: "#FEE2E2" },
+                    { label: "Élevée", count: reportData.summary.highCount, color: "#EA580C", bg: "#FFEDD5" },
+                    { label: "Moyenne", count: reportData.summary.mediumCount, color: COLORS.navy, bg: COLORS.bgLight },
+                    { label: "Faible", count: reportData.summary.lowCount, color: COLORS.teal, bg: COLORS.lightTeal }
+                  ].map(sev => {
+                    const total = reportData.summary.totalEvents || 1;
+                    const pct = ((sev.count / total) * 100).toFixed(0);
+                    return (
+                      <div key={sev.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", backgroundColor: COLORS.bgLight, borderRadius: "10px", border: `1px solid ${COLORS.border}` }}>
+                        <span style={{ fontSize: "0.88rem", fontWeight: "700", color: COLORS.navy }}>{sev.label}</span>
+                        <span style={{ backgroundColor: sev.bg, color: sev.color, padding: "3px 10px", borderRadius: "999px", fontSize: "0.78rem", fontWeight: "800" }}>
+                          {sev.count} ({pct}%)
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
           )}
 
-          {/* DETAILED EVENT REGISTRY TAB */}
-          {activeTab === "events" && reportData && reportData.summary.totalEvents > 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              {reportData.events.map((ev) => (
-                <div key={ev.id} style={{ backgroundColor: COLORS.bgLight, borderRadius: "14px", border: `1px solid ${COLORS.border}`, padding: "16px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px", marginBottom: "10px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.92rem" }}>#{ev.id.substring(0, 8)}</span>
-                      <span
-                        style={{
-                          backgroundColor: ev.severity === "CRITICAL" ? "#FEE2E2" : ev.severity === "HIGH" ? "#FFEDD5" : COLORS.lightTeal,
-                          color: ev.severity === "CRITICAL" ? "#DC2626" : ev.severity === "HIGH" ? "#C2410C" : COLORS.teal,
+          {/* 5.2 PREVIEW MODEL: PAR ÉTABLISSEMENT */}
+          {selectedModel === "facility" && (
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              {reportData.facilities.length === 0 ? (
+                <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, textAlign: "center", color: COLORS.muted }}>
+                  Aucun établissement actif répertorié.
+                </div>
+              ) : (
+                reportData.facilities.map(fac => {
+                  const facEvents = reportData.events.filter(e => e.facilityName === fac.name);
+                  const crit = facEvents.filter(e => e.severity === "CRITICAL").length;
+                  const high = facEvents.filter(e => e.severity === "HIGH").length;
+                  const med = facEvents.filter(e => e.severity === "MEDIUM").length;
+                  const low = facEvents.filter(e => e.severity === "LOW").length;
+
+                  // Unique diseases at this facility
+                  const diseaseMap: Record<string, number> = {};
+                  facEvents.forEach(e => { diseaseMap[e.diseaseName] = (diseaseMap[e.diseaseName] || 0) + 1; });
+
+                  return (
+                    <div key={fac.id} style={{ backgroundColor: "white", borderRadius: "16px", border: `1px solid ${COLORS.border}`, padding: "20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
+                        <div>
+                          <span style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: "3px 10px", borderRadius: "999px", fontSize: "0.75rem", fontWeight: "800" }}>
+                            {fac.facilityType || "Structure de Santé"}
+                          </span>
+                          <h3 style={{ fontSize: "1.1rem", fontWeight: "900", color: COLORS.navy, margin: "6px 0 2px 0" }}>
+                            {fac.name}
+                          </h3>
+                          <div style={{ fontSize: "0.8rem", color: COLORS.muted }}>
+                            Wilaya {fac.wilaya || wilayaInfo.name}
+                          </div>
+                        </div>
+
+                        <div style={{ display: "flex", gap: "8px" }}>
+                          <span style={{ backgroundColor: "#FEE2E2", color: "#DC2626", padding: "4px 10px", borderRadius: "8px", fontSize: "0.78rem", fontWeight: "800" }}>
+                            {crit} Critiques
+                          </span>
+                          <span style={{ backgroundColor: "#FFEDD5", color: "#EA580C", padding: "4px 10px", borderRadius: "8px", fontSize: "0.78rem", fontWeight: "800" }}>
+                            {high} Élevés
+                          </span>
+                          <span style={{ backgroundColor: COLORS.bgLight, color: COLORS.navy, padding: "4px 10px", borderRadius: "8px", fontSize: "0.78rem", fontWeight: "800", border: `1px solid ${COLORS.border}` }}>
+                            {med} Moyens
+                          </span>
+                          <span style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: "4px 10px", borderRadius: "8px", fontSize: "0.78rem", fontWeight: "800" }}>
+                            {low} Faibles
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: "12px", marginTop: "12px" }}>
+                        <div style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, marginBottom: "8px" }}>
+                          Pathologies déclarées au sein de la structure:
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                          {Object.keys(diseaseMap).map(dis => (
+                            <span key={dis} style={{ backgroundColor: COLORS.bgLight, color: COLORS.navy, border: `1px solid ${COLORS.border}`, padding: "4px 10px", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "700" }}>
+                              {dis}: <strong>{diseaseMap[dis]} cas</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* 5.3 PREVIEW MODEL: PAR PATHOLOGIE */}
+          {selectedModel === "pathology" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: "16px" }}>
+              {reportData.diseases.length === 0 ? (
+                <div style={{ backgroundColor: "white", padding: "30px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, textAlign: "center", color: COLORS.muted }}>
+                  Aucune pathologie enregistrée.
+                </div>
+              ) : (
+                reportData.diseases.map(d => {
+                  const disEvents = reportData.events.filter(e => e.diseaseName === d.name);
+                  const facSet = new Set(disEvents.map(e => e.facilityName));
+
+                  return (
+                    <div key={d.id} style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px" }}>
+                      <div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                          <span style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.teal, textTransform: "uppercase" }}>Pathologie Déclarable</span>
+                          <span style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: "3px 10px", borderRadius: "999px", fontSize: "0.8rem", fontWeight: "800" }}>
+                            {d.count} cas ({d.percentage}%)
+                          </span>
+                        </div>
+
+                        <h3 style={{ fontSize: "1.15rem", fontWeight: "900", color: COLORS.navy, margin: 0 }}>
+                          {d.name}
+                        </h3>
+                      </div>
+
+                      <div style={{ backgroundColor: COLORS.bgLight, padding: "12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}>
+                        <div style={{ color: COLORS.muted, marginBottom: "4px" }}>Établissements concernés ({facSet.size}):</div>
+                        <div style={{ fontWeight: "700", color: COLORS.navy }}>
+                          {Array.from(facSet).join(", ") || "—"}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )}
+
+          {/* 5.4 PREVIEW MODEL: PAR GRAVITÉ */}
+          {selectedModel === "severity" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: "16px" }}>
+              {[
+                { key: "CRITICAL", label: "Critique", desc: "Urgence sanitaire absolue", color: "#DC2626", bg: "#FEE2E2", count: reportData.summary.criticalCount },
+                { key: "HIGH", label: "Élevée", desc: "Surveillance rapprochée", color: "#EA580C", bg: "#FFEDD5", count: reportData.summary.highCount },
+                { key: "MEDIUM", label: "Moyenne", desc: "Cas confirmé standard", color: COLORS.navy, bg: COLORS.bgLight, count: reportData.summary.mediumCount },
+                { key: "LOW", label: "Faible", desc: "Signalement de routine", color: COLORS.teal, bg: COLORS.lightTeal, count: reportData.summary.lowCount },
+              ].map(sev => {
+                const total = reportData.summary.totalEvents || 1;
+                const pct = ((sev.count / total) * 100).toFixed(0);
+                const sevEvents = reportData.events.filter(e => e.severity === sev.key);
+                const facCount = new Set(sevEvents.map(e => e.facilityName)).size;
+
+                return (
+                  <div key={sev.key} style={{ backgroundColor: "white", padding: "20px", borderRadius: "16px", border: `1px solid ${COLORS.border}`, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "12px" }}>
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase" }}>{sev.label}</span>
+                        <span style={{ backgroundColor: sev.bg, color: sev.color, padding: "3px 10px", borderRadius: "999px", fontSize: "0.8rem", fontWeight: "800" }}>
+                          {pct}%
+                        </span>
+                      </div>
+
+                      <div style={{ fontSize: "1.8rem", fontWeight: "900", color: sev.color }}>
+                        {sev.count} cas
+                      </div>
+                      <div style={{ fontSize: "0.8rem", color: COLORS.muted }}>{sev.desc}</div>
+                    </div>
+
+                    <div style={{ backgroundColor: COLORS.bgLight, padding: "10px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.8rem", color: COLORS.navy, fontWeight: "700" }}>
+                      {facCount} structure(s) sanitaire(s) touchée(s)
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 5.5 PREVIEW MODEL: REGISTRE DÉTAILLÉ */}
+          {selectedModel === "detailed" && (
+            <div style={{ backgroundColor: "white", borderRadius: "16px", border: `1px solid ${COLORS.border}`, padding: "20px", boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
+              <div style={{ fontSize: "1rem", fontWeight: "800", color: COLORS.navy, marginBottom: "16px" }}>
+                Fiches d'Événements Individuels ({reportData.events.length})
+              </div>
+
+              {reportData.events.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "30px", color: COLORS.muted }}>
+                  Aucun enregistrement détaillé disponible.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                  {reportData.events.map(ev => (
+                    <div key={ev.id} style={{ backgroundColor: COLORS.bgLight, borderRadius: "14px", border: `1px solid ${COLORS.border}`, padding: "16px 20px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "8px", marginBottom: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                          <span style={{ backgroundColor: COLORS.navy, color: "white", padding: "3px 8px", borderRadius: "6px", fontSize: "0.75rem", fontWeight: "800" }}>
+                            #EV-{ev.id.substring(0, 8).toUpperCase()}
+                          </span>
+                          <span style={{ fontSize: "0.95rem", fontWeight: "800", color: COLORS.navy }}>
+                            {ev.diseaseName}
+                          </span>
+                        </div>
+
+                        <span style={{
                           padding: "3px 10px",
                           borderRadius: "999px",
                           fontSize: "0.75rem",
                           fontWeight: "800",
-                        }}
-                      >
-                        {ev.severity}
-                      </span>
-                    </div>
+                          backgroundColor: ev.severity === "CRITICAL" ? "#FEE2E2" : ev.severity === "HIGH" ? "#FFEDD5" : COLORS.lightTeal,
+                          color: ev.severity === "CRITICAL" ? "#DC2626" : ev.severity === "HIGH" ? "#EA580C" : COLORS.teal
+                        }}>
+                          {ev.severity}
+                        </span>
+                      </div>
 
-                    <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "0.8rem", color: COLORS.muted }}>
-                      <Clock size={14} /> {formatDateTime(ev.createdAt)}
-                    </div>
-                  </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "8px", fontSize: "0.82rem", color: COLORS.text, margin: "10px 0" }}>
+                        <div><strong>Établissement:</strong> {ev.facilityName}</div>
+                        <div><strong>Médecin:</strong> Dr. {ev.doctorName || "Anonymisé"}</div>
+                        <div><strong>Patient:</strong> {ev.patientName || "Cas Anonymisé"}</div>
+                        <div><strong>Date:</strong> {formatDateTime(ev.createdAt)}</div>
+                      </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "12px", fontSize: "0.85rem", margin: "10px 0" }}>
-                    <div>
-                      <span style={{ color: COLORS.muted }}>Pathologie: </span>
-                      <strong style={{ color: COLORS.teal }}>{ev.diseaseName}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: COLORS.muted }}>Établissement: </span>
-                      <strong style={{ color: COLORS.navy }}>{ev.facilityName} ({ev.wilaya})</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: COLORS.muted }}>Médecin Déclarant: </span>
-                      <strong>{ev.doctorName || "—"}</strong>
-                    </div>
-                    <div>
-                      <span style={{ color: COLORS.muted }}>Patient: </span>
-                      <strong>{ev.patientName || "Cas Anonymisé"}</strong>
-                    </div>
-                  </div>
+                      <div style={{ fontSize: "0.82rem", color: COLORS.muted, fontStyle: "italic" }}>
+                        Observations: « {ev.description || "Aucune observation enregistrée"} »
+                      </div>
 
-                  {ev.description && (
-                    <div style={{ fontSize: "0.82rem", color: COLORS.text, backgroundColor: "white", padding: "10px 14px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, marginTop: "8px" }}>
-                      {ev.description}
+                      {ev.patientProofUrl && (
+                        <div style={{ marginTop: "10px" }}>
+                          <button
+                            onClick={() => setSelectedProofUrl(ev.patientProofUrl || null)}
+                            style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "0.78rem", fontWeight: "700", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                          >
+                            <Eye size={13} /> Consulter Preuve Médicale
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  )}
-
-                  {ev.patientProofUrl && (
-                    <button
-                      onClick={() => setSelectedProofUrl(ev.patientProofUrl || null)}
-                      style={{
-                        marginTop: "10px",
-                        padding: "6px 12px",
-                        borderRadius: "8px",
-                        border: `1px solid ${COLORS.teal}`,
-                        backgroundColor: COLORS.lightTeal,
-                        color: COLORS.teal,
-                        fontWeight: "700",
-                        fontSize: "0.78rem",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                      }}
-                    >
-                      <Eye size={14} /> Consulter la Preuve Médicale Attachée
-                    </button>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           )}
-        </div>
-      </div>
 
-      {/* PROOF MODAL */}
-      <MedicalProofModal proofPath={selectedProofUrl} onClose={() => setSelectedProofUrl(null)} />
+        </div>
+      )}
+
+      {/* MEDICAL PROOF MODAL */}
+      <MedicalProofModal
+        proofPath={selectedProofUrl}
+        onClose={() => setSelectedProofUrl(null)}
+      />
+
     </div>
   );
 }
