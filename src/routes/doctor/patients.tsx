@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   Users, 
   Search, 
@@ -702,7 +703,7 @@ function DoctorPatientsPage() {
                     </td>
 
                     <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                      {new Date(p.created_at).toLocaleDateString('fr-FR')}
+                      {formatDateTime(p.created_at)}
                     </td>
 
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
@@ -831,7 +832,7 @@ function DoctorPatientsPage() {
                           <div style={{ fontSize: '0.82rem', color: COLORS.text, marginTop: '4px' }}>{evt.description}</div>
                           <div style={{ fontSize: '0.75rem', color: COLORS.muted, marginTop: '6px', display: 'flex', justifyContent: 'space-between' }}>
                             <span>Structure : {evt.facility?.name || '—'}</span>
-                            <span>{new Date(evt.created_at).toLocaleDateString('fr-FR')}</span>
+                            <span>{formatDateTime(evt.created_at)}</span>
                           </div>
                         </div>
                       );

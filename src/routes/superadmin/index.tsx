@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { validateCurrentSession } from "@/lib/auth";
 import { ALGERIA_WILAYAS_69 } from "@/lib/wilayas";
 import {
@@ -157,17 +158,7 @@ function SuperadminDashboard() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string>("");
 
-  const formatDateTime = (isoString: string) => {
-    try {
-      const d = new Date(isoString);
-      const dateStr = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-      const hours = String(d.getHours()).padStart(2, "0");
-      const minutes = String(d.getMinutes()).padStart(2, "0");
-      return `${dateStr} à ${hours}:${minutes}`;
-    } catch {
-      return isoString;
-    }
-  };
+  // Using centralized formatDateTime utility from @/lib/utils
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -325,8 +316,7 @@ function SuperadminDashboard() {
         recentActivities: activities.slice(0, 8)
       });
 
-      const now = new Date();
-      setLastUpdated(`${now.toLocaleDateString("fr-FR")} à ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`);
+      setLastUpdated(formatDateTime(new Date()));
     } catch (err: any) {
       console.error("[SuperadminDashboard] Error fetching statistics:", err);
       setErrorMsg("Impossible de charger les statistiques du serveur. Veuillez réessayer.");

@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, Link, createFileRoute, useNavigate, useLocation } from "@tanstack/react-router";
+import { Outlet, Link, createFileRoute, useNavigate, useLocation, redirect } from "@tanstack/react-router";
 import { 
   LayoutDashboard, 
   Users, 
@@ -13,8 +13,16 @@ import {
   CheckCircle2
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { validateCurrentSession, clearSession } from "@/lib/auth";
+import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 export const Route = createFileRoute("/doctor")({
+  beforeLoad: async () => {
+    const authResult = await validateCurrentSession(["DOCTOR"]);
+    if (!authResult.authorized) {
+      throw redirect({ to: (authResult.redirectTo || "/login") as any });
+    }
+  },
   component: DoctorLayout,
 });
 
@@ -28,25 +36,28 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
-import { validateCurrentSession, clearSession } from "@/lib/auth";
-
 function DoctorLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentDoctor, setCurrentDoctor] = useState<any>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [authChecking, setAuthChecking] = useState(true);
+  const [authStatus, setAuthStatus] = useState<{ checking: boolean; authorized: boolean }>({
+    checking: true,
+    authorized: false,
+  });
 
   useEffect(() => {
+    let isMounted = true;
     // 1. Guard check: Validate DOCTOR role and active user session in database
     const verifyAuth = async () => {
       const authResult = await validateCurrentSession(["DOCTOR"]);
       if (!authResult.authorized) {
-        navigate({ to: authResult.redirectTo || "/login" as any });
+        navigate({ to: (authResult.redirectTo || "/login") as any });
+        if (isMounted) setAuthStatus({ checking: false, authorized: false });
         return;
       }
-      setAuthChecking(false);
+      if (isMounted) setAuthStatus({ checking: false, authorized: true });
     };
 
     verifyAuth();
@@ -109,13 +120,24 @@ function DoctorLayout() {
 
     loadDoctorProfile();
 
-    return () => window.removeEventListener("storage", handleStorageChange);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, [location.pathname]);
 
   const handleLogout = async () => {
     await clearSession();
     navigate({ to: "/login" });
   };
+
+  if (authStatus.checking) {
+    return <AuthLoadingScreen message="Vérification des accès Médecin..." />;
+  }
+
+  if (!authStatus.authorized) {
+    return null;
+  }
 
   const navItems = [
     { to: "/doctor", label: "Tableau de bord", icon: LayoutDashboard, exact: true },

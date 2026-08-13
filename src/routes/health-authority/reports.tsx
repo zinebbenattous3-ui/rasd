@@ -241,15 +241,7 @@ export function HealthAuthorityReportsPage() {
     }, 400);
   };
 
-  // Format Timestamp Helper (DD/MM/YYYY à HH:mm)
-  const formatDateTime = (dateStr: string) => {
-    if (!dateStr) return "—";
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
-    const datePart = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "numeric" });
-    const timePart = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-    return `${datePart} à ${timePart}`;
-  };
+  // Using formatDateTime utility imported from @/lib/utils
 
   // Active filters list
   const activeFilters = [

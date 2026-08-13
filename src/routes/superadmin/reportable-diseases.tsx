@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   Activity, 
   Plus, 
@@ -364,7 +365,7 @@ function SuperadminReportableDiseasesPage() {
                   </td>
 
                   <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                    {disease.created_at ? new Date(disease.created_at).toLocaleDateString('fr-FR') : '—'}
+                    {disease.created_at ? formatDateTime(disease.created_at) : '—'}
                   </td>
 
                   <td style={{ padding: '16px 20px', textAlign: 'right' }}>

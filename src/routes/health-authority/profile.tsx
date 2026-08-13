@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   User, 
   Mail, 
@@ -246,7 +247,7 @@ function HealthAuthorityProfilePage() {
               <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '600', textTransform: 'uppercase' }}>Date d'Enregistrement</div>
               <div style={{ fontSize: '0.9rem', color: COLORS.text, fontWeight: '500', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <Calendar size={15} color={COLORS.muted} />
-                <span>{user?.created_at ? new Date(user.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
+                <span>{user?.created_at ? formatDateTime(user.created_at) : '—'}</span>
               </div>
             </div>
           </div>

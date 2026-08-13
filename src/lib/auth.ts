@@ -56,6 +56,25 @@ export async function validateCurrentSession(allowedRoles?: UserRole[]): Promise
     return { authorized: false, redirectTo: "/login", reason: "NOT_AUTHENTICATED" };
   }
 
+  // Fast pre-check based on stored session role
+  if (allowedRoles && allowedRoles.length > 0 && session.role) {
+    const sessionRole = (session.role || "").toUpperCase() as UserRole;
+    if (!allowedRoles.includes(sessionRole)) {
+      const roleRedirectMap: Record<UserRole, string> = {
+        DOCTOR: "/doctor",
+        PATIENT: "/patient",
+        INSPECTOR: "/inspector",
+        HEALTH_AUTHORITY: "/health-authority",
+        SUPERADMIN: "/superadmin"
+      };
+      return {
+        authorized: false,
+        redirectTo: roleRedirectMap[sessionRole] || "/login",
+        reason: "UNAUTHORIZED_ROLE"
+      };
+    }
+  }
+
   try {
     // Database check: query users table for id, role, is_active
     const { data: dbUser, error } = await supabase

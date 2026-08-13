@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Outlet, Link, createFileRoute, useNavigate, useLocation } from "@tanstack/react-router";
+import { Outlet, Link, createFileRoute, useNavigate, useLocation, redirect } from "@tanstack/react-router";
 import {
   LayoutDashboard,
   Building2,
@@ -18,8 +18,15 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { validateCurrentSession, clearSession } from "@/lib/auth";
+import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 export const Route = createFileRoute("/inspector")({
+  beforeLoad: async () => {
+    const authResult = await validateCurrentSession(["INSPECTOR"]);
+    if (!authResult.authorized) {
+      throw redirect({ to: (authResult.redirectTo || "/login") as any });
+    }
+  },
   component: InspectorLayout,
 });
 
@@ -39,17 +46,24 @@ function InspectorLayout() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [inspectorProfile, setInspectorProfile] = useState<any>(null);
+  const [authStatus, setAuthStatus] = useState<{ checking: boolean; authorized: boolean }>({
+    checking: true,
+    authorized: false,
+  });
 
   useEffect(() => {
+    let isMounted = true;
     const verifyAuth = async () => {
       const authResult = await validateCurrentSession(["INSPECTOR"]);
       if (!authResult.authorized) {
-        navigate({ to: authResult.redirectTo || "/login" as any });
+        navigate({ to: (authResult.redirectTo || "/login") as any });
+        if (isMounted) setAuthStatus({ checking: false, authorized: false });
         return;
       }
-      if (authResult.user) {
+      if (authResult.user && isMounted) {
         setCurrentUser(authResult.user);
       }
+      if (isMounted) setAuthStatus({ checking: false, authorized: true });
     };
 
     verifyAuth();
@@ -82,13 +96,24 @@ function InspectorLayout() {
 
     loadInspector();
 
-    return () => window.removeEventListener("storage", handleStorageChange);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, [location.pathname]);
 
   const handleLogout = async () => {
     await clearSession();
     navigate({ to: "/login" });
   };
+
+  if (authStatus.checking) {
+    return <AuthLoadingScreen message="Vérification des accès Inspecteur..." />;
+  }
+
+  if (!authStatus.authorized) {
+    return null;
+  }
 
   const navItems = [
     { to: "/inspector", label: "Tableau de bord", icon: LayoutDashboard, exact: true },

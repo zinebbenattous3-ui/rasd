@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   Building2, 
   Plus, 
@@ -468,7 +469,7 @@ function HealthAuthorityFacilitiesPage() {
                       </div>
                     </td>
                     <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                      {new Date(fac.created_at).toLocaleDateString('fr-FR')}
+                      {formatDateTime(fac.created_at)}
                     </td>
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: '8px' }}>
@@ -728,13 +729,13 @@ function HealthAuthorityFacilitiesPage() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                   <span style={{ color: COLORS.muted }}>Date de création :</span>
                   <span style={{ fontWeight: '600', color: COLORS.text }}>
-                    {new Date(activeFacility.created_at).toLocaleString('fr-FR')}
+                    {formatDateTime(activeFacility.created_at)}
                   </span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
                   <span style={{ color: COLORS.muted }}>Dernière mise à jour :</span>
                   <span style={{ fontWeight: '600', color: COLORS.text }}>
-                    {new Date(activeFacility.updated_at).toLocaleString('fr-FR')}
+                    {formatDateTime(activeFacility.updated_at)}
                   </span>
                 </div>
               </div>

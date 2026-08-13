@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   Building2, 
   Activity, 
@@ -105,12 +106,7 @@ function HealthAuthorityDashboard() {
             title: `Nouvel établissement enregistré : ${fac.name}`,
             subtitle: `Type: ${fac.facility_type} • Wilaya: ${fac.wilaya}`,
             creator: creatorName,
-            timestamp: new Date(fac.created_at).toLocaleDateString('fr-FR', {
-              day: 'numeric',
-              month: 'short',
-              hour: '2-digit',
-              minute: '2-digit'
-            })
+            timestamp: formatDateTime(fac.created_at)
           };
         });
         setActivityLogs(logs);
@@ -299,7 +295,7 @@ function HealthAuthorityDashboard() {
                     </div>
                     <div style={{ fontSize: '0.75rem', color: COLORS.muted, textAlign: 'right' }}>
                       <Calendar size={13} style={{ marginBottom: '2px' }} />
-                      <div>{new Date(fac.created_at).toLocaleDateString('fr-FR')}</div>
+                      <div>{formatDateTime(fac.created_at)}</div>
                     </div>
                   </div>
                 );

@@ -1,9 +1,17 @@
 import { useState, useEffect } from "react";
-import { Outlet, Link, createFileRoute, useNavigate, useLocation } from "@tanstack/react-router";
+import { Outlet, Link, createFileRoute, useNavigate, useLocation, redirect } from "@tanstack/react-router";
 import { LayoutDashboard, Building2, User, LogOut, Menu, X, ShieldAlert, Stethoscope, BarChart3 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { validateCurrentSession, clearSession } from "@/lib/auth";
+import { AuthLoadingScreen } from "@/components/AuthLoadingScreen";
 
 export const Route = createFileRoute("/health-authority")({
+  beforeLoad: async () => {
+    const authResult = await validateCurrentSession(["HEALTH_AUTHORITY"]);
+    if (!authResult.authorized) {
+      throw redirect({ to: (authResult.redirectTo || "/login") as any });
+    }
+  },
   component: HealthAuthorityLayout,
 });
 
@@ -17,23 +25,28 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
-import { validateCurrentSession, clearSession } from "@/lib/auth";
-
 function HealthAuthorityLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [authStatus, setAuthStatus] = useState<{ checking: boolean; authorized: boolean }>({
+    checking: true,
+    authorized: false,
+  });
 
   useEffect(() => {
+    let isMounted = true;
     // 1. Guard check: Validate HEALTH_AUTHORITY role and active user session in database
     const verifyAuth = async () => {
       const authResult = await validateCurrentSession(["HEALTH_AUTHORITY"]);
       if (!authResult.authorized) {
-        navigate({ to: authResult.redirectTo || "/login" as any });
+        navigate({ to: (authResult.redirectTo || "/login") as any });
+        if (isMounted) setAuthStatus({ checking: false, authorized: false });
         return;
       }
+      if (isMounted) setAuthStatus({ checking: false, authorized: true });
     };
 
     verifyAuth();
@@ -83,13 +96,24 @@ function HealthAuthorityLayout() {
 
     loadProfile();
 
-    return () => window.removeEventListener("storage", handleStorageChange);
+    return () => {
+      isMounted = false;
+      window.removeEventListener("storage", handleStorageChange);
+    };
   }, [location.pathname]);
 
   const handleLogout = async () => {
     await clearSession();
     navigate({ to: "/login" });
   };
+
+  if (authStatus.checking) {
+    return <AuthLoadingScreen message="Vérification des accès Autorité Sanitaire..." />;
+  }
+
+  if (!authStatus.authorized) {
+    return null;
+  }
 
   const navItems = [
     { to: "/health-authority", label: "Tableau de bord", icon: LayoutDashboard, exact: true },

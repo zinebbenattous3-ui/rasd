@@ -2,6 +2,7 @@ import { useState } from "react";
 import { SeverityBadge } from "./Badge";
 import { facilityById, type HealthEvent } from "@/lib/mockData";
 import { PatientProofViewer } from "@/components/medical/PatientProofViewer";
+import { formatDateTime } from "@/lib/utils";
 
 interface EventRowProps {
   event: HealthEvent;
@@ -10,7 +11,6 @@ interface EventRowProps {
 
 export function EventRow({ event, onView }: EventRowProps) {
   const facility = facilityById(event.facility_id);
-  const created = new Date(event.created_at);
   const [viewerOpen, setViewerOpen] = useState(false);
 
   return (
@@ -26,8 +26,7 @@ export function EventRow({ event, onView }: EventRowProps) {
         </td>
         <td>
           <time dateTime={event.created_at}>
-            {created.toLocaleDateString("fr-FR", { day: "2-digit", month: "short" })}{" "}
-            {created.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+            {formatDateTime(event.created_at)}
           </time>
         </td>
         <td>

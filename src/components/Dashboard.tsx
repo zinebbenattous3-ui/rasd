@@ -13,6 +13,7 @@ import {
   type HealthEvent,
 } from "@/lib/mockData";
 import { Algeria69WilayaMap } from "./Algeria69WilayaMap";
+import { formatDateTime } from "@/lib/utils";
 
 interface DashboardProps {
   role: string;
@@ -53,7 +54,7 @@ export function Dashboard({ role, demo, onLogout }: DashboardProps) {
     const to = nextStatus[event.status];
     setEvents((prev) => prev.map((e) => (e.id === event.id ? { ...e, status: to } : e)));
     setAudit((prev) => [
-      `${new Date().toLocaleTimeString("fr-FR")} — ${event.reportable_disease?.name || "Maladie"} : ${event.status} → ${to}`,
+      `${formatDateTime(new Date())} — ${event.reportable_disease?.name || "Maladie"} : ${event.status} → ${to}`,
       ...prev,
     ]);
   }

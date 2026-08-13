@@ -40,6 +40,7 @@ import {
 } from "@/lib/proof-storage";
 import { enhanceMedicalObservation, type StructuredObservation } from "@/lib/ai-enhance";
 import { PatientProofViewer } from "@/components/medical/PatientProofViewer";
+import { formatDateTime } from "@/lib/utils";
 
 export const Route = createFileRoute("/doctor/health-events")({
   component: DoctorHealthEventsPage,
@@ -896,10 +897,7 @@ function DoctorHealthEventsPage() {
 
                     <td style={{ padding: '16px 20px', color: COLORS.navy, fontSize: '0.85rem' }}>
                       <div style={{ fontWeight: '700' }}>
-                        {new Date(evt.created_at).toLocaleDateString('fr-FR')}
-                      </div>
-                      <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '2px' }}>
-                        {new Date(evt.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatDateTime(evt.created_at)}
                       </div>
                     </td>
 
@@ -960,7 +958,7 @@ function DoctorHealthEventsPage() {
                 <div>
                   <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Date & Heure de création</div>
                   <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.9rem', marginTop: '2px' }}>
-                    {new Date(selectedEvent.created_at).toLocaleDateString('fr-FR')} à {new Date(selectedEvent.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    {formatDateTime(selectedEvent.created_at)}
                   </div>
                 </div>
               </div>

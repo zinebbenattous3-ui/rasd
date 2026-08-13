@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   Clock, 
   Search, 
@@ -732,7 +733,7 @@ function HealthAuthorityDoctorsPage() {
                     </td>
 
                     <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                      {new Date(doc.created_at).toLocaleDateString('fr-FR')}
+                      {formatDateTime(doc.created_at)}
                     </td>
 
                     <td style={{ padding: '16px 20px', textAlign: 'right' }}>

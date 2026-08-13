@@ -6,6 +6,7 @@ import { getReportDataServer, ReportPayload, ReportType } from "@/lib/reportsSer
 import { generateReportPDF } from "@/lib/pdfGenerator";
 import { generateReportExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import {
   FileText,
   FileSpreadsheet,
@@ -602,7 +603,7 @@ export function SuperadminReportsPage() {
                           {ev.severity}
                         </span>
                       </div>
-                      <span style={{ fontSize: "0.78rem", color: COLORS.muted }}>{new Date(ev.createdAt).toLocaleDateString("fr-FR")}</span>
+                      <span style={{ fontSize: "0.78rem", color: COLORS.muted }}>{formatDateTime(ev.createdAt)}</span>
                     </div>
 
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "10px", fontSize: "0.82rem" }}>

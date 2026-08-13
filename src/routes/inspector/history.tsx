@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { validateCurrentSession } from "@/lib/auth";
 import { normalizeWilayaCode } from "@/lib/wilayas";
 import { 
@@ -323,7 +324,7 @@ export function InspectorHistoryPage() {
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "8px" }}>
                       <span style={{ fontSize: "0.88rem", fontWeight: "800", color: COLORS.navy }}>{item.title}</span>
                       <span style={{ fontSize: "0.78rem", color: COLORS.muted, fontWeight: "600", display: "flex", alignItems: "center", gap: "4px" }}>
-                        <Clock size={12} /> {item.date.toLocaleDateString("fr-FR")} à {item.date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
+                        <Clock size={12} /> {formatDateTime(item.date)}
                       </span>
                     </div>
 

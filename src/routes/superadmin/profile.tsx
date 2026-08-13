@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   User, 
   Lock, 
@@ -458,7 +459,7 @@ function ProfilePage() {
                     alignItems: 'center',
                     gap: '8px'
                   }}>
-                    <span>{createdAt ? new Date(createdAt).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }) : 'Inconnue'}</span>
+                    <span>{createdAt ? formatDateTime(createdAt) : 'Inconnue'}</span>
                   </div>
                 </div>
               </div>

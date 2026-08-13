@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { validateCurrentSession } from "@/lib/auth";
 import { normalizeWilayaCode } from "@/lib/wilayas";
 import { 
@@ -546,7 +547,7 @@ export function InspectorFacilitiesPage() {
                           <strong>{ev.reportable_diseases?.name || "Pathologie"}</strong>
                           <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>Gravité: {ev.severity}</div>
                         </div>
-                        <span style={{ fontSize: "0.75rem", color: COLORS.muted }}>{new Date(ev.created_at).toLocaleDateString("fr-FR")}</span>
+                        <span style={{ fontSize: "0.75rem", color: COLORS.muted }}>{formatDateTime(ev.created_at)}</span>
                       </div>
                     ))}
                   </div>

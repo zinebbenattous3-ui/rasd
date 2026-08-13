@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   User, 
   Building2, 
@@ -528,7 +529,7 @@ function DoctorProfilePage() {
                     Envoyée le
                   </div>
                   <div style={{ fontWeight: '700', color: COLORS.navy, fontSize: '0.92rem', marginTop: '2px' }}>
-                    {new Date(pendingRequest.created_at).toLocaleDateString('fr-FR')} à {new Date(pendingRequest.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                    {formatDateTime(pendingRequest.created_at)}
                   </div>
                 </div>
               </div>
@@ -612,7 +613,7 @@ function DoctorProfilePage() {
                         </span>
                       </div>
                       <div style={{ fontSize: '0.8rem', color: COLORS.muted, marginTop: '4px' }}>
-                        Demande créée le {new Date(req.created_at).toLocaleDateString('fr-FR')} à {new Date(req.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        Demande créée le {formatDateTime(req.created_at)}
                       </div>
                       {req.reason && (
                         <div style={{ fontSize: '0.82rem', color: COLORS.text, marginTop: '6px', fontStyle: 'italic' }}>

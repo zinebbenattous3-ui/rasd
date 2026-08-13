@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
+import { formatDateTime } from "@/lib/utils";
 import { 
   Users, 
   Activity, 
@@ -928,7 +929,7 @@ function DoctorDashboardPage() {
                         </span>
                       </div>
                       <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>
-                        {getMaskedPatientId(patientObj)} • Déclaré le {new Date(evt.created_at).toLocaleDateString('fr-FR')}
+                        {getMaskedPatientId(patientObj)} • Déclaré le {formatDateTime(evt.created_at)}
                       </div>
                     </div>
 
@@ -1035,7 +1036,7 @@ function DoctorDashboardPage() {
                         </span>
                       </td>
                       <td style={{ padding: '14px 16px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                        {new Date(evt.created_at).toLocaleDateString('fr-FR')} à {new Date(evt.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        {formatDateTime(evt.created_at)}
                       </td>
                     </tr>
                   );
