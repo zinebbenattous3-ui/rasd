@@ -605,21 +605,15 @@ export function InspectorFacilitiesPage() {
                 />
               </div>
 
-              {/* FACILITY TYPE */}
+              {/* FACILITY TYPE (LOCKED TO CLINIQUE PRIVÉE FOR INSPECTORS) */}
               <div>
                 <label style={{ fontSize: "0.82rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
-                  Type d'Établissement *
+                  Type d'Établissement (Verrouillé)
                 </label>
-                <select
-                  value={addForm.facility_type}
-                  onChange={(e) => setAddForm({ ...addForm, facility_type: e.target.value })}
-                  style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
-                >
-                  <option value="Clinique privée">Clinique privée</option>
-                  <option value="EPSP">EPSP (Établissement Public de Santé de Proximité)</option>
-                  <option value="EPH">EPH (Établissement Public Hospitalier)</option>
-                  <option value="CHU">CHU (Centre Hospitalier Universitaire)</option>
-                </select>
+                <div style={{ padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, backgroundColor: "#F1F5F9", color: COLORS.navy, fontWeight: "700", fontSize: "0.88rem", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Lock size={16} color="#B45309" />
+                  <span>Clinique privée</span>
+                </div>
               </div>
 
               {/* WILAYA (LOCKED TO INSPECTOR) */}
