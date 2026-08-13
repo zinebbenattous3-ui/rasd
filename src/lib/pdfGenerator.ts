@@ -654,7 +654,25 @@ export function generateModelPDF(modelKey: ReportModelKey, payload: ReportPayloa
   }
 }
 
-// Legacy fallback export
-export function generateReportPDF(payload: ReportPayload): void {
-  generateSynthesisReport(payload);
+const REPORT_TYPE_TO_MODEL_KEY: Record<string, ReportModelKey> = {
+  EXECUTIVE: "synthesis",
+  FACILITY: "facility",
+  DISEASE: "pathology",
+  WILAYA: "severity",
+  DETAILED_EVENTS: "detailed",
+  synthesis: "synthesis",
+  facility: "facility",
+  pathology: "pathology",
+  severity: "severity",
+  detailed: "detailed",
+};
+
+export function generateReportPDF(
+  payload: ReportPayload,
+  modelKeyOverride?: ReportModelKey | string,
+  wilayaInfo?: { code: string; name: string }
+): void {
+  const keyToUse = modelKeyOverride || payload.appliedScope?.reportType || "EXECUTIVE";
+  const modelKey = REPORT_TYPE_TO_MODEL_KEY[keyToUse] || "synthesis";
+  generateModelPDF(modelKey, payload, wilayaInfo);
 }

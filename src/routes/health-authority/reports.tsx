@@ -209,7 +209,7 @@ export function HealthAuthorityReportsPage() {
 
     setTimeout(() => {
       try {
-        generateReportPDF(reportData);
+        generateReportPDF(reportData, reportType);
         setExportSuccessMsg("Document PDF généré avec succès.");
       } catch (err: any) {
         console.error("PDF generation failed:", err);
@@ -229,7 +229,7 @@ export function HealthAuthorityReportsPage() {
 
     setTimeout(() => {
       try {
-        generateReportExcel(reportData);
+        generateReportExcel(reportData, reportType);
         setExportSuccessMsg("Classeur Excel exporté avec succès.");
       } catch (err: any) {
         console.error("Excel generation failed:", err);

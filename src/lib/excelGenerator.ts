@@ -177,7 +177,25 @@ export function generateModelExcel(modelKey: ReportModelKey, payload: ReportPayl
   }
 }
 
-// Legacy export fallback
-export function generateReportExcel(payload: ReportPayload): void {
-  exportSynthesisExcel(payload);
+const REPORT_TYPE_TO_MODEL_KEY: Record<string, ReportModelKey> = {
+  EXECUTIVE: "synthesis",
+  FACILITY: "facility",
+  DISEASE: "pathology",
+  WILAYA: "severity",
+  DETAILED_EVENTS: "detailed",
+  synthesis: "synthesis",
+  facility: "facility",
+  pathology: "pathology",
+  severity: "severity",
+  detailed: "detailed",
+};
+
+export function generateReportExcel(
+  payload: ReportPayload,
+  modelKeyOverride?: ReportModelKey | string,
+  wilayaInfo?: { code: string; name: string }
+): void {
+  const keyToUse = modelKeyOverride || payload.appliedScope?.reportType || "EXECUTIVE";
+  const modelKey = REPORT_TYPE_TO_MODEL_KEY[keyToUse] || "synthesis";
+  generateModelExcel(modelKey, payload, wilayaInfo);
 }

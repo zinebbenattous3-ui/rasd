@@ -98,6 +98,7 @@ export interface ReportPayload {
   userRole?: string;
   privacyLevel: ReportPrivacyLevel;
   appliedScope: {
+    reportType?: ReportType | undefined;
     forcedWilaya?: string | undefined;
     forcedFacilityId?: string | undefined;
     forcedDoctorId?: string | undefined;
@@ -520,6 +521,7 @@ export const getReportDataServer = createServerFn({ method: "POST" })
         userRole: role,
         privacyLevel,
         appliedScope: {
+          reportType: data.reportType,
           forcedWilaya,
           forcedFacilityId,
           forcedDoctorId,
