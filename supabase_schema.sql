@@ -16,7 +16,7 @@ CREATE TABLE public.users (
 CREATE TABLE public.facilities (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   name character varying NOT NULL,
-  facility_type character varying NOT NULL CHECK (facility_type::text = ANY (ARRAY['Hôpital'::character varying, 'EPH'::character varying, 'EPSP'::character varying, 'Clinique privée'::character varying, 'Autre'::character varying]::text[])),
+  facility_type character varying NOT NULL CHECK (facility_type::text = ANY (ARRAY['EPSP'::character varying, 'EPH'::character varying, 'CHU'::character varying, 'Clinique privée'::character varying]::text[])),
   wilaya text NOT NULL,
   address text NOT NULL,
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -34,6 +34,7 @@ CREATE TABLE public.doctors (
   verified_by_facility uuid,
   verified_at timestamp with time zone,
   phone character varying NOT NULL,
+  order_number character varying,
   status character varying NOT NULL DEFAULT 'PENDING'::character varying CHECK (status::text = ANY (ARRAY['PENDING'::character varying, 'ACCEPTED'::character varying, 'REJECTED'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -134,6 +134,7 @@ function DoctorProfilePage() {
           firstName: userObj?.first_name,
           lastName: userObj?.last_name,
           nin: docData.nin,
+          orderNumber: docData.order_number,
           phone: docData.phone,
           specialty: docData.specialty,
           status: docData.status,
@@ -414,6 +415,15 @@ function DoctorProfilePage() {
                 </div>
                 <div style={{ fontWeight: '800', color: COLORS.navy, fontSize: '0.92rem', marginTop: '4px' }}>{doctorProfile.nin}</div>
               </div>
+
+              {doctorProfile.orderNumber && (
+                <div>
+                  <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <FileText size={14} /> N° Ordre des Médecins
+                  </div>
+                  <div style={{ fontWeight: '800', color: COLORS.teal, fontSize: '0.92rem', marginTop: '4px' }}>{doctorProfile.orderNumber}</div>
+                </div>
+              )}
             </div>
           </div>
 

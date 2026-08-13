@@ -33,18 +33,7 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
-const FACILITY_TYPES = [
-  { value: "EPSP", label: "EPSP — Établissement Public de Santé de Proximité" },
-  { value: "EPH", label: "EPH — Établissement Public Hospitalier" },
-  { value: "CHU", label: "CHU — Centre Hospitalo-Universitaire" },
-];
-
-const FACILITY_LABELS: Record<string, string> = {
-  EPSP: "EPSP — Établissement Public de Santé de Proximité",
-  EPH: "EPH — Établissement Public Hospitalier",
-  CHU: "CHU — Centre Hospitalo-Universitaire",
-};
-
+import { FACILITY_TYPES, FACILITY_TYPE_LABELS as FACILITY_LABELS } from "@/lib/facilities";
 import { WILAYAS_LIST_NAMES as ALGERIA_WILAYAS } from "@/lib/wilayas";
 
 function HealthAuthorityFacilitiesPage() {

@@ -45,6 +45,8 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
+import { isPrivateClinic } from "@/lib/facilities";
+
 export function InspectorFacilitiesPage() {
   const [loading, setLoading] = useState(true);
   const [inspectorWilaya, setInspectorWilaya] = useState<string | null>(null);
@@ -596,7 +598,7 @@ export function InspectorFacilitiesPage() {
                     Étape 1: Sélectionner la clinique privée (Wilaya {inspectorWilaya})
                   </label>
                   <div style={{ maxHeight: "240px", overflowY: "auto", border: `1px solid ${COLORS.border}`, borderRadius: "12px", padding: "6px", display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {facilities.map((fac) => (
+                    {facilities.filter(fac => isPrivateClinic(fac.facility_type)).map((fac) => (
                       <div
                         key={fac.id}
                         onClick={() => setSelectedClinicId(fac.id)}

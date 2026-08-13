@@ -15,7 +15,7 @@ CREATE TABLE public.facilities (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
   user_id uuid,
   name character varying NOT NULL,
-  facility_type character varying CHECK (facility_type::text = ANY (ARRAY['Hôpital'::character varying, 'EPH'::character varying, 'EPSP'::character varying, 'Clinique privée'::character varying, 'Autre'::character varying]::text[])),
+  facility_type character varying CHECK (facility_type::text = ANY (ARRAY['EPSP'::character varying, 'EPH'::character varying, 'CHU'::character varying, 'Clinique privée'::character varying]::text[])),
   wilaya text,
   address text,
   created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP,

@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth-hash";
 import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/TurnstileWidget";
 import { verifyTurnstileToken } from "@/lib/turnstileServer";
+import { isPrivateClinic } from "@/lib/facilities";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -37,6 +38,7 @@ interface FormErrors {
   nin?: string;
   specialty?: string;
   facility?: string;
+  order_number?: string;
   phone?: string;
   function_title?: string;
   wilaya?: string;
@@ -100,6 +102,8 @@ function SignupPage() {
     specialty: "",
     facility: "",
     facility_id: "",
+    selected_facility_type: "",
+    order_number: "",
     phone: "",
     // Patient specific
     birth_date: "",
@@ -202,6 +206,13 @@ function SignupPage() {
         if (!form.specialty.trim()) nextErrors.specialty = "Spécialité requise.";
         if (!form.phone.trim()) nextErrors.phone = "Numéro de téléphone requis.";
         else if (!/^\d{10}$/.test(form.phone.trim())) nextErrors.phone = "Le téléphone doit comporter 10 chiffres (ex: 0550123456).";
+
+        // REQUIRE order_number ONLY if facility_type is "Clinique privée"
+        if (isPrivateClinic(form.selected_facility_type)) {
+          if (!form.order_number || !form.order_number.trim()) {
+            nextErrors.order_number = "Le numéro d'ordre du médecin est obligatoire pour une clinique privée.";
+          }
+        }
       } else if (form.role === 'INSPECTOR') {
         if (!form.function_title.trim()) nextErrors.function_title = "Fonction requise.";
         if (!form.wilaya.trim()) nextErrors.wilaya = "Wilaya requise.";
@@ -281,10 +292,14 @@ function SignupPage() {
         });
 
         if (!error && data && data.success !== false) {
-          if (form.facility_id) {
+          if (form.facility_id || form.order_number) {
             await supabase
               .from('doctors')
-              .update({ facility_id: form.facility_id, status: 'PENDING' })
+              .update({
+                facility_id: form.facility_id || null,
+                order_number: form.order_number.trim() || null,
+                status: 'PENDING'
+              })
               .eq('nin', form.nin.trim());
           }
           setLoading(false);
@@ -325,6 +340,7 @@ function SignupPage() {
           nin: form.nin.trim(),
           specialty: form.specialty.trim(),
           facility_id: form.facility_id || null,
+          order_number: form.order_number.trim() || null,
           phone: form.phone.trim(),
           status: 'PENDING'
         }]);
@@ -730,8 +746,13 @@ function SignupPage() {
                         <input
                           type="text"
                           value={form.facility}
-                          onChange={(e) => { update("facility", e.target.value); update("facility_id", ""); setShowFacilityDropdown(true); }}
-                          placeholder="Rechercher CHU, EPH, Clinique..."
+                          onChange={(e) => {
+                            update("facility", e.target.value);
+                            update("facility_id", "");
+                            update("selected_facility_type", "");
+                            setShowFacilityDropdown(true);
+                          }}
+                          placeholder="Rechercher CHU, EPH, EPSP, Clinique..."
                           style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
                           onFocus={() => setShowFacilityDropdown(true)}
                           onBlur={() => setTimeout(() => setShowFacilityDropdown(false), 200)}
@@ -739,7 +760,16 @@ function SignupPage() {
                         {showFacilityDropdown && filteredFacilities.length > 0 && (
                           <ul style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "180px", overflowY: "auto", backgroundColor: "white", border: "1px solid #cbd5e1", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)", listStyle: "none", padding: "4px 0", margin: "4px 0 0 0", zIndex: 30 }}>
                             {filteredFacilities.map((fac) => (
-                              <li key={fac.id} onClick={() => { update("facility", fac.name); update("facility_id", fac.id); setShowFacilityDropdown(false); }} style={{ padding: "0.6rem 1rem", fontSize: "0.9rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}>
+                              <li
+                                key={fac.id}
+                                onClick={() => {
+                                  update("facility", fac.name);
+                                  update("facility_id", fac.id);
+                                  update("selected_facility_type", fac.facility_type);
+                                  setShowFacilityDropdown(false);
+                                }}
+                                style={{ padding: "0.6rem 1rem", fontSize: "0.9rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
+                              >
                                 <div style={{ fontWeight: "700", color: "#062C54" }}>{fac.name}</div>
                                 <div style={{ fontSize: "0.75rem", color: "#718096" }}>{fac.wilaya} • {fac.facility_type || 'Établissement'}</div>
                               </li>
@@ -747,6 +777,33 @@ function SignupPage() {
                           </ul>
                         )}
                       </div>
+
+                      {/* Order Number — Required for Private Clinics ONLY */}
+                      {isPrivateClinic(form.selected_facility_type) && (
+                        <div style={{ animation: "fadeIn 0.3s ease-out" }}>
+                          <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>
+                            Numéro d'ordre du médecin *
+                          </label>
+                          <input
+                            type="text"
+                            value={form.order_number}
+                            onChange={(e) => update("order_number", e.target.value)}
+                            placeholder="ex: 16/12345"
+                            style={{
+                              width: "100%",
+                              padding: "0.75rem 1rem",
+                              borderRadius: "10px",
+                              border: errors.order_number ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                              fontSize: "0.95rem"
+                            }}
+                          />
+                          {errors.order_number && (
+                            <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>
+                              {errors.order_number}
+                            </span>
+                          )}
+                        </div>
+                      )}
 
                       <div>
                         <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Téléphone professionnel *</label>
