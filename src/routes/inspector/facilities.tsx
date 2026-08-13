@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { validateCurrentSession } from "@/lib/auth";
+import { normalizeWilayaCode } from "@/lib/wilayas";
 import { 
   Building2, 
   Search, 
@@ -68,12 +69,13 @@ export function InspectorFacilitiesPage() {
 
       if (inspRec?.wilaya) {
         setInspectorWilaya(inspRec.wilaya);
+        const normCode = normalizeWilayaCode(inspRec.wilaya);
 
         // 2. Fetch Facilities strictly matching Inspector's Wilaya
         const { data: facsData } = await supabase
           .from("facilities")
           .select("*")
-          .eq("wilaya", inspRec.wilaya)
+          .ilike("wilaya", `%${normCode}%`)
           .order("name");
 
         const facList = facsData || [];
@@ -164,7 +166,7 @@ export function InspectorFacilitiesPage() {
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            🏥 Annuaire des Établissements
+            Annuaire des Établissements
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Consultation et surveillance des structures de santé enregistrées dans votre territoire.

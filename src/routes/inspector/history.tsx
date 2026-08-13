@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { validateCurrentSession } from "@/lib/auth";
+import { normalizeWilayaCode } from "@/lib/wilayas";
 import { 
   History, 
   Clock, 
@@ -53,13 +54,13 @@ export function InspectorHistoryPage() {
 
       if (inspRec?.wilaya) {
         setInspectorWilaya(inspRec.wilaya);
-        const wilaya = inspRec.wilaya;
+        const normCode = normalizeWilayaCode(inspRec.wilaya);
 
         // Fetch facilities in Wilaya
         const { data: facs } = await supabase
           .from("facilities")
           .select("id, name, created_at")
-          .eq("wilaya", wilaya);
+          .ilike("wilaya", `%${normCode}%`);
 
         const facList = facs || [];
         const facIds = facList.map(f => f.id);
@@ -134,7 +135,7 @@ export function InspectorHistoryPage() {
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            📜 Historique & Journal des Activités
+            Historique & Journal des Activités
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Chronologie complète des actions, déclarations et mouvements sanitaires dans la Wilaya {inspectorWilaya || "—"}.

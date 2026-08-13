@@ -83,7 +83,7 @@ export function InspectorRequestsPage() {
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            📑 Suivi des Demandes Administrative
+            Suivi des Demandes Administratives
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Historique et statut des demandes d'affectations et modifications transmises au Superadmin.
@@ -99,9 +99,9 @@ export function InspectorRequestsPage() {
       <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
         {[
           { key: "ALL", label: "Toutes les demandes" },
-          { key: "PENDING", label: "🟡 En attente" },
-          { key: "APPROVED", label: "🟢 Approuvées" },
-          { key: "REJECTED", label: "🔴 Rejetées" },
+          { key: "PENDING", label: "En attente" },
+          { key: "APPROVED", label: "Approuvées" },
+          { key: "REJECTED", label: "Rejetées" },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -160,7 +160,7 @@ export function InspectorRequestsPage() {
                       Demande d'affectation médecin
                     </div>
                     <h3 style={{ fontSize: "1.1rem", fontWeight: "800", color: COLORS.navy, margin: "4px 0 0 0" }}>
-                      {docName} ➔ 🏥 {targetFac}
+                      {docName} ➔ {targetFac}
                     </h3>
                     <div style={{ fontSize: "0.8rem", color: COLORS.muted, marginTop: "4px" }}>
                       Transmise le {new Date(req.created_at).toLocaleDateString("fr-FR")} à {new Date(req.created_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}
@@ -170,19 +170,19 @@ export function InspectorRequestsPage() {
                   <div>
                     {req.status === "PENDING" && (
                       <span style={{ backgroundColor: "#FEF3C7", color: "#B45309", border: "1px solid #FCD34D", padding: "6px 14px", borderRadius: "999px", fontSize: "0.8rem", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <Clock size={14} /> 🟡 En attente de validation
+                        <Clock size={14} /> En attente de validation
                       </span>
                     )}
 
                     {req.status === "APPROVED" && (
                       <span style={{ backgroundColor: "#DCFCE7", color: "#15803D", border: "1px solid #86EFAC", padding: "6px 14px", borderRadius: "999px", fontSize: "0.8rem", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <CheckCircle2 size={14} /> 🟢 Approuvée
+                        <CheckCircle2 size={14} /> Approuvée
                       </span>
                     )}
 
                     {req.status === "REJECTED" && (
                       <span style={{ backgroundColor: "#FEE2E2", color: "#B91C1C", border: "1px solid #FCA5A5", padding: "6px 14px", borderRadius: "999px", fontSize: "0.8rem", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                        <XCircle size={14} /> 🔴 Rejetée
+                        <XCircle size={14} /> Rejetée
                       </span>
                     )}
                   </div>

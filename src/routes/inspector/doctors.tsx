@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { validateCurrentSession } from "@/lib/auth";
+import { normalizeWilayaCode } from "@/lib/wilayas";
 import { 
   Stethoscope, 
   Search, 
@@ -79,13 +80,13 @@ export function InspectorDoctorsPage() {
 
       if (inspRec?.wilaya) {
         setInspectorWilaya(inspRec.wilaya);
-        const wilaya = inspRec.wilaya;
+        const normCode = normalizeWilayaCode(inspRec.wilaya);
 
         // 2. Fetch Facilities in Inspector's Wilaya
         const { data: facsData } = await supabase
           .from("facilities")
           .select("*")
-          .eq("wilaya", wilaya)
+          .ilike("wilaya", `%${normCode}%`)
           .order("name");
 
         const facList = facsData || [];
@@ -188,7 +189,7 @@ export function InspectorDoctorsPage() {
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            🩺 Effectifs Médicaux & Cliniques
+            Effectifs Médicaux & Cliniques
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Recherche et gestion des affectations des praticiens de santé dans votre Wilaya.
@@ -360,7 +361,7 @@ export function InspectorDoctorsPage() {
                   <div style={{ display: "flex", flexDirection: "column", gap: "6px", backgroundColor: COLORS.bgLight, padding: "12px", borderRadius: "12px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}>
                     <div>
                       <span style={{ color: COLORS.muted }}>Établissement: </span>
-                      <strong style={{ color: COLORS.navy }}>🏥 {facName}</strong>
+                      <strong style={{ color: COLORS.navy }}>{facName}</strong>
                     </div>
                     {doc.nin && (
                       <div>
@@ -502,7 +503,7 @@ export function InspectorDoctorsPage() {
                         }}
                       >
                         <div>
-                          <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.9rem" }}>🏥 {fac.name}</div>
+                          <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.9rem" }}>{fac.name}</div>
                           <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>Type: {fac.facility_type || "Clinique"} • Wilaya {fac.wilaya}</div>
                         </div>
                         {selectedClinicId === fac.id && <Check size={18} color={COLORS.teal} />}

@@ -19,7 +19,7 @@ import {
   Layers
 } from "lucide-react";
 import { validateCurrentSession } from "@/lib/auth";
-import { ALGERIA_WILAYAS_69 } from "@/lib/wilayas";
+import { ALGERIA_WILAYAS_69, normalizeWilayaCode } from "@/lib/wilayas";
 
 export const Route = createFileRoute("/inspector/")({
   component: InspectorDashboardPage,
@@ -72,13 +72,13 @@ export function InspectorDashboardPage() {
 
         if (inspRec?.wilaya) {
           setInspector(inspRec);
-          const wilaya = inspRec.wilaya;
+          const normCode = normalizeWilayaCode(inspRec.wilaya);
 
-          // 1. Fetch Facilities in Inspector's Wilaya
+          // 1. Fetch Facilities in Inspector's Wilaya strictly
           const { data: facs } = await supabase
             .from("facilities")
             .select("id, name, created_at, wilaya")
-            .eq("wilaya", wilaya);
+            .ilike("wilaya", `%${normCode}%`);
 
           const facList = facs || [];
           const facIds = facList.map(f => f.id);
@@ -154,7 +154,7 @@ export function InspectorDashboardPage() {
 
           // 4. Fetch Pending Change Requests submitted by this Inspector
           const { count: reqCount } = await supabase
-            .from("doctor_assignments" as any) // Ledger or requests
+            .from("doctor_facility_change_requests" as any)
             .select("id", { count: "exact", head: true })
             .eq("status", "PENDING");
 
@@ -179,7 +179,8 @@ export function InspectorDashboardPage() {
     loadData();
   }, []);
 
-  const wilayaInfo = ALGERIA_WILAYAS_69.find(w => w.code === inspector?.wilaya);
+  const wilayaCode = normalizeWilayaCode(inspector?.wilaya);
+  const wilayaInfo = ALGERIA_WILAYAS_69.find(w => w.code === wilayaCode);
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
@@ -212,7 +213,7 @@ export function InspectorDashboardPage() {
 
           <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginTop: "14px", backgroundColor: "rgba(255,255,255,0.1)", padding: "6px 14px", borderRadius: "10px", fontSize: "0.85rem", fontWeight: "700" }}>
             <MapPin size={16} color={COLORS.teal} />
-            <span>📍 Wilaya {inspector?.wilaya || "—"} {wilayaInfo ? `(${wilayaInfo.name})` : ""}</span>
+            <span>Wilaya {inspector?.wilaya || "—"} {wilayaInfo ? `(${wilayaInfo.name})` : ""}</span>
             <Lock size={12} color="#f59e0b" style={{ marginLeft: "4px" }} />
           </div>
         </div>

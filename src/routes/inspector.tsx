@@ -123,7 +123,7 @@ function InspectorLayout() {
             <div style={{ flex: 1, overflow: "hidden" }}>
               <div style={{ fontSize: "0.68rem", color: "#94a3b8", textTransform: "uppercase", fontWeight: "700" }}>Périmètre de Juridiction</div>
               <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "white", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                📍 Wilaya {inspectorProfile?.wilaya || "—"}
+                Wilaya {inspectorProfile?.wilaya || "—"}
               </div>
             </div>
             <Lock size={12} color="#f59e0b" />

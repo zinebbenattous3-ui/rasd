@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { validateCurrentSession } from "@/lib/auth";
+import { normalizeWilayaCode } from "@/lib/wilayas";
+import { MedicalProofModal } from "@/components/MedicalProofModal";
 import { 
   Activity, 
   Search, 
@@ -37,6 +39,22 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
+function formatDateTime(isoString?: string): string {
+  if (!isoString) return "—";
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return isoString;
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${day}/${month}/${year} à ${hours}:${minutes}`;
+  } catch {
+    return isoString;
+  }
+}
+
 export function InspectorHealthEventsPage() {
   const [loading, setLoading] = useState(true);
   const [inspectorWilaya, setInspectorWilaya] = useState<string | null>(null);
@@ -46,7 +64,7 @@ export function InspectorHealthEventsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [severityFilter, setSeverityFilter] = useState("ALL");
   const [selectedEvent, setSelectedEvent] = useState<any | null>(null);
-  const [proofModalUrl, setProofModalUrl] = useState<string | null>(null);
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -62,11 +80,12 @@ export function InspectorHealthEventsPage() {
 
       if (inspRec?.wilaya) {
         setInspectorWilaya(inspRec.wilaya);
+        const normCode = normalizeWilayaCode(inspRec.wilaya);
 
         const { data: facs } = await supabase
           .from("facilities")
           .select("id")
-          .eq("wilaya", inspRec.wilaya);
+          .ilike("wilaya", `%${normCode}%`);
 
         const facIds = (facs || []).map(f => f.id);
 
@@ -120,7 +139,7 @@ export function InspectorHealthEventsPage() {
       <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
         <div>
           <h1 style={{ fontSize: "1.8rem", fontWeight: "900", color: COLORS.navy, letterSpacing: "-0.02em", margin: 0 }}>
-            🚨 Événements de Santé Signalés
+            Événements de Santé Signalés
           </h1>
           <p style={{ color: COLORS.muted, fontSize: "0.92rem", marginTop: "4px" }}>
             Registre et surveillance épidémiologique des cas déclarés dans la Wilaya {inspectorWilaya || "—"}.
@@ -190,13 +209,13 @@ export function InspectorHealthEventsPage() {
               {filteredEvents.map((ev) => (
                 <tr key={ev.id} style={{ borderBottom: `1px solid ${COLORS.border}` }}>
                   <td style={{ padding: "14px 18px", color: COLORS.navy, fontWeight: "600" }}>
-                    {new Date(ev.created_at).toLocaleDateString("fr-FR")}
+                    {formatDateTime(ev.created_at)}
                   </td>
                   <td style={{ padding: "14px 18px", fontWeight: "800", color: COLORS.navy }}>
                     {ev.reportable_diseases?.name || "Non spécifié"}
                   </td>
                   <td style={{ padding: "14px 18px", color: COLORS.muted }}>
-                    🏥 {ev.facility?.name || "—"}
+                    {ev.facility?.name || "—"}
                   </td>
                   <td style={{ padding: "14px 18px" }}>
                     <span style={{
@@ -233,7 +252,7 @@ export function InspectorHealthEventsPage() {
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
           <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "600px", width: "100%", overflow: "hidden" }}>
             <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: "800", margin: 0 }}>Fiche d'Événement # {selectedEvent.id.substring(0, 8)}</h3>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: "800", margin: 0 }}>Fiche d'Événement #{selectedEvent.id.substring(0, 8)}</h3>
               <button onClick={() => setSelectedEvent(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={22} /></button>
             </div>
 
@@ -242,11 +261,11 @@ export function InspectorHealthEventsPage() {
               <div><strong>Gravité:</strong> {selectedEvent.severity}</div>
               <div><strong>Établissement:</strong> {selectedEvent.facility?.name} (Wilaya {selectedEvent.facility?.wilaya})</div>
               <div><strong>Médecin déclarant:</strong> Dr. {selectedEvent.doctor?.users?.first_name} {selectedEvent.doctor?.users?.last_name}</div>
-              <div><strong>Date du signalement:</strong> {new Date(selectedEvent.created_at).toLocaleString("fr-FR")}</div>
-              {selectedEvent.proof_url && (
+              <div><strong>Date du signalement:</strong> {formatDateTime(selectedEvent.created_at)}</div>
+              {(selectedEvent.patient_proof_url || selectedEvent.proof_url) && (
                 <div>
-                  <button onClick={() => setProofModalUrl(selectedEvent.proof_url)} style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                    <ImageIcon size={16} /> Afficher la preuve médicale
+                  <button onClick={() => setSelectedProofUrl(selectedEvent.patient_proof_url || selectedEvent.proof_url)} style={{ backgroundColor: COLORS.teal, color: "white", border: "none", padding: "8px 14px", borderRadius: "8px", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <ImageIcon size={16} /> Consulter la Preuve Médicale Attachée
                   </button>
                 </div>
               )}
@@ -259,15 +278,11 @@ export function InspectorHealthEventsPage() {
         </div>
       )}
 
-      {/* PROOF IMAGE MODAL */}
-      {proofModalUrl && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.85)", zIndex: 400, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
-          <div style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }}>
-            <button onClick={() => setProofModalUrl(null)} style={{ position: "absolute", top: "-40px", right: 0, background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={28} /></button>
-            <img src={proofModalUrl} alt="Preuve médicale" style={{ maxWidth: "100%", maxHeight: "80vh", borderRadius: "12px", border: "2px solid white" }} />
-          </div>
-        </div>
-      )}
+      {/* PROOF VIEWER MODAL */}
+      <MedicalProofModal
+        proofUrl={selectedProofUrl}
+        onClose={() => setSelectedProofUrl(null)}
+      />
 
     </div>
   );
