@@ -382,11 +382,11 @@ export function HealthAuthorityReportsPage() {
           </div>
         </div>
 
-        {/* 4-COLUMN RESPONSIVE GRID */}
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+        {/* 3-COLUMN BALANCED RESPONSIVE GRID (2 ROWS OF 3 ITEMS) */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "18px" }}>
           {/* WILAYA FILTER */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Wilaya
             </label>
             <SelectDropdown
@@ -404,7 +404,7 @@ export function HealthAuthorityReportsPage() {
 
           {/* FACILITY FILTER */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Établissement sous Gestion
             </label>
             <SelectDropdown
@@ -419,35 +419,9 @@ export function HealthAuthorityReportsPage() {
             />
           </div>
 
-          {/* DATE DE DÉBUT */}
-          <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
-              Date de début
-            </label>
-            <DatePicker
-              value={dateFrom}
-              onChange={(val) => setDateFrom(val)}
-              placeholder="Choisir date de début..."
-              maxDate={dateTo || undefined}
-            />
-          </div>
-
-          {/* DATE DE FIN */}
-          <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
-              Date de fin
-            </label>
-            <DatePicker
-              value={dateTo}
-              onChange={(val) => setDateTo(val)}
-              placeholder="Choisir date de fin..."
-              minDate={dateFrom || undefined}
-            />
-          </div>
-
           {/* PATHOLOGIE */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Pathologie
             </label>
             <SelectDropdown
@@ -463,9 +437,35 @@ export function HealthAuthorityReportsPage() {
             />
           </div>
 
+          {/* DATE DE DÉBUT */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Date de début
+            </label>
+            <DatePicker
+              value={dateFrom}
+              onChange={(val) => setDateFrom(val)}
+              placeholder="Choisir date de début..."
+              maxDate={dateTo || undefined}
+            />
+          </div>
+
+          {/* DATE DE FIN */}
+          <div>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
+              Date de fin
+            </label>
+            <DatePicker
+              value={dateTo}
+              onChange={(val) => setDateTo(val)}
+              placeholder="Choisir date de fin..."
+              minDate={dateFrom || undefined}
+            />
+          </div>
+
           {/* GRAVITÉ */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
+            <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Niveau de Gravité
             </label>
             <SelectDropdown
@@ -482,90 +482,95 @@ export function HealthAuthorityReportsPage() {
               ]}
             />
           </div>
+        </div>
 
-          {/* ACTION BUTTONS ROW */}
-          <div style={{ display: "flex", alignItems: "flex-end", gap: "10px", gridColumn: "span 1 / -1" }}>
-            <button
-              onClick={fetchReport}
-              disabled={isLoading}
-              style={{
-                backgroundColor: COLORS.navy,
-                color: "white",
-                padding: "11px 24px",
-                borderRadius: "10px",
-                fontWeight: "700",
-                fontSize: "0.88rem",
-                border: "none",
-                cursor: isLoading ? "not-allowed" : "pointer",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                boxShadow: "0 4px 12px rgba(6,44,84,0.15)",
-                opacity: isLoading ? 0.7 : 1,
-              }}
-            >
-              {isLoading ? <RefreshCw size={16} className="animate-spin" /> : <Filter size={16} />}
-              {isLoading ? "Application des filtres..." : "Appliquer les filtres"}
-            </button>
+        {/* DEDICATED ACTION BUTTONS & ACTIVE FILTERS FOOTER BAR */}
+        <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: `1px solid ${COLORS.border}`, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "16px" }}>
+          {/* Active Chips or Status count on Left */}
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
+            {activeFilters.length > 0 ? (
+              <>
+                <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.muted, textTransform: "uppercase", letterSpacing: "0.04em" }}>Filtres Actifs:</span>
+                {activeFilters.map((f) => (
+                  <span
+                    key={f.key}
+                    style={{
+                      backgroundColor: COLORS.lightTeal,
+                      color: COLORS.teal,
+                      padding: "4px 10px",
+                      borderRadius: "999px",
+                      fontSize: "0.78rem",
+                      fontWeight: "700",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "6px",
+                      border: `1px solid ${COLORS.teal}40`,
+                    }}
+                  >
+                    {f.label}
+                    <X size={13} style={{ cursor: "pointer" }} onClick={f.clear} />
+                  </span>
+                ))}
+              </>
+            ) : (
+              <span style={{ fontSize: "0.82rem", color: COLORS.muted, fontWeight: "600" }}>
+                {reportData ? `${reportData.summary.totalEvents} événement(s) correspondent à vos filtres.` : "Sélectionnez vos critères de filtrage."}
+              </span>
+            )}
+          </div>
 
+          {/* BUTTONS ALIGNED RIGHT */}
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", marginLeft: "auto" }}>
             {activeFilters.length > 0 && (
               <button
+                type="button"
                 onClick={handleResetFilters}
                 disabled={isLoading}
                 style={{
                   backgroundColor: "transparent",
-                  color: COLORS.muted,
-                  padding: "11px 18px",
+                  color: COLORS.navy,
+                  padding: "10px 18px",
                   borderRadius: "10px",
                   fontWeight: "700",
-                  fontSize: "0.85rem",
-                  border: `1px solid ${COLORS.border}`,
+                  fontSize: "0.88rem",
+                  border: `1.5px solid ${COLORS.border}`,
                   cursor: "pointer",
-                  display: "flex",
+                  display: "inline-flex",
                   alignItems: "center",
                   gap: "6px",
+                  transition: "all 0.15s ease",
                 }}
               >
                 <RotateCcw size={15} /> Réinitialiser
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={fetchReport}
+              disabled={isLoading}
+              style={{
+                backgroundColor: COLORS.navy,
+                color: "white",
+                padding: "10px 24px",
+                borderRadius: "10px",
+                fontWeight: "700",
+                fontSize: "0.88rem",
+                border: "none",
+                cursor: isLoading ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                boxShadow: "0 4px 14px rgba(6,44,84,0.2)",
+                opacity: isLoading ? 0.7 : 1,
+                transition: "all 0.15s ease",
+              }}
+            >
+              {isLoading ? <RefreshCw size={16} className="animate-spin" /> : <Filter size={16} />}
+              {isLoading ? "Application..." : "Appliquer les filtres"}
+            </button>
           </div>
         </div>
-
-        {/* ACTIVE FILTER CHIPS & RESULT COUNTER */}
-        {activeFilters.length > 0 && (
-          <div style={{ marginTop: "16px", paddingTop: "14px", borderTop: `1px dashed ${COLORS.border}`, display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "12px" }}>
-            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px" }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: "700", color: COLORS.muted, textTransform: "uppercase" }}>Filtres Actifs:</span>
-              {activeFilters.map((f) => (
-                <span
-                  key={f.key}
-                  style={{
-                    backgroundColor: COLORS.lightTeal,
-                    color: COLORS.teal,
-                    padding: "4px 10px",
-                    borderRadius: "999px",
-                    fontSize: "0.78rem",
-                    fontWeight: "700",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    border: `1px solid ${COLORS.teal}40`,
-                  }}
-                >
-                  {f.label}
-                  <X size={13} style={{ cursor: "pointer" }} onClick={f.clear} />
-                </span>
-              ))}
-            </div>
-
-            {reportData && (
-              <div style={{ fontSize: "0.82rem", fontWeight: "700", color: COLORS.navy }}>
-                {reportData.summary.totalEvents} événement(s) correspondent à vos filtres.
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
       {/* SUMMARY METRICS CARDS (Calculated strictly from filtered dataset) */}
