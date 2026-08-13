@@ -53,18 +53,6 @@ const PRESET_AUTHORITY_TYPES = [
     label: 'Directeur de service de santé', 
     short: 'DSS', 
     description: 'Direction des Services de Santé et des Établissements' 
-  },
-  { 
-    code: 'CLINIQUE_PRIVEE', 
-    label: 'Clinique Privée', 
-    short: 'Clinique', 
-    description: 'Établissement ou clinique sanitaire du secteur privé' 
-  },
-  { 
-    code: 'OTHER', 
-    label: 'Autre / Personnalisé', 
-    short: 'Autre', 
-    description: 'Autre organisme ou autorité sanitaire rattachée' 
   }
 ];
 

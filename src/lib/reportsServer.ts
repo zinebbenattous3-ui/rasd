@@ -317,10 +317,14 @@ export const getReportDataServer = createServerFn({ method: "POST" })
       }
 
       if (data.dateFrom) {
-        query = query.gte("created_at", new Date(data.dateFrom).toISOString());
+        const dFrom = new Date(data.dateFrom);
+        dFrom.setHours(0, 0, 0, 0);
+        query = query.gte("created_at", dFrom.toISOString());
       }
       if (data.dateTo) {
-        query = query.lte("created_at", new Date(data.dateTo).toISOString());
+        const dTo = new Date(data.dateTo);
+        dTo.setHours(23, 59, 59, 999);
+        query = query.lte("created_at", dTo.toISOString());
       }
 
       const { data: rawEvents, error: fetchErr } = await query;

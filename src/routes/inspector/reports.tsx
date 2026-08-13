@@ -6,6 +6,7 @@ import { getReportDataServer, ReportPayload, ReportType } from "@/lib/reportsSer
 import { generateReportPDF } from "@/lib/pdfGenerator";
 import { generateReportExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   FileText,
   FileSpreadsheet,
@@ -449,22 +450,57 @@ export function InspectorReportsPage() {
 
           {/* DATE RANGE */}
           <div>
-            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
+            <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "6px" }}>
               Période
             </label>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}
-              />
-              <input
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}
-              />
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div>
+                <span style={{ fontSize: "0.72rem", color: COLORS.muted, fontWeight: "600", display: "block", marginBottom: "3px" }}>
+                  Date de début
+                </span>
+                <DatePicker
+                  value={dateFrom}
+                  onChange={(val) => setDateFrom(val)}
+                  placeholder="Choisir date de début..."
+                  maxDate={dateTo || undefined}
+                />
+              </div>
+              <div>
+                <span style={{ fontSize: "0.72rem", color: COLORS.muted, fontWeight: "600", display: "block", marginBottom: "3px" }}>
+                  Date de fin
+                </span>
+                <DatePicker
+                  value={dateTo}
+                  onChange={(val) => setDateTo(val)}
+                  placeholder="Choisir date de fin..."
+                  minDate={dateFrom || undefined}
+                />
+              </div>
+              {(dateFrom || dateTo) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom("");
+                    setDateTo("");
+                  }}
+                  style={{
+                    fontSize: "0.75rem",
+                    color: COLORS.teal,
+                    fontWeight: "700",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    textAlign: "left",
+                    padding: "2px 0",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    marginTop: "2px"
+                  }}
+                >
+                  <X size={12} /> Réinitialiser la période
+                </button>
+              )}
             </div>
           </div>
 

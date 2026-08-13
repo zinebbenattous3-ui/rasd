@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Outlet, Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { LayoutDashboard, Users, ShieldAlert, Building2, LogOut, User, Activity, Menu, X, BarChart3 } from "lucide-react";
+import { LayoutDashboard, Users, ShieldCheck, LogOut, User, Activity, Menu, X } from "lucide-react";
 import { validateCurrentSession, clearSession } from "@/lib/auth";
 
 export const Route = createFileRoute("/superadmin")({
@@ -66,8 +66,7 @@ function SuperadminLayout() {
   const navItems = [
     { to: "/superadmin", label: "Tableau de bord", icon: LayoutDashboard, exact: true },
     { to: "/superadmin/inspectors", label: "Inspecteurs", icon: Users, exact: false },
-    { to: "/superadmin/health-authorities", label: "Autorités de Santé", icon: ShieldAlert, exact: false },
-    { to: "/superadmin/facilities", label: "Établissements", icon: Building2, exact: false },
+    { to: "/superadmin/health-authorities", label: "Autorités de Santé", icon: ShieldCheck, exact: false },
     { to: "/superadmin/reportable-diseases", label: "Maladies Déclarables", icon: Activity, exact: false },
   ];
 
@@ -85,26 +84,21 @@ function SuperadminLayout() {
         <nav style={{ flex: 1, padding: '1.5rem 1rem', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.1em', color: 'rgba(255,255,255,0.4)', marginBottom: '1rem', paddingLeft: '1rem' }}>Menu Principal</div>
 
-          <Link to="/superadmin" style={linkStyle} activeProps={{ style: activeStyle }} activeOptions={{ exact: true }}>
-            <LayoutDashboard size={20} />
-            <span>Tableau de bord</span>
-          </Link>
-          <Link to="/superadmin/inspectors" style={linkStyle} activeProps={{ style: activeStyle }}>
-            <Users size={20} />
-            <span>Inspecteurs</span>
-          </Link>
-          <Link to="/superadmin/health-authorities" style={linkStyle} activeProps={{ style: activeStyle }}>
-            <ShieldAlert size={20} />
-            <span>Autorités de Santé</span>
-          </Link>
-          <Link to="/superadmin/facilities" style={linkStyle} activeProps={{ style: activeStyle }}>
-            <Building2 size={20} />
-            <span>Établissements</span>
-          </Link>
-          <Link to="/superadmin/reportable-diseases" style={linkStyle} activeProps={{ style: activeStyle }}>
-            <Activity size={20} />
-            <span>Maladies Déclarables</span>
-          </Link>
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.to}
+                to={item.to as any}
+                style={linkStyle}
+                activeProps={{ style: activeStyle }}
+                activeOptions={{ exact: item.exact }}
+              >
+                <Icon size={20} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
         </nav>
 
         <div style={{ padding: '1.5rem 1rem', borderTop: '1px solid rgba(255,255,255,0.1)' }}>
