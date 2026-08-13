@@ -116,7 +116,7 @@ export function InspectorHealthEventsPage() {
         // Fetch reportable diseases list
         const { data: diseases } = await supabase
           .from("reportable_diseases")
-          .select("id, name, code")
+          .select("id, name")
           .order("name");
         setDiseasesList(diseases || []);
 
@@ -138,7 +138,7 @@ export function InspectorHealthEventsPage() {
               updated_at,
               reportable_disease_id,
               facility:facility_id (id, name, facility_type, wilaya),
-              reportable_diseases:reportable_disease_id (id, name, code),
+              reportable_diseases:reportable_disease_id (id, name),
               doctor:doctor_id (
                 id,
                 specialty,
@@ -197,7 +197,8 @@ export function InspectorHealthEventsPage() {
 
   // Filtered dataset logic
   const filteredEvents = events.filter((e) => {
-    const diseaseName = e.reportable_diseases?.name || "";
+    const disObj = Array.isArray(e.reportable_diseases) ? e.reportable_diseases[0] : e.reportable_diseases;
+    const diseaseName = disObj?.name || "";
     const facName = e.facility?.name || "";
     const docName = e.doctor?.users ? `${e.doctor.users.first_name} ${e.doctor.users.last_name}` : "";
     const description = e.description || "";
@@ -469,7 +470,7 @@ export function InspectorHealthEventsPage() {
                     {formatDateTime(ev.created_at)}
                   </td>
                   <td style={{ padding: "14px 18px", fontWeight: "800", color: COLORS.navy }}>
-                    {ev.reportable_diseases?.name || "Non spécifié"}
+                    {(Array.isArray(ev.reportable_diseases) ? ev.reportable_diseases[0] : ev.reportable_diseases)?.name || "Non spécifié"}
                   </td>
                   <td style={{ padding: "14px 18px", color: COLORS.muted }}>
                     {ev.facility?.name || "—"}
@@ -509,12 +510,17 @@ export function InspectorHealthEventsPage() {
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6,44,84,0.6)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}>
           <div style={{ backgroundColor: "white", borderRadius: "20px", maxWidth: "600px", width: "100%", overflow: "hidden", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
             <div style={{ padding: "20px 24px", backgroundColor: COLORS.navy, color: "white", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ fontSize: "1.2rem", fontWeight: "800", margin: 0 }}>Fiche d'Événement #{selectedEvent.id.substring(0, 8)}</h3>
-              <button onClick={() => setSelectedEvent(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={22} /></button>
+              <div>
+                <div style={{ fontSize: "0.75rem", color: COLORS.teal, fontWeight: "800", textTransform: "uppercase" }}>Détails du Signalement</div>
+                <h3 style={{ fontSize: "1.2rem", fontWeight: "900", margin: "4px 0 0 0", color: "white" }}>
+                  {(Array.isArray(selectedEvent.reportable_diseases) ? selectedEvent.reportable_diseases[0] : selectedEvent.reportable_diseases)?.name || "Signalement Sanitaire"}
+                </h3>
+              </div>
+              <button onClick={() => setSelectedEvent(null)} style={{ background: "none", border: "none", color: "white", cursor: "pointer" }}><X size={24} /></button>
             </div>
 
             <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "14px", fontSize: "0.9rem" }}>
-              <div><strong>Pathologie:</strong> {selectedEvent.reportable_diseases?.name}</div>
+              <div><strong>Pathologie:</strong> {(Array.isArray(selectedEvent.reportable_diseases) ? selectedEvent.reportable_diseases[0] : selectedEvent.reportable_diseases)?.name || "Non spécifiée"}</div>
               <div><strong>Gravité:</strong> {selectedEvent.severity}</div>
               <div><strong>Description / Observations:</strong> {selectedEvent.description || "Aucune observation supplémentaire"}</div>
               <div><strong>Établissement:</strong> {selectedEvent.facility?.name} (Wilaya {selectedEvent.facility?.wilaya})</div>
