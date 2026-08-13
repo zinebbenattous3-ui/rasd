@@ -182,7 +182,7 @@ function HealthAuthorityDashboard() {
           </button>
           
           <Link
-            to="/reports"
+            to="/health-authority/reports"
             style={{
               backgroundColor: "rgba(255,255,255,0.15)",
               color: "white",

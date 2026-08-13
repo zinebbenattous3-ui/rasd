@@ -69,7 +69,6 @@ function SuperadminLayout() {
     { to: "/superadmin/health-authorities", label: "Autorités de Santé", icon: ShieldAlert, exact: false },
     { to: "/superadmin/facilities", label: "Établissements", icon: Building2, exact: false },
     { to: "/superadmin/reportable-diseases", label: "Maladies Déclarables", icon: Activity, exact: false },
-    { to: "/superadmin/reports", label: " Rapports", icon: BarChart3, exact: false },
   ];
 
   return (
@@ -105,10 +104,6 @@ function SuperadminLayout() {
           <Link to="/superadmin/reportable-diseases" style={linkStyle} activeProps={{ style: activeStyle }}>
             <Activity size={20} />
             <span>Maladies Déclarables</span>
-          </Link>
-          <Link to="/reports" style={linkStyle} activeProps={{ style: activeStyle }}>
-            <BarChart3 size={20} />
-            <span> Rapports</span>
           </Link>
         </nav>
 

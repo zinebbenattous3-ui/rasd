@@ -36,7 +36,7 @@ export function ReportsRedirectPage() {
       } else if (role === "HEALTH_AUTHORITY") {
         navigate({ to: "/health-authority/reports" as any });
       } else if (role === "SUPERADMIN") {
-        navigate({ to: "/superadmin/reports" as any });
+        navigate({ to: "/superadmin" as any });
       } else {
         setErrorMsg("Accès non autorisé au centre de rapports.");
         setChecking(false);

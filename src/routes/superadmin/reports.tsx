@@ -79,20 +79,8 @@ export function SuperadminReportsPage() {
   // Active View Category Tab
   const [activeTab, setActiveTab] = useState<"summary" | "facilities" | "diseases" | "severities" | "events">("summary");
 
-  // Validate Authentication on Mount (STRICT: SUPERADMIN ONLY)
   useEffect(() => {
-    async function verifyAuth() {
-      const authResult = await validateCurrentSession(["SUPERADMIN"]);
-      if (!authResult.authorized) {
-        navigate({ to: authResult.redirectTo || "/login" as any });
-        return;
-      }
-      if (authResult.user) {
-        setCurrentUser(authResult.user);
-      }
-      setAuthChecking(false);
-    }
-    verifyAuth();
+    navigate({ to: "/superadmin" });
   }, []);
 
   // Fetch Diseases and All Facilities
