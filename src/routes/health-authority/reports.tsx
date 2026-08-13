@@ -7,6 +7,7 @@ import { generateModelPDF, ReportModelKey } from "@/lib/pdfGenerator";
 import { generateModelExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
 import { MedicalProofModal } from "@/components/MedicalProofModal";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   FileText,
   FileSpreadsheet,
@@ -468,11 +469,11 @@ export function HealthAuthorityReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
               Date de début
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+              onChange={(val) => setDateFrom(val)}
+              placeholder="Date de début..."
+              maxDate={dateTo || undefined}
             />
           </div>
 
@@ -481,11 +482,11 @@ export function HealthAuthorityReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
               Date de fin
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+              onChange={(val) => setDateTo(val)}
+              placeholder="Date de fin..."
+              minDate={dateFrom || undefined}
             />
           </div>
 

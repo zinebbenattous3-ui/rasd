@@ -7,6 +7,7 @@ import { generateReportPDF } from "@/lib/pdfGenerator";
 import { generateReportExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/utils";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   FileText,
   FileSpreadsheet,
@@ -409,17 +410,17 @@ export function SuperadminReportsPage() {
               Période
             </label>
             <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <input
-                type="date"
+              <DatePicker
                 value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}
+                onChange={(val) => setDateFrom(val)}
+                placeholder="Date de début..."
+                maxDate={dateTo || undefined}
               />
-              <input
-                type="date"
+              <DatePicker
                 value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.82rem" }}
+                onChange={(val) => setDateTo(val)}
+                placeholder="Date de fin..."
+                minDate={dateFrom || undefined}
               />
             </div>
           </div>

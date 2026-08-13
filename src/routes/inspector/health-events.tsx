@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { validateCurrentSession } from "@/lib/auth";
 import { normalizeWilayaCode } from "@/lib/wilayas";
 import { MedicalProofModal } from "@/components/MedicalProofModal";
+import { DatePicker } from "@/components/ui/date-picker";
 import { 
   Activity, 
   Search, 
@@ -393,11 +394,11 @@ export function InspectorHealthEventsPage() {
             <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Date de début
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+              onChange={(val) => setDateFrom(val)}
+              placeholder="Date de début..."
+              maxDate={dateTo || undefined}
             />
           </div>
 
@@ -406,11 +407,11 @@ export function InspectorHealthEventsPage() {
             <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Date de fin
             </label>
-            <input
-              type="date"
+            <DatePicker
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
+              onChange={(val) => setDateTo(val)}
+              placeholder="Date de fin..."
+              minDate={dateFrom || undefined}
             />
           </div>
 
