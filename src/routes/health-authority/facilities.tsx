@@ -33,7 +33,17 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
-const FACILITY_TYPES = ['Hôpital', 'EPH', 'EPSP', 'Clinique privée', 'Autre'];
+const FACILITY_TYPES = [
+  { value: "EPSP", label: "EPSP — Établissement Public de Santé de Proximité" },
+  { value: "EPH", label: "EPH — Établissement Public Hospitalier" },
+  { value: "CHU", label: "CHU — Centre Hospitalo-Universitaire" },
+];
+
+const FACILITY_LABELS: Record<string, string> = {
+  EPSP: "EPSP — Établissement Public de Santé de Proximité",
+  EPH: "EPH — Établissement Public Hospitalier",
+  CHU: "CHU — Centre Hospitalo-Universitaire",
+};
 
 import { WILAYAS_LIST_NAMES as ALGERIA_WILAYAS } from "@/lib/wilayas";
 
@@ -58,7 +68,7 @@ function HealthAuthorityFacilitiesPage() {
   // Form State for Add / Edit
   const [form, setForm] = useState({
     name: "",
-    facility_type: "Hôpital",
+    facility_type: "EPSP",
     wilaya: "16 - Alger",
     address: ""
   });
@@ -283,7 +293,7 @@ function HealthAuthorityFacilitiesPage() {
             </h2>
           </div>
           <p style={{ color: COLORS.muted, fontSize: '0.95rem', margin: 0 }}>
-            Administrez et filtrez l'ensemble des hôpitaux, EPH, EPSP et cliniques privées de votre juridiction.
+            Administrez et filtrez l'ensemble des structures sanitaires publiques (EPSP, EPH, CHU) de votre juridiction.
           </p>
         </div>
 
@@ -361,8 +371,8 @@ function HealthAuthorityFacilitiesPage() {
               placeholder="Tous les Types"
               icon={Building2}
               options={[
-                { value: "ALL", label: "Tous les Types" },
-                ...FACILITY_TYPES.map(t => ({ value: t, label: t }))
+                { value: "ALL", label: "Tous les Types (EPSP, EPH, CHU)" },
+                ...FACILITY_TYPES.map(t => ({ value: t.value, label: t.label }))
               ]}
             />
           </div>
@@ -559,7 +569,7 @@ function HealthAuthorityFacilitiesPage() {
                   onChange={(val) => setForm({ ...form, facility_type: val })}
                   placeholder="Sélectionner le type..."
                   icon={Building2}
-                  options={FACILITY_TYPES.map(t => ({ value: t, label: t }))}
+                  options={FACILITY_TYPES.map(t => ({ value: t.value, label: t.label }))}
                 />
               </div>
 
@@ -642,7 +652,7 @@ function HealthAuthorityFacilitiesPage() {
                   onChange={(val) => setForm({ ...form, facility_type: val })}
                   placeholder="Sélectionner le type..."
                   icon={Building2}
-                  options={FACILITY_TYPES.map(t => ({ value: t, label: t }))}
+                  options={FACILITY_TYPES.map(t => ({ value: t.value, label: t.label }))}
                 />
               </div>
 

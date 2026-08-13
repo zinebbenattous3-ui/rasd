@@ -33,11 +33,9 @@ function HealthAuthorityDashboard() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [stats, setStats] = useState({
     total: 0,
-    hopital: 0,
-    eph: 0,
     epsp: 0,
-    clinique: 0,
-    autre: 0
+    eph: 0,
+    chu: 0
   });
   const [recentFacilities, setRecentFacilities] = useState<any[]>([]);
   const [activityLogs, setActivityLogs] = useState<any[]>([]);
@@ -90,13 +88,11 @@ function HealthAuthorityDashboard() {
 
       if (!facError && facilitiesData) {
         const total = facilitiesData.length;
-        const hopital = facilitiesData.filter(f => f.facility_type === 'Hôpital').length;
-        const eph = facilitiesData.filter(f => f.facility_type === 'EPH').length;
         const epsp = facilitiesData.filter(f => f.facility_type === 'EPSP').length;
-        const clinique = facilitiesData.filter(f => f.facility_type === 'Clinique privée').length;
-        const autre = facilitiesData.filter(f => f.facility_type === 'Autre').length;
+        const eph = facilitiesData.filter(f => f.facility_type === 'EPH').length;
+        const chu = facilitiesData.filter(f => f.facility_type === 'CHU' || f.facility_type === 'Hôpital').length;
 
-        setStats({ total, hopital, eph, epsp, clinique, autre });
+        setStats({ total, epsp, eph, chu });
         setRecentFacilities(facilitiesData.slice(0, 5));
 
         // Create activity logs from recent facility creation events
@@ -240,32 +236,25 @@ function HealthAuthorityDashboard() {
             <div style={{ fontSize: '0.78rem', color: COLORS.teal, fontWeight: '600', marginTop: '6px' }}>Directement enregistrés</div>
           </div>
 
-          {/* Hospitals */}
+          {/* EPSP */}
           <div style={{ backgroundColor: 'white', padding: '22px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-            <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Hôpitaux</div>
-            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#1D4ED8', marginTop: '8px' }}>{stats.hopital}</div>
-            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Grands centres hospitaliers</div>
+            <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>EPSP</div>
+            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#B45309', marginTop: '8px' }}>{stats.epsp}</div>
+            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Santé de Proximité</div>
           </div>
 
           {/* EPH */}
           <div style={{ backgroundColor: 'white', padding: '22px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
             <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>EPH</div>
             <div style={{ fontSize: '2rem', fontWeight: '800', color: '#15803D', marginTop: '8px' }}>{stats.eph}</div>
-            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Publique hospitalier</div>
+            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Établissement Public Hospitalier</div>
           </div>
 
-          {/* EPSP */}
+          {/* CHU */}
           <div style={{ backgroundColor: 'white', padding: '22px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-            <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>EPSP</div>
-            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#B45309', marginTop: '8px' }}>{stats.epsp}</div>
-            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Proximité santé publique</div>
-          </div>
-
-          {/* Cliniques Privées */}
-          <div style={{ backgroundColor: 'white', padding: '22px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 2px 10px rgba(0,0,0,0.03)' }}>
-            <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Cliniques Privées</div>
-            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#7E22CE', marginTop: '8px' }}>{stats.clinique}</div>
-            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Secteur privé agréé</div>
+            <div style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.05em' }}>CHU</div>
+            <div style={{ fontSize: '2rem', fontWeight: '800', color: '#1D4ED8', marginTop: '8px' }}>{stats.chu}</div>
+            <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '6px' }}>Centre Hospitalo-Universitaire</div>
           </div>
         </div>
       </div>
