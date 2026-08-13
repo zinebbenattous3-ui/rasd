@@ -180,6 +180,7 @@ export const getReportDataServer = createServerFn({ method: "POST" })
       let forcedFacilityId: string | undefined = undefined;
       let forcedDoctorId: string | undefined = undefined;
       let userScopeDescription = "";
+      let authFacIds: string[] = [];
 
       // 2. Role-Based Authorization & Scope Computation
       if (role === "PATIENT" || role === "DOCTOR") {
@@ -193,25 +194,25 @@ export const getReportDataServer = createServerFn({ method: "POST" })
         const { data: userFacs } = await supabase
           .from("facilities")
           .select("id, name, wilaya, facility_type")
-          .eq("created_by", userRec.id);
+          .or(`created_by.eq.${userRec.id},user_id.eq.${userRec.id}`);
 
-        let authFacIds = (userFacs || []).map((f) => f.id);
+        authFacIds = (userFacs || []).map((f) => f.id);
 
         if (authFacIds.length === 0) {
-          // Fallback: If authority has not explicitly created facilities, query all facilities
+          // Fallback: If authority has not explicitly created facilities, check all facilities
           const { data: allFacs } = await supabase.from("facilities").select("id, name, wilaya, facility_type");
           authFacIds = (allFacs || []).map((f) => f.id);
         }
 
         // Verify requested facilityId against authorized list
         if (data.facilityId) {
-          if (!authFacIds.includes(data.facilityId)) {
+          if (authFacIds.length > 0 && !authFacIds.includes(data.facilityId)) {
             return { ...defaultPayload, error: "Accès refusé : Vous n'êtes pas autorisé à consulter cet établissement." };
           }
           forcedFacilityId = data.facilityId;
         }
 
-        userScopeDescription = `Établissements sous gestion (${authFacIds.length} structures autorisées)`;
+        userScopeDescription = `Établissements sous gestion (${authFacIds.length} structure(s) autorisée(s))`;
       } else if (role === "INSPECTOR") {
         privacyLevel = 3;
         const { data: inspRec } = await supabase
@@ -284,20 +285,33 @@ export const getReportDataServer = createServerFn({ method: "POST" })
           )
         `);
 
-      // Enforce forced scope server-side
-      if (forcedWilaya) {
-        query = query.eq("facilities.wilaya", forcedWilaya);
-      } else if (data.wilaya) {
-        const normCode = normalizeWilayaCode(data.wilaya);
-        if (normCode) {
-          query = query.eq("facilities.wilaya", normCode);
+      // Enforce Health Authority Facility Scope
+      if (role === "HEALTH_AUTHORITY") {
+        if (forcedFacilityId) {
+          query = query.eq("facility_id", forcedFacilityId);
+        } else if (authFacIds.length > 0) {
+          query = query.in("facility_id", authFacIds);
+        } else {
+          return {
+            ...defaultPayload,
+            appliedScope: { userScopeDescription }
+          };
+        }
+      } else {
+        if (forcedFacilityId) {
+          query = query.eq("facility_id", forcedFacilityId);
+        } else if (data.facilityId) {
+          query = query.eq("facility_id", data.facilityId);
         }
       }
 
-      if (forcedFacilityId) {
-        query = query.eq("facility_id", forcedFacilityId);
-      } else if (data.facilityId) {
-        query = query.eq("facility_id", data.facilityId);
+      // Enforce forced or requested Wilaya scope (resilient ilike matching)
+      if (forcedWilaya) {
+        const normCode = normalizeWilayaCode(forcedWilaya) || forcedWilaya;
+        query = query.ilike("facilities.wilaya", `%${normCode}%`);
+      } else if (data.wilaya) {
+        const normCode = normalizeWilayaCode(data.wilaya) || data.wilaya;
+        query = query.ilike("facilities.wilaya", `%${normCode}%`);
       }
 
       if (data.facilityType) {

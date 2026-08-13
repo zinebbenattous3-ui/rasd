@@ -95,3 +95,14 @@ export function getWilayaByName(name: string): Wilaya | undefined {
       `${w.code} - ${w.name}`.toLowerCase() === cleanName
   );
 }
+
+export function normalizeWilayaCode(input?: string | number): string {
+  if (!input) return "";
+  const str = String(input).trim();
+  const match = str.match(/^(\d{1,2})/);
+  if (match && match[1]) {
+    return match[1].padStart(2, "0");
+  }
+  const foundByName = getWilayaByName(str);
+  return foundByName ? foundByName.code : "";
+}
