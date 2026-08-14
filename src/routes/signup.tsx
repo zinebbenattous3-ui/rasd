@@ -14,6 +14,7 @@ import { hashPassword } from "@/lib/auth-hash";
 import { TurnstileWidget, type TurnstileWidgetRef } from "@/components/TurnstileWidget";
 import { verifyTurnstileToken } from "@/lib/turnstileServer";
 import { isPrivateClinic } from "@/lib/facilities";
+import { WILAYAS_LIST_NAMES } from "@/lib/wilayas";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -42,6 +43,7 @@ interface FormErrors {
   public_facility_type?: string;
   facility?: string;
   unlisted_clinic_name?: string;
+  unlisted_clinic_wilaya?: string;
   unlisted_clinic_address?: string;
   order_number?: string;
   phone?: string;
@@ -114,6 +116,7 @@ function SignupPage() {
     phone: "",
     is_unlisted_clinic: false,
     unlisted_clinic_name: "",
+    unlisted_clinic_wilaya: "16 - Alger",
     unlisted_clinic_address: "",
     // Patient specific
     birth_date: "",
@@ -231,6 +234,9 @@ function SignupPage() {
             if (!form.unlisted_clinic_name.trim()) {
               nextErrors.unlisted_clinic_name = "Le nom de la clinique privée est obligatoire.";
             }
+            if (!form.unlisted_clinic_wilaya.trim()) {
+              nextErrors.unlisted_clinic_wilaya = "La wilaya de la clinique est obligatoire.";
+            }
             if (!form.unlisted_clinic_address.trim()) {
               nextErrors.unlisted_clinic_address = "L'adresse de la clinique est obligatoire.";
             }
@@ -317,7 +323,7 @@ function SignupPage() {
           .insert([{
             name: form.unlisted_clinic_name.trim(),
             facility_type: 'Clinique privée',
-            wilaya: form.wilaya || '16 - Alger',
+            wilaya: form.unlisted_clinic_wilaya || form.wilaya || '16 - Alger',
             address: form.unlisted_clinic_address.trim() || null
           }])
           .select('id')
@@ -1077,6 +1083,23 @@ function SignupPage() {
 
                               <div>
                                 <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", color: "#062C54", marginBottom: "0.3rem" }}>
+                                  Wilaya d'implantation de la clinique *
+                                </label>
+                                <select
+                                  value={form.unlisted_clinic_wilaya}
+                                  onChange={(e) => update("unlisted_clinic_wilaya", e.target.value)}
+                                  style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: "8px", border: errors.unlisted_clinic_wilaya ? "1.5px solid #ef4444" : "1px solid #cbd5e1", fontSize: "0.9rem", outline: "none", backgroundColor: "white" }}
+                                >
+                                  <option value="">Sélectionner une Wilaya...</option>
+                                  {WILAYAS_LIST_NAMES.map((w) => (
+                                    <option key={w} value={w}>{w}</option>
+                                  ))}
+                                </select>
+                                {errors.unlisted_clinic_wilaya && <span style={{ color: "#ef4444", fontSize: "0.78rem", marginTop: "0.2rem", display: "block" }}>{errors.unlisted_clinic_wilaya}</span>}
+                              </div>
+
+                              <div>
+                                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", color: "#062C54", marginBottom: "0.3rem" }}>
                                   Adresse complète de la clinique *
                                 </label>
                                 <input
@@ -1291,7 +1314,7 @@ function SignupPage() {
                             </div>
                             {form.is_unlisted_clinic ? (
                               <div style={{ fontSize: "0.78rem", color: "#718096" }}>
-                                {form.unlisted_clinic_name} (Clinique non répertoriée)
+                                {form.unlisted_clinic_name} • {form.unlisted_clinic_wilaya || 'Wilaya non spécifiée'} (Non répertoriée)
                               </div>
                             ) : (
                               form.facility && <div style={{ fontSize: "0.78rem", color: "#718096" }}>{form.facility} ({form.selected_facility_type})</div>
