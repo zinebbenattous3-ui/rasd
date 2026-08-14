@@ -6,7 +6,8 @@ import { MedicalNetworkCanvas, type NetworkState } from "@/components/medical/Me
 import { validateNIN } from "dz-nin-checker";
 import {
   Eye, EyeOff, AlertCircle, CheckCircle2, ArrowRight, ShieldCheck,
-  Stethoscope, User, Search, Building2, Lock, ChevronRight, Edit2
+  Stethoscope, User, Search, Building2, Lock, ChevronRight, Edit2,
+  Clock, Info, X, Plus
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth-hash";
@@ -37,7 +38,11 @@ interface FormErrors {
   last_name?: string;
   nin?: string;
   specialty?: string;
+  sector?: string;
+  public_facility_type?: string;
   facility?: string;
+  unlisted_clinic_name?: string;
+  unlisted_clinic_address?: string;
   order_number?: string;
   phone?: string;
   function_title?: string;
@@ -99,12 +104,17 @@ function SignupPage() {
     nin: "",
     role: "DOCTOR" as RoleType,
     // Doctor specific
+    sector: "PUBLIC" as "PUBLIC" | "PRIVATE" | "",
     specialty: "",
     facility: "",
     facility_id: "",
-    selected_facility_type: "",
+    selected_facility_type: "CHU",
+    public_facility_type: "CHU" as "CHU" | "EPH" | "EPSP" | "",
     order_number: "",
     phone: "",
+    is_unlisted_clinic: false,
+    unlisted_clinic_name: "",
+    unlisted_clinic_address: "",
     // Patient specific
     birth_date: "",
     gender: "M",
@@ -207,10 +217,29 @@ function SignupPage() {
         if (!form.phone.trim()) nextErrors.phone = "Numéro de téléphone requis.";
         else if (!/^\d{10}$/.test(form.phone.trim())) nextErrors.phone = "Le téléphone doit comporter 10 chiffres (ex: 0550123456).";
 
-        // REQUIRE order_number ONLY if facility_type is "Clinique privée"
-        if (isPrivateClinic(form.selected_facility_type)) {
+        if (!form.sector) {
+          nextErrors.sector = "Veuillez choisir votre secteur d'exercice (Secteur public ou Secteur privé).";
+        } else if (form.sector === 'PUBLIC') {
+          if (!form.public_facility_type) {
+            nextErrors.public_facility_type = "Veuillez choisir le type d'établissement public (CHU, EPH ou EPSP).";
+          }
+          if (!form.facility_id) {
+            nextErrors.facility = "Veuillez sélectionner votre établissement public de rattachement.";
+          }
+        } else if (form.sector === 'PRIVATE') {
+          if (form.is_unlisted_clinic) {
+            if (!form.unlisted_clinic_name.trim()) {
+              nextErrors.unlisted_clinic_name = "Le nom de la clinique privée est obligatoire.";
+            }
+            if (!form.unlisted_clinic_address.trim()) {
+              nextErrors.unlisted_clinic_address = "L'adresse de la clinique est obligatoire.";
+            }
+          } else if (!form.facility_id) {
+            nextErrors.facility = "Veuillez sélectionner votre clinique privée de rattachement.";
+          }
+
           if (!form.order_number || !form.order_number.trim()) {
-            nextErrors.order_number = "Le numéro d'ordre du médecin est obligatoire pour une clinique privée.";
+            nextErrors.order_number = "Le numéro d'ordre est obligatoire pour l'exercice en secteur privé.";
           }
         }
       } else if (form.role === 'INSPECTOR') {
@@ -279,6 +308,35 @@ function SignupPage() {
     setNetworkState('done');
 
     try {
+      let doctorFacilityId = form.facility_id || null;
+
+      // Unlisted private clinic registration handling
+      if (form.role === 'DOCTOR' && form.sector === 'PRIVATE' && form.is_unlisted_clinic && form.unlisted_clinic_name.trim()) {
+        const { data: newFac, error: newFacErr } = await supabase
+          .from('facilities')
+          .insert([{
+            name: form.unlisted_clinic_name.trim(),
+            facility_type: 'Clinique privée',
+            wilaya: form.wilaya || '16 - Alger',
+            address: form.unlisted_clinic_address.trim() || null
+          }])
+          .select('id')
+          .single();
+
+        if (!newFacErr && newFac) {
+          doctorFacilityId = newFac.id;
+        } else {
+          const { data: existingFac } = await supabase
+            .from('facilities')
+            .select('id')
+            .eq('name', form.unlisted_clinic_name.trim())
+            .maybeSingle();
+          if (existingFac) {
+            doctorFacilityId = existingFac.id;
+          }
+        }
+      }
+
       if (form.role === 'DOCTOR') {
         // 1. Try RPC registration procedure for Doctors
         const { data, error } = await supabase.rpc('register_doctor', {
@@ -292,16 +350,15 @@ function SignupPage() {
         });
 
         if (!error && data && data.success !== false) {
-          if (form.facility_id || form.order_number) {
-            await supabase
-              .from('doctors')
-              .update({
-                facility_id: form.facility_id || null,
-                order_number: form.order_number.trim() || null,
-                status: 'PENDING'
-              })
-              .eq('nin', form.nin.trim());
-          }
+          await supabase
+            .from('doctors')
+            .update({
+              facility_id: doctorFacilityId,
+              order_number: form.sector === 'PRIVATE' ? (form.order_number.trim() || null) : null,
+              status: 'PENDING'
+            })
+            .eq('nin', form.nin.trim());
+
           setLoading(false);
           setDone(true);
           return;
@@ -339,8 +396,8 @@ function SignupPage() {
           user_id: userData.id,
           nin: form.nin.trim(),
           specialty: form.specialty.trim(),
-          facility_id: form.facility_id || null,
-          order_number: form.order_number.trim() || null,
+          facility_id: doctorFacilityId,
+          order_number: form.sector === 'PRIVATE' ? (form.order_number.trim() || null) : null,
           phone: form.phone.trim(),
           status: 'PENDING'
         }]);
@@ -706,17 +763,27 @@ function SignupPage() {
                   {/* STEP 3: PROFIL MÉDICAL */}
                   {step === 3 && (
                     <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem", animation: "fadeIn 0.3s ease-out" }}>
-                      <div style={{ backgroundColor: "#f0fdfa", border: "1px solid rgba(15, 162, 155, 0.3)", borderRadius: "10px", padding: "0.85rem 1rem", display: "flex", alignItems: "center", gap: "10px" }}>
-                        <Stethoscope size={20} color="#0fa29b" />
+                      
+                      {/* Header Card */}
+                      <div style={{ backgroundColor: "#f0fdfa", border: "1px solid rgba(15, 162, 155, 0.3)", borderRadius: "12px", padding: "1rem 1.25rem", display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div style={{ padding: "8px", borderRadius: "10px", backgroundColor: "rgba(15, 162, 155, 0.15)", color: "#0fa29b" }}>
+                          <Stethoscope size={22} />
+                        </div>
                         <div>
-                          <div style={{ fontSize: "0.85rem", fontWeight: "700", color: "#062C54" }}>Profil Médecin Praticien</div>
-                          <div style={{ fontSize: "0.75rem", color: "#4a5568" }}>Rattachement médical et déclarations épidémiologiques</div>
+                          <h3 style={{ fontSize: "1.05rem", fontWeight: "800", color: "#062C54", margin: 0 }}>
+                            Votre environnement professionnel
+                          </h3>
+                          <p style={{ fontSize: "0.82rem", color: "#4a5568", margin: "2px 0 0 0" }}>
+                            Indiquez le secteur et l'établissement dans lequel vous exercez.
+                          </p>
                         </div>
                       </div>
 
-                      {/* Doctor Specific Fields */}
+                      {/* Doctor Specialty */}
                       <div style={{ position: "relative" }}>
-                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Spécialité Médicale *</label>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "700", color: "#062C54", marginBottom: "0.4rem" }}>
+                          Spécialité Médicale *
+                        </label>
                         <input
                           type="text"
                           value={form.specialty}
@@ -725,7 +792,7 @@ function SignupPage() {
                             setShowSpecialtyDropdown(true);
                           }}
                           placeholder="ex: Cardiologie, Médecine générale..."
-                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.specialty ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
+                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.specialty ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem", outline: "none" }}
                           onFocus={() => setShowSpecialtyDropdown(true)}
                           onBlur={() => setTimeout(() => setShowSpecialtyDropdown(false), 200)}
                         />
@@ -741,82 +808,433 @@ function SignupPage() {
                         {errors.specialty && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.specialty}</span>}
                       </div>
 
-                      <div style={{ position: "relative" }}>
-                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Établissement rattaché</label>
-                        <input
-                          type="text"
-                          value={form.facility}
-                          onChange={(e) => {
-                            update("facility", e.target.value);
-                            update("facility_id", "");
-                            update("selected_facility_type", "");
-                            setShowFacilityDropdown(true);
-                          }}
-                          placeholder="Rechercher CHU, EPH, EPSP, Clinique..."
-                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
-                          onFocus={() => setShowFacilityDropdown(true)}
-                          onBlur={() => setTimeout(() => setShowFacilityDropdown(false), 200)}
-                        />
-                        {showFacilityDropdown && filteredFacilities.length > 0 && (
-                          <ul style={{ position: "absolute", top: "100%", left: 0, right: 0, maxHeight: "180px", overflowY: "auto", backgroundColor: "white", border: "1px solid #cbd5e1", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)", listStyle: "none", padding: "4px 0", margin: "4px 0 0 0", zIndex: 30 }}>
-                            {filteredFacilities.map((fac) => (
-                              <li
-                                key={fac.id}
-                                onClick={() => {
-                                  update("facility", fac.name);
-                                  update("facility_id", fac.id);
-                                  update("selected_facility_type", fac.facility_type);
-                                  setShowFacilityDropdown(false);
-                                }}
-                                style={{ padding: "0.6rem 1rem", fontSize: "0.9rem", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
-                              >
-                                <div style={{ fontWeight: "700", color: "#062C54" }}>{fac.name}</div>
-                                <div style={{ fontSize: "0.75rem", color: "#718096" }}>{fac.wilaya} • {fac.facility_type || 'Établissement'}</div>
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </div>
-
-                      {/* Order Number — Required for Private Clinics ONLY */}
-                      {isPrivateClinic(form.selected_facility_type) && (
-                        <div style={{ animation: "fadeIn 0.3s ease-out" }}>
-                          <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>
-                            Numéro d'ordre du médecin *
-                          </label>
-                          <input
-                            type="text"
-                            value={form.order_number}
-                            onChange={(e) => update("order_number", e.target.value)}
-                            placeholder="ex: 16/12345"
-                            style={{
-                              width: "100%",
-                              padding: "0.75rem 1rem",
-                              borderRadius: "10px",
-                              border: errors.order_number ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
-                              fontSize: "0.95rem"
-                            }}
-                          />
-                          {errors.order_number && (
-                            <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>
-                              {errors.order_number}
-                            </span>
-                          )}
-                        </div>
-                      )}
-
+                      {/* Professional Phone */}
                       <div>
-                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "600", color: "#2d3748", marginBottom: "0.4rem" }}>Téléphone professionnel *</label>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "700", color: "#062C54", marginBottom: "0.4rem" }}>
+                          Téléphone professionnel *
+                        </label>
                         <input
                           type="tel"
                           value={form.phone}
                           onChange={(e) => update("phone", e.target.value.replace(/\D/g, ""))}
                           placeholder="0550123456"
                           maxLength={10}
-                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.phone ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem" }}
+                          style={{ width: "100%", padding: "0.75rem 1rem", borderRadius: "10px", border: errors.phone ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.95rem", outline: "none" }}
                         />
                         {errors.phone && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.phone}</span>}
                       </div>
+
+                      {/* SECTEUR D'EXERCICE SELECTION */}
+                      <div>
+                        <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "700", color: "#062C54", marginBottom: "0.5rem" }}>
+                          Secteur d'exercice *
+                        </label>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                          {/* PUBLIC SECTOR BUTTON */}
+                          <div
+                            onClick={() => {
+                              update("sector", "PUBLIC");
+                              update("public_facility_type", "CHU");
+                              update("facility", "");
+                              update("facility_id", "");
+                              update("selected_facility_type", "CHU");
+                              update("is_unlisted_clinic", false);
+                              update("order_number", "");
+                            }}
+                            style={{
+                              padding: "14px 16px",
+                              borderRadius: "12px",
+                              border: form.sector === "PUBLIC" ? "2px solid #0fa29b" : "1.5px solid #cbd5e1",
+                              backgroundColor: form.sector === "PUBLIC" ? "#f0fdfa" : "#ffffff",
+                              cursor: "pointer",
+                              transition: "all 0.2s ease",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px"
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "800", color: "#062C54", fontSize: "0.95rem" }}>
+                                <Building2 size={18} color={form.sector === "PUBLIC" ? "#0fa29b" : "#64748b"} />
+                                <span>Secteur public</span>
+                              </div>
+                              {form.sector === "PUBLIC" && <CheckCircle2 size={18} color="#0fa29b" />}
+                            </div>
+                            <span style={{ fontSize: "0.78rem", color: "#64748b", paddingLeft: "26px" }}>
+                              CHU · EPH · EPSP
+                            </span>
+                          </div>
+
+                          {/* PRIVATE SECTOR BUTTON */}
+                          <div
+                            onClick={() => {
+                              update("sector", "PRIVATE");
+                              update("selected_facility_type", "Clinique privée");
+                              update("facility", "");
+                              update("facility_id", "");
+                              update("public_facility_type", "");
+                              update("is_unlisted_clinic", false);
+                            }}
+                            style={{
+                              padding: "14px 16px",
+                              borderRadius: "12px",
+                              border: form.sector === "PRIVATE" ? "2px solid #0fa29b" : "1.5px solid #cbd5e1",
+                              backgroundColor: form.sector === "PRIVATE" ? "#f0fdfa" : "#ffffff",
+                              cursor: "pointer",
+                              transition: "all 0.2s ease",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px"
+                            }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px", fontWeight: "800", color: "#062C54", fontSize: "0.95rem" }}>
+                                <Stethoscope size={18} color={form.sector === "PRIVATE" ? "#0fa29b" : "#64748b"} />
+                                <span>Secteur privé</span>
+                              </div>
+                              {form.sector === "PRIVATE" && <CheckCircle2 size={18} color="#0fa29b" />}
+                            </div>
+                            <span style={{ fontSize: "0.78rem", color: "#64748b", paddingLeft: "26px" }}>
+                              Clinique privée
+                            </span>
+                          </div>
+                        </div>
+                        {errors.sector && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.sector}</span>}
+                      </div>
+
+                      {/* PUBLIC SECTOR FLOW */}
+                      {form.sector === 'PUBLIC' && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", backgroundColor: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                          
+                          {/* FACILITY TYPE CHOICES */}
+                          <div>
+                            <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "700", color: "#062C54", marginBottom: "0.4rem" }}>
+                              Type d'établissement public *
+                            </label>
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "8px" }}>
+                              {[
+                                { type: "CHU", label: "CHU", desc: "Centre Hospitalo-Universitaire" },
+                                { type: "EPH", label: "EPH", desc: "Établissement Public Hospitalier" },
+                                { type: "EPSP", label: "EPSP", desc: "Établissement Public de Santé de Proximité" },
+                              ].map((opt) => (
+                                <button
+                                  key={opt.type}
+                                  type="button"
+                                  onClick={() => {
+                                    update("public_facility_type", opt.type);
+                                    update("selected_facility_type", opt.type);
+                                    update("facility", "");
+                                    update("facility_id", "");
+                                  }}
+                                  style={{
+                                    padding: "10px 8px",
+                                    borderRadius: "10px",
+                                    border: form.public_facility_type === opt.type ? "2px solid #0fa29b" : "1px solid #cbd5e1",
+                                    backgroundColor: form.public_facility_type === opt.type ? "#f0fdfa" : "#ffffff",
+                                    color: "#062C54",
+                                    fontWeight: "700",
+                                    fontSize: "0.85rem",
+                                    cursor: "pointer",
+                                    textAlign: "center",
+                                    display: "flex",
+                                    flexDirection: "column",
+                                    alignItems: "center",
+                                    gap: "2px"
+                                  }}
+                                >
+                                  <span>{opt.label}</span>
+                                  <span style={{ fontSize: "0.68rem", fontWeight: "500", color: "#64748b", lineHeight: "1.1" }}>{opt.desc}</span>
+                                </button>
+                              ))}
+                            </div>
+                            {errors.public_facility_type && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.public_facility_type}</span>}
+                          </div>
+
+                          {/* FACILITY SELECTION OR SELECTED CARD */}
+                          {form.facility_id ? (
+                            <div style={{ backgroundColor: "#ffffff", border: "1.5px solid #0fa29b", borderRadius: "12px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(15,162,155,0.08)" }}>
+                              <div>
+                                <div style={{ fontSize: "0.72rem", fontWeight: "800", color: "#0fa29b", textTransform: "uppercase" }}>
+                                  Établissement Sélectionné ({form.selected_facility_type})
+                                </div>
+                                <div style={{ fontSize: "1rem", fontWeight: "800", color: "#062C54", marginTop: "2px" }}>
+                                  {form.facility}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  update("facility", "");
+                                  update("facility_id", "");
+                                }}
+                                style={{ backgroundColor: "#f1f5f9", border: "none", borderRadius: "8px", padding: "6px 12px", fontSize: "0.8rem", fontWeight: "700", color: "#475569", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                              >
+                                <X size={14} /> Changer
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ position: "relative" }}>
+                              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "700", color: "#062C54", marginBottom: "0.4rem" }}>
+                                Rechercher et sélectionner un établissement ({form.public_facility_type || 'Public'}) *
+                              </label>
+                              <div style={{ position: "relative" }}>
+                                <input
+                                  type="text"
+                                  value={form.facility}
+                                  onChange={(e) => {
+                                    update("facility", e.target.value);
+                                    setShowFacilityDropdown(true);
+                                  }}
+                                  placeholder={`Rechercher un ${form.public_facility_type || 'établissement'}...`}
+                                  style={{ width: "100%", padding: "0.75rem 1rem 0.75rem 2.5rem", borderRadius: "10px", border: errors.facility ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.92rem", outline: "none" }}
+                                  onFocus={() => setShowFacilityDropdown(true)}
+                                />
+                                <Search size={18} color="#94a3b8" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }} />
+                              </div>
+
+                              {showFacilityDropdown && (
+                                <div style={{ marginTop: "6px", maxHeight: "200px", overflowY: "auto", backgroundColor: "white", border: "1px solid #cbd5e1", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)", padding: "4px" }}>
+                                  {facilitiesList
+                                    .filter(f => f.facility_type === form.public_facility_type && (
+                                      normalizeString(f.name).includes(normalizeString(form.facility)) ||
+                                      (f.wilaya && normalizeString(f.wilaya).includes(normalizeString(form.facility)))
+                                    ))
+                                    .map((fac) => (
+                                      <div
+                                        key={fac.id}
+                                        onClick={() => {
+                                          update("facility", fac.name);
+                                          update("facility_id", fac.id);
+                                          update("selected_facility_type", fac.facility_type);
+                                          setShowFacilityDropdown(false);
+                                        }}
+                                        style={{ padding: "10px 12px", borderRadius: "8px", cursor: "pointer", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                                      >
+                                        <div>
+                                          <div style={{ fontWeight: "800", color: "#062C54", fontSize: "0.9rem" }}>{fac.name}</div>
+                                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{fac.facility_type} • Wilaya {fac.wilaya}</div>
+                                        </div>
+                                        <ChevronRight size={16} color="#94a3b8" />
+                                      </div>
+                                    ))
+                                  }
+                                  {facilitiesList.filter(f => f.facility_type === form.public_facility_type).length === 0 && (
+                                    <div style={{ padding: "12px", fontSize: "0.85rem", color: "#64748b", textAlign: "center" }}>
+                                      Aucun établissement de type {form.public_facility_type} trouvé.
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                              {errors.facility && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.facility}</span>}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* PRIVATE SECTOR FLOW */}
+                      {form.sector === 'PRIVATE' && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "1rem", backgroundColor: "#f8fafc", padding: "16px", borderRadius: "12px", border: "1px solid #e2e8f0" }}>
+                          
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <div>
+                              <span style={{ fontSize: "0.78rem", fontWeight: "700", color: "#64748b" }}>Type d'Établissement: </span>
+                              <span style={{ fontSize: "0.82rem", fontWeight: "800", color: "#0fa29b", backgroundColor: "#f0fdfa", border: "1px solid rgba(15,162,155,0.3)", padding: "2px 8px", borderRadius: "6px" }}>Clinique privée</span>
+                            </div>
+                          </div>
+
+                          {form.is_unlisted_clinic ? (
+                            <div style={{ display: "flex", flexDirection: "column", gap: "12px", backgroundColor: "#ffffff", border: "1.5px solid #0fa29b", borderRadius: "12px", padding: "14px" }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <div style={{ fontSize: "0.85rem", fontWeight: "800", color: "#062C54" }}>
+                                  Nouvelle clinique privée (Non répertoriée)
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    update("is_unlisted_clinic", false);
+                                    update("unlisted_clinic_name", "");
+                                    update("unlisted_clinic_address", "");
+                                  }}
+                                  style={{ background: "none", border: "none", color: "#0fa29b", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer" }}
+                                >
+                                  ← Rechercher une clinique répertoriée
+                                </button>
+                              </div>
+
+                              <div>
+                                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", color: "#062C54", marginBottom: "0.3rem" }}>
+                                  Nom de la clinique privée *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={form.unlisted_clinic_name}
+                                  onChange={(e) => update("unlisted_clinic_name", e.target.value)}
+                                  placeholder="ex: Clinique El Shifa"
+                                  style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: "8px", border: errors.unlisted_clinic_name ? "1.5px solid #ef4444" : "1px solid #cbd5e1", fontSize: "0.9rem" }}
+                                />
+                                {errors.unlisted_clinic_name && <span style={{ color: "#ef4444", fontSize: "0.78rem", marginTop: "0.2rem", display: "block" }}>{errors.unlisted_clinic_name}</span>}
+                              </div>
+
+                              <div>
+                                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", color: "#062C54", marginBottom: "0.3rem" }}>
+                                  Adresse complète de la clinique *
+                                </label>
+                                <input
+                                  type="text"
+                                  value={form.unlisted_clinic_address}
+                                  onChange={(e) => update("unlisted_clinic_address", e.target.value)}
+                                  placeholder="ex: 15 Rue Didouche Mourad, Alger"
+                                  style={{ width: "100%", padding: "0.65rem 0.85rem", borderRadius: "8px", border: errors.unlisted_clinic_address ? "1.5px solid #ef4444" : "1px solid #cbd5e1", fontSize: "0.9rem" }}
+                                />
+                                {errors.unlisted_clinic_address && <span style={{ color: "#ef4444", fontSize: "0.78rem", marginTop: "0.2rem", display: "block" }}>{errors.unlisted_clinic_address}</span>}
+                              </div>
+
+                              {/* LEGAL WARNING NOTICE */}
+                              <div style={{ backgroundColor: "#fefce8", border: "1px solid #fef08a", borderRadius: "10px", padding: "10px 12px", fontSize: "0.78rem", color: "#854d0e", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                                <ShieldCheck size={16} color="#ca8a04" style={{ flexShrink: 0, marginTop: "2px" }} />
+                                <span>
+                                  En renseignant une clinique privée non répertoriée, vous confirmez que les informations fournies sont exactes et engagez votre responsabilité quant à leur authenticité. L'établissement pourra faire l'objet d'une vérification avant validation définitive.
+                                </span>
+                              </div>
+                            </div>
+                          ) : form.facility_id ? (
+                            <div style={{ backgroundColor: "#ffffff", border: "1.5px solid #0fa29b", borderRadius: "12px", padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", boxShadow: "0 2px 8px rgba(15,162,155,0.08)" }}>
+                              <div>
+                                <div style={{ fontSize: "0.72rem", fontWeight: "800", color: "#0fa29b", textTransform: "uppercase" }}>
+                                  Clinique Sélectionnée (Clinique privée)
+                                </div>
+                                <div style={{ fontSize: "1rem", fontWeight: "800", color: "#062C54", marginTop: "2px" }}>
+                                  {form.facility}
+                                </div>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  update("facility", "");
+                                  update("facility_id", "");
+                                }}
+                                style={{ backgroundColor: "#f1f5f9", border: "none", borderRadius: "8px", padding: "6px 12px", fontSize: "0.8rem", fontWeight: "700", color: "#475569", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}
+                              >
+                                <X size={14} /> Changer
+                              </button>
+                            </div>
+                          ) : (
+                            <div style={{ position: "relative" }}>
+                              <label style={{ display: "block", fontSize: "0.85rem", fontWeight: "700", color: "#062C54", marginBottom: "0.4rem" }}>
+                                Rechercher votre clinique privée *
+                              </label>
+                              <div style={{ position: "relative" }}>
+                                <input
+                                  type="text"
+                                  value={form.facility}
+                                  onChange={(e) => {
+                                    update("facility", e.target.value);
+                                    setShowFacilityDropdown(true);
+                                  }}
+                                  placeholder="Rechercher une clinique privée..."
+                                  style={{ width: "100%", padding: "0.75rem 1rem 0.75rem 2.5rem", borderRadius: "10px", border: errors.facility ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1", fontSize: "0.92rem", outline: "none" }}
+                                  onFocus={() => setShowFacilityDropdown(true)}
+                                />
+                                <Search size={18} color="#94a3b8" style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }} />
+                              </div>
+
+                              {showFacilityDropdown && (
+                                <div style={{ marginTop: "6px", maxHeight: "200px", overflowY: "auto", backgroundColor: "white", border: "1px solid #cbd5e1", borderRadius: "10px", boxShadow: "0 10px 25px rgba(0,0,0,0.1)", padding: "4px" }}>
+                                  {facilitiesList
+                                    .filter(f => isPrivateClinic(f.facility_type) && (
+                                      normalizeString(f.name).includes(normalizeString(form.facility)) ||
+                                      (f.wilaya && normalizeString(f.wilaya).includes(normalizeString(form.facility)))
+                                    ))
+                                    .map((fac) => (
+                                      <div
+                                        key={fac.id}
+                                        onClick={() => {
+                                          update("facility", fac.name);
+                                          update("facility_id", fac.id);
+                                          setShowFacilityDropdown(false);
+                                        }}
+                                        style={{ padding: "10px 12px", borderRadius: "8px", cursor: "pointer", borderBottom: "1px solid #f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                                      >
+                                        <div>
+                                          <div style={{ fontWeight: "800", color: "#062C54", fontSize: "0.9rem" }}>{fac.name}</div>
+                                          <div style={{ fontSize: "0.75rem", color: "#64748b" }}>Clinique privée • Wilaya {fac.wilaya}</div>
+                                        </div>
+                                        <ChevronRight size={16} color="#94a3b8" />
+                                      </div>
+                                    ))
+                                  }
+                                  
+                                  {/* UNLISTED CLINIC SECONDARY ACTION */}
+                                  <div
+                                    onClick={() => {
+                                      update("is_unlisted_clinic", true);
+                                      update("facility", "");
+                                      update("facility_id", "");
+                                      setShowFacilityDropdown(false);
+                                    }}
+                                    style={{ padding: "10px", backgroundColor: "#f0fdfa", color: "#0fa29b", fontWeight: "800", fontSize: "0.85rem", borderRadius: "8px", cursor: "pointer", textAlign: "center", border: "1.5px dashed rgba(15,162,155,0.4)", marginTop: "4px", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+                                  >
+                                    <Plus size={16} />
+                                    <span>Ma clinique n'est pas répertoriée</span>
+                                  </div>
+                                </div>
+                              )}
+                              {errors.facility && <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>{errors.facility}</span>}
+
+                              {!showFacilityDropdown && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    update("is_unlisted_clinic", true);
+                                    update("facility", "");
+                                    update("facility_id", "");
+                                  }}
+                                  style={{ marginTop: "8px", background: "none", border: "none", color: "#0fa29b", fontSize: "0.82rem", fontWeight: "800", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "4px" }}
+                                >
+                                  <Plus size={14} /> Ma clinique n'est pas répertoriée
+                                </button>
+                              )}
+                            </div>
+                          )}
+
+                          {/* NUMÉRO D'ORDRE (PRIVATE ONLY) */}
+                          <div>
+                            <label style={{ display: "block", fontSize: "0.88rem", fontWeight: "700", color: "#062C54", marginBottom: "0.2rem" }}>
+                              Numéro d'ordre *
+                            </label>
+                            <div style={{ fontSize: "0.75rem", color: "#64748b", marginBottom: "0.4rem" }}>
+                              Numéro d'inscription au Tableau de l'Ordre des médecins.
+                            </div>
+                            <input
+                              type="text"
+                              value={form.order_number}
+                              onChange={(e) => update("order_number", e.target.value)}
+                              placeholder="ex: 16/12345"
+                              style={{
+                                width: "100%",
+                                padding: "0.75rem 1rem",
+                                borderRadius: "10px",
+                                border: errors.order_number ? "1.5px solid #ef4444" : "1.5px solid #cbd5e1",
+                                fontSize: "0.95rem",
+                                outline: "none"
+                              }}
+                            />
+                            {errors.order_number && (
+                              <span style={{ color: "#ef4444", fontSize: "0.8rem", marginTop: "0.3rem", display: "block" }}>
+                                {errors.order_number}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* VERIFICATION NOTICE */}
+                          <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "10px 12px", fontSize: "0.78rem", color: "#1e40af", display: "flex", gap: "8px", alignItems: "flex-start" }}>
+                            <Clock size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: "2px" }} />
+                            <span>
+                              Votre inscription sera enregistrée avec le statut En attente (PENDING). Votre rattachement à cet établissement sera soumis à vérification administrative.
+                            </span>
+                          </div>
+                        </div>
+                      )}
 
                       <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
                         <button type="button" onClick={prevStep} style={{ flex: 1, padding: "0.85rem", borderRadius: "10px", border: "1.5px solid #cbd5e1", backgroundColor: "transparent", color: "#062C54", fontWeight: "600", cursor: "pointer" }}>
@@ -866,12 +1284,21 @@ function SignupPage() {
                           <div>
                             <div style={{ fontSize: "0.75rem", fontWeight: "700", color: "#718096", textTransform: "uppercase" }}>Profil</div>
                             <div style={{ fontSize: "0.92rem", fontWeight: "600", color: "#0fa29b", marginTop: "2px" }}>
-                              {form.role === 'DOCTOR' && `Médecin ${form.specialty ? `• ${form.specialty}` : ''}`}
+                              {form.role === 'DOCTOR' && `Médecin ${form.specialty ? `• ${form.specialty}` : ''} (${form.sector === 'PRIVATE' ? 'Secteur privé' : 'Secteur public'})`}
                               {form.role === 'PATIENT' && `Patient • Groupe ${form.blood_type}`}
                               {form.role === 'INSPECTOR' && `Inspecteur • ${form.wilaya}`}
                               {form.role === 'HEALTH_AUTHORITY' && `Autorité Sanitaire • ${form.authority_position}`}
                             </div>
-                            {form.facility && <div style={{ fontSize: "0.78rem", color: "#718096" }}>{form.facility}</div>}
+                            {form.is_unlisted_clinic ? (
+                              <div style={{ fontSize: "0.78rem", color: "#718096" }}>
+                                {form.unlisted_clinic_name} (Clinique non répertoriée)
+                              </div>
+                            ) : (
+                              form.facility && <div style={{ fontSize: "0.78rem", color: "#718096" }}>{form.facility} ({form.selected_facility_type})</div>
+                            )}
+                            {form.sector === 'PRIVATE' && form.order_number && (
+                              <div style={{ fontSize: "0.78rem", color: "#718096" }}>N° d'ordre: {form.order_number}</div>
+                            )}
                           </div>
                           <button type="button" onClick={() => setStep(3)} style={{ background: "none", border: "none", color: "#0fa29b", fontSize: "0.8rem", fontWeight: "700", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
                             <Edit2 size={12} /> Modifier
