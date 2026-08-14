@@ -1253,7 +1253,7 @@ function SignupPage() {
                           <div style={{ backgroundColor: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: "10px", padding: "10px 12px", fontSize: "0.78rem", color: "#1e40af", display: "flex", gap: "8px", alignItems: "flex-start" }}>
                             <Clock size={16} color="#2563eb" style={{ flexShrink: 0, marginTop: "2px" }} />
                             <span>
-                              Votre inscription sera enregistrée avec le statut En attente (PENDING). Votre rattachement à cet établissement sera soumis à vérification administrative.
+                              Votre inscription sera enregistrée avec le statut En attente . Votre rattachement à cet établissement sera soumis à vérification administrative.
                             </span>
                           </div>
                         </div>

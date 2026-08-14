@@ -37,6 +37,7 @@ import { Route as InspectorFacilitiesRouteImport } from './routes/inspector/faci
 import { Route as InspectorHealthEventsRouteImport } from './routes/inspector/health-events'
 import { Route as InspectorHistoryRouteImport } from './routes/inspector/history'
 import { Route as InspectorReportsRouteImport } from './routes/inspector/reports'
+import { Route as InspectorRequestsRouteImport } from './routes/inspector/requests'
 import { Route as SuperadminIndexRouteImport } from './routes/superadmin/index'
 import { Route as SuperadminFacilitiesRouteImport } from './routes/superadmin/facilities'
 import { Route as SuperadminHealthAuthoritiesRouteImport } from './routes/superadmin/health-authorities'
@@ -186,6 +187,11 @@ const InspectorReportsRoute = InspectorReportsRouteImport.update({
   path: '/reports',
   getParentRoute: () => InspectorRoute,
 } as any)
+const InspectorRequestsRoute = InspectorRequestsRouteImport.update({
+  id: '/requests',
+  path: '/requests',
+  getParentRoute: () => InspectorRoute,
+} as any)
 const SuperadminIndexRoute = SuperadminIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/inspector/health-events': typeof InspectorHealthEventsRoute
   '/inspector/history': typeof InspectorHistoryRoute
   '/inspector/reports': typeof InspectorReportsRoute
+  '/inspector/requests': typeof InspectorRequestsRoute
   '/superadmin/facilities': typeof SuperadminFacilitiesRoute
   '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
   '/superadmin/inspectors': typeof SuperadminInspectorsRoute
@@ -283,6 +290,7 @@ export interface FileRoutesByTo {
   '/inspector/health-events': typeof InspectorHealthEventsRoute
   '/inspector/history': typeof InspectorHistoryRoute
   '/inspector/reports': typeof InspectorReportsRoute
+  '/inspector/requests': typeof InspectorRequestsRoute
   '/superadmin/facilities': typeof SuperadminFacilitiesRoute
   '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
   '/superadmin/inspectors': typeof SuperadminInspectorsRoute
@@ -321,6 +329,7 @@ export interface FileRoutesById {
   '/inspector/health-events': typeof InspectorHealthEventsRoute
   '/inspector/history': typeof InspectorHistoryRoute
   '/inspector/reports': typeof InspectorReportsRoute
+  '/inspector/requests': typeof InspectorRequestsRoute
   '/superadmin/facilities': typeof SuperadminFacilitiesRoute
   '/superadmin/health-authorities': typeof SuperadminHealthAuthoritiesRoute
   '/superadmin/inspectors': typeof SuperadminInspectorsRoute
@@ -360,6 +369,7 @@ export interface FileRouteTypes {
     | '/inspector/health-events'
     | '/inspector/history'
     | '/inspector/reports'
+    | '/inspector/requests'
     | '/superadmin/facilities'
     | '/superadmin/health-authorities'
     | '/superadmin/inspectors'
@@ -393,6 +403,7 @@ export interface FileRouteTypes {
     | '/inspector/health-events'
     | '/inspector/history'
     | '/inspector/reports'
+    | '/inspector/requests'
     | '/superadmin/facilities'
     | '/superadmin/health-authorities'
     | '/superadmin/inspectors'
@@ -430,6 +441,7 @@ export interface FileRouteTypes {
     | '/inspector/health-events'
     | '/inspector/history'
     | '/inspector/reports'
+    | '/inspector/requests'
     | '/superadmin/facilities'
     | '/superadmin/health-authorities'
     | '/superadmin/inspectors'
@@ -656,6 +668,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InspectorReportsRouteImport
       parentRoute: typeof InspectorRoute
     }
+    '/inspector/requests': {
+      id: '/inspector/requests'
+      path: '/requests'
+      fullPath: '/inspector/requests'
+      preLoaderRoute: typeof InspectorRequestsRouteImport
+      parentRoute: typeof InspectorRoute
+    }
     '/superadmin/': {
       id: '/superadmin/'
       path: '/'
@@ -751,6 +770,7 @@ interface InspectorRouteChildren {
   InspectorHealthEventsRoute: typeof InspectorHealthEventsRoute
   InspectorHistoryRoute: typeof InspectorHistoryRoute
   InspectorReportsRoute: typeof InspectorReportsRoute
+  InspectorRequestsRoute: typeof InspectorRequestsRoute
   InspectorIndexRoute: typeof InspectorIndexRoute
 }
 
@@ -760,6 +780,7 @@ const InspectorRouteChildren: InspectorRouteChildren = {
   InspectorHealthEventsRoute: InspectorHealthEventsRoute,
   InspectorHistoryRoute: InspectorHistoryRoute,
   InspectorReportsRoute: InspectorReportsRoute,
+  InspectorRequestsRoute: InspectorRequestsRoute,
   InspectorIndexRoute: InspectorIndexRoute,
 }
 
