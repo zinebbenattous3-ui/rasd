@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/utils";
 import { 
@@ -33,7 +33,10 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
-// Reusable Ultra-Modern Custom Dropdown Component
+// PUBLIC FACILITY TYPES FOR HEALTH AUTHORITY ONLY
+const PUBLIC_FACILITY_TYPES = ["CHU", "EPH", "EPSP"];
+
+// Reusable Custom Dropdown Component
 function CustomDropdown({
   icon: Icon,
   options,
@@ -108,8 +111,7 @@ function CustomDropdown({
           zIndex: 100,
           padding: '6px',
           maxHeight: '260px',
-          overflowY: 'auto',
-          animation: 'fadeIn 0.15s ease-out'
+          overflowY: 'auto'
         }}>
           {options.map((opt) => {
             const isSelected = opt.value === value;
@@ -167,7 +169,7 @@ function HealthAuthorityDoctorsPage() {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedStatus, setSelectedStatus] = useState<string>("PENDING"); // Default prioritizes PENDING
+  const [selectedStatus, setSelectedStatus] = useState<string>("PENDING");
   const [selectedFacility, setSelectedFacility] = useState<string>("ALL");
   const [selectedSpecialty, setSelectedSpecialty] = useState<string>("ALL");
 
@@ -189,7 +191,7 @@ function HealthAuthorityDoctorsPage() {
     return () => clearTimeout(timer);
   }, [toast]);
 
-  // Load Health Authority's responsible facilities & linked doctors
+  // Load Health Authority's public facilities & linked public-sector doctors strictly
   const loadData = async () => {
     setLoading(true);
     try {
@@ -208,40 +210,29 @@ function HealthAuthorityDoctorsPage() {
         .limit(1)
         .maybeSingle();
 
-      if (!authData?.user_id) {
-        setLoading(false);
-        return;
+      if (authData?.user_id) {
+        setCurrentUserId(authData.user_id);
       }
 
-      const uid = authData.user_id;
-      setCurrentUserId(uid);
-
-      // 2. Fetch facilities created by / assigned to this Health Authority
+      // 2. Fetch PUBLIC facilities ONLY (CHU, EPH, EPSP) - strict query-level filter
       const { data: facsData } = await supabase
         .from('facilities')
         .select('id, name, wilaya, facility_type')
-        .eq('created_by', uid);
+        .in('facility_type', PUBLIC_FACILITY_TYPES);
 
-      let facIds: string[] = [];
-      if (facsData && facsData.length > 0) {
-        facIds = facsData.map(f => f.id);
-        setResponsibleFacilities(facsData);
-      } else {
-        // Fallback: If no facilities created by this specific user yet, query all facilities for demonstration
-        const { data: allFacs } = await supabase.from('facilities').select('id, name, wilaya, facility_type');
-        if (allFacs) {
-          facIds = allFacs.map(f => f.id);
-          setResponsibleFacilities(allFacs);
-        }
-      }
+      const publicFacs = facsData || [];
+      setResponsibleFacilities(publicFacs);
 
-      if (facIds.length === 0) {
+      const publicFacIds = publicFacs.map(f => f.id);
+
+      if (publicFacIds.length === 0) {
         setDoctors([]);
+        setStats({ pending: 0, accepted: 0, rejected: 0 });
         setLoading(false);
         return;
       }
 
-      // 3. Fetch doctors belonging strictly to responsible facilities
+      // 3. Fetch doctors belonging strictly to PUBLIC facilities
       const { data: docsData, error: docsError } = await supabase
         .from('doctors')
         .select(`
@@ -261,15 +252,17 @@ function HealthAuthorityDoctorsPage() {
             wilaya
           )
         `)
-        .in('facility_id', facIds)
+        .in('facility_id', publicFacIds)
         .order('created_at', { ascending: false });
 
       if (!docsError && docsData) {
-        setDoctors(docsData);
+        // Double guarantee query level filter for public facility types
+        const publicDocs = docsData.filter(d => d.facility && PUBLIC_FACILITY_TYPES.includes(d.facility.facility_type));
+        setDoctors(publicDocs);
 
-        const pending = docsData.filter(d => d.status === 'PENDING').length;
-        const accepted = docsData.filter(d => d.status === 'ACCEPTED').length;
-        const rejected = docsData.filter(d => d.status === 'REJECTED').length;
+        const pending = publicDocs.filter(d => d.status === 'PENDING').length;
+        const accepted = publicDocs.filter(d => d.status === 'ACCEPTED').length;
+        const rejected = publicDocs.filter(d => d.status === 'REJECTED').length;
         setStats({ pending, accepted, rejected });
       }
     } catch (err) {
@@ -289,16 +282,15 @@ function HealthAuthorityDoctorsPage() {
     setShowDrawer(true);
   };
 
-  // Handle Accept Doctor
+  // Handle Accept Doctor (Public sector)
   const handleConfirmAccept = async () => {
-    if (!selectedDoctor || !currentUserId) return;
+    if (!selectedDoctor) return;
     setSubmittingAction(true);
     setActionError(null);
 
     try {
       const now = new Date().toISOString();
 
-      // Update doctor status to ACCEPTED
       const { error: updateErr } = await supabase
         .from('doctors')
         .update({
@@ -313,7 +305,7 @@ function HealthAuthorityDoctorsPage() {
 
       setShowAcceptModal(false);
       setShowDrawer(false);
-      setToast({ message: "✓ Médecin accepté", type: 'success' });
+      setToast({ message: "✓ Médecin du secteur public accepté", type: 'success' });
       loadData();
     } catch (err: any) {
       setActionError(err.message || "Erreur lors de la validation.");
@@ -324,14 +316,13 @@ function HealthAuthorityDoctorsPage() {
 
   // Handle Reject Doctor
   const handleConfirmReject = async () => {
-    if (!selectedDoctor || !currentUserId) return;
+    if (!selectedDoctor) return;
     setSubmittingAction(true);
     setActionError(null);
 
     try {
       const now = new Date().toISOString();
 
-      // Update doctor status to REJECTED
       const { error: updateErr } = await supabase
         .from('doctors')
         .update({
@@ -379,10 +370,8 @@ function HealthAuthorityDoctorsPage() {
     return matchesQuery && matchesStatus && matchesFacility && matchesSpecialty;
   });
 
-  // Check if any filter is active (non-default)
   const isFilterActive = searchQuery.trim() !== "" || selectedStatus !== "ALL" || selectedFacility !== "ALL" || selectedSpecialty !== "ALL";
 
-  // Reset active filters
   const resetFilters = () => {
     setSearchQuery("");
     setSelectedStatus("ALL");
@@ -390,18 +379,15 @@ function HealthAuthorityDoctorsPage() {
     setSelectedSpecialty("ALL");
   };
 
-  // Format Doctor Full Name cleanly (Fallback if DB has placeholder "1")
   const getDoctorFullName = (doc: any) => {
     if (!doc?.users) return "Médecin";
     const fn = (doc.users.first_name || '').trim();
     const ln = (doc.users.last_name || '').trim();
     
-    // Check if real names exist and are not placeholder "1"
     if (fn && ln && fn !== "1" && ln !== "1") {
       return `${fn} ${ln}`;
     }
 
-    // Fall back to clean email prefix
     if (doc.users.email) {
       const emailPrefix = doc.users.email.split('@')[0];
       const cleanName = emailPrefix.replace(/[0-9]/g, '');
@@ -413,7 +399,6 @@ function HealthAuthorityDoctorsPage() {
     return "Médecin";
   };
 
-  // Status Filter Options
   const statusOptions = [
     { value: 'ALL', label: 'Tous les statuts' },
     { value: 'PENDING', label: 'En attente', dotColor: '#D97706' },
@@ -421,13 +406,11 @@ function HealthAuthorityDoctorsPage() {
     { value: 'REJECTED', label: 'Refusés', dotColor: '#DC2626' },
   ];
 
-  // Facility Filter Options
   const facilityOptions = [
-    { value: 'ALL', label: 'Toutes les structures' },
-    ...responsibleFacilities.map(f => ({ value: f.id, label: `${f.name} (${f.wilaya})` }))
+    { value: 'ALL', label: 'Tous les établissements publics' },
+    ...responsibleFacilities.map(f => ({ value: f.id, label: `${f.name} (${f.facility_type})` }))
   ];
 
-  // Specialty Filter Options
   const specialtyOptions = [
     { value: 'ALL', label: 'Toutes les spécialités' },
     ...uniqueSpecialties.map(s => ({ value: s, label: s }))
@@ -435,7 +418,6 @@ function HealthAuthorityDoctorsPage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Toast Feedback Notification */}
       {toast && (
         <div style={{
           position: 'fixed',
@@ -451,15 +433,14 @@ function HealthAuthorityDoctorsPage() {
           fontWeight: '700',
           display: 'flex',
           alignItems: 'center',
-          gap: '10px',
-          animation: 'fadeIn 0.2s'
+          gap: '10px'
         }}>
           {toast.type === 'success' ? <CheckCircle2 size={18} color="#34D399" /> : <AlertCircle size={18} color="#FCA5A5" />}
           <span>{toast.message}</span>
         </div>
       )}
 
-      {/* Top Header & Subtitle */}
+      {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
@@ -467,11 +448,11 @@ function HealthAuthorityDoctorsPage() {
               <Stethoscope size={24} />
             </div>
             <h2 style={{ fontSize: '1.75rem', fontWeight: '800', color: COLORS.navy, margin: 0, letterSpacing: '-0.02em' }}>
-              Vérification des Médecins
+              Vérification des Médecins du Secteur Public
             </h2>
           </div>
           <p style={{ color: COLORS.muted, fontSize: '0.95rem', margin: 0 }}>
-            Examinez et validez les demandes d'inscription des médecins rattachés à vos établissements.
+            Instruction et validation exclusive des praticiens de santé rattachés aux structures publiques (CHU, EPH, EPSP).
           </p>
         </div>
 
@@ -497,9 +478,8 @@ function HealthAuthorityDoctorsPage() {
         </button>
       </div>
 
-      {/* Statistics Cards */}
+      {/* Statistics Cards (Strictly Public Sector) */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
-        {/* Pending Card */}
         <div 
           onClick={() => setSelectedStatus("PENDING")}
           style={{
@@ -508,19 +488,17 @@ function HealthAuthorityDoctorsPage() {
             borderRadius: '16px',
             border: selectedStatus === "PENDING" ? `2px solid #D97706` : `1px solid ${COLORS.border}`,
             cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.02)',
-            transition: 'all 0.15s'
+            boxShadow: '0 4px 14px rgba(0,0,0,0.02)'
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>En Attente</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#D97706', textTransform: 'uppercase', letterSpacing: '0.05em' }}>En Attente (Public)</span>
             <Clock size={18} color="#D97706" />
           </div>
           <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#B45309', marginTop: '10px' }}>{stats.pending}</div>
-          <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>Demandes à examiner</div>
+          <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>CHU · EPH · EPSP</div>
         </div>
 
-        {/* Accepted Card */}
         <div 
           onClick={() => setSelectedStatus("ACCEPTED")}
           style={{
@@ -529,19 +507,17 @@ function HealthAuthorityDoctorsPage() {
             borderRadius: '16px',
             border: selectedStatus === "ACCEPTED" ? `2px solid ${COLORS.teal}` : `1px solid ${COLORS.border}`,
             cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.02)',
-            transition: 'all 0.15s'
+            boxShadow: '0 4px 14px rgba(0,0,0,0.02)'
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#15803D', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Acceptés</span>
+            <span style={{ fontSize: '0.8rem', fontWeight: '700', color: '#15803D', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Acceptés (Public)</span>
             <CheckCircle2 size={18} color="#15803D" />
           </div>
           <div style={{ fontSize: '2.2rem', fontWeight: '800', color: '#15803D', marginTop: '10px' }}>{stats.accepted}</div>
-          <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>Profils vérifiés</div>
+          <div style={{ fontSize: '0.78rem', color: COLORS.muted, marginTop: '4px' }}>Profils publics vérifiés</div>
         </div>
 
-        {/* Rejected Card */}
         <div 
           onClick={() => setSelectedStatus("REJECTED")}
           style={{
@@ -550,8 +526,7 @@ function HealthAuthorityDoctorsPage() {
             borderRadius: '16px',
             border: selectedStatus === "REJECTED" ? `2px solid #DC2626` : `1px solid ${COLORS.border}`,
             cursor: 'pointer',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.02)',
-            transition: 'all 0.15s'
+            boxShadow: '0 4px 14px rgba(0,0,0,0.02)'
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -563,11 +538,9 @@ function HealthAuthorityDoctorsPage() {
         </div>
       </div>
 
-      {/* ULTRA-MODERN TOOLBAR & CUSTOM POPOVER DROPDOWNS */}
+      {/* Toolbar & Filters */}
       <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, padding: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        {/* Search Bar & Custom Interactive Dropdowns Grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', alignItems: 'center' }}>
-          {/* Integrated Search Input */}
           <div style={{ position: 'relative' }}>
             <Search size={18} color={COLORS.muted} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
             <input
@@ -583,21 +556,11 @@ function HealthAuthorityDoctorsPage() {
                 fontSize: '0.9rem',
                 outline: 'none',
                 backgroundColor: COLORS.bgLight,
-                color: COLORS.navy,
-                transition: 'all 0.2s'
-              }}
-              onFocus={(e) => {
-                e.target.style.backgroundColor = 'white';
-                e.target.style.borderColor = COLORS.teal;
-              }}
-              onBlur={(e) => {
-                e.target.style.backgroundColor = COLORS.bgLight;
-                e.target.style.borderColor = COLORS.border;
+                color: COLORS.navy
               }}
             />
           </div>
 
-          {/* Custom Statut Popover Dropdown */}
           <CustomDropdown
             icon={Filter}
             options={statusOptions}
@@ -606,56 +569,31 @@ function HealthAuthorityDoctorsPage() {
             placeholder="Statut..."
           />
 
-          {/* Custom Facility Popover Dropdown */}
           <CustomDropdown
             icon={Building2}
             options={facilityOptions}
             value={selectedFacility}
             onChange={setSelectedFacility}
-            placeholder="Toutes les structures"
+            placeholder="Établissements publics"
           />
 
-          {/* Custom Specialty Popover Dropdown */}
           <CustomDropdown
             icon={Stethoscope}
             options={specialtyOptions}
             value={selectedSpecialty}
             onChange={setSelectedSpecialty}
-            placeholder="Toutes les spécialités"
+            placeholder="Spécialités"
           />
         </div>
 
-        {/* Active Filter Chips & Reset */}
         {isFilterActive && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: `1px solid ${COLORS.border}`, paddingTop: '12px', flexWrap: 'wrap', gap: '10px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '600' }}>Filtres actifs :</span>
-              
               {selectedStatus !== "ALL" && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '700' }}>
-                  Statut : {selectedStatus === 'PENDING' ? 'En attente' : selectedStatus === 'ACCEPTED' ? 'Acceptés' : 'Refusés'}
+                <span style={{ backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  Statut : {selectedStatus}
                   <X size={14} style={{ cursor: 'pointer' }} onClick={() => setSelectedStatus("ALL")} />
-                </span>
-              )}
-
-              {selectedFacility !== "ALL" && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '700' }}>
-                  Structure : {responsibleFacilities.find(f => f.id === selectedFacility)?.name || 'Sélectionnée'}
-                  <X size={14} style={{ cursor: 'pointer' }} onClick={() => setSelectedFacility("ALL")} />
-                </span>
-              )}
-
-              {selectedSpecialty !== "ALL" && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: COLORS.lightTeal, color: COLORS.teal, padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '700' }}>
-                  Spécialité : {selectedSpecialty}
-                  <X size={14} style={{ cursor: 'pointer' }} onClick={() => setSelectedSpecialty("ALL")} />
-                </span>
-              )}
-
-              {searchQuery.trim() !== "" && (
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', backgroundColor: '#F1F5F9', color: COLORS.navy, padding: '4px 10px', borderRadius: '999px', fontSize: '0.8rem', fontWeight: '700' }}>
-                  Recherche : "{searchQuery}"
-                  <X size={14} style={{ cursor: 'pointer' }} onClick={() => setSearchQuery("")} />
                 </span>
               )}
             </div>
@@ -673,14 +611,14 @@ function HealthAuthorityDoctorsPage() {
       {/* Doctor List Table */}
       <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
         {loading ? (
-          <div style={{ padding: '4rem', textAlign: 'center', color: COLORS.muted }}>Chargement des requêtes médicales...</div>
+          <div style={{ padding: '4rem', textAlign: 'center', color: COLORS.muted }}>Chargement des requêtes médicales publiques...</div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
             <thead style={{ backgroundColor: '#f8fafc', borderBottom: `1px solid ${COLORS.border}` }}>
               <tr>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Médecin</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Spécialité</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Établissement</th>
+                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Établissement Public</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>NIN / Tél</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Statut</th>
                 <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Date d'inscription</th>
@@ -705,7 +643,7 @@ function HealthAuthorityDoctorsPage() {
 
                     <td style={{ padding: '16px 20px' }}>
                       <div style={{ fontWeight: '600', color: COLORS.navy, fontSize: '0.88rem' }}>{doc.facility?.name || '—'}</div>
-                      <div style={{ fontSize: '0.78rem', color: COLORS.muted }}>{doc.facility?.wilaya || '—'}</div>
+                      <div style={{ fontSize: '0.78rem', color: COLORS.teal, fontWeight: '700' }}>{doc.facility?.facility_type} • Wilaya {doc.facility?.wilaya || '—'}</div>
                     </td>
 
                     <td style={{ padding: '16px 20px', fontSize: '0.85rem', color: COLORS.text }}>
@@ -713,7 +651,6 @@ function HealthAuthorityDoctorsPage() {
                       <div style={{ color: COLORS.muted }}>Tél: {doc.phone}</div>
                     </td>
 
-                    {/* Compact Refined Status Badges */}
                     <td style={{ padding: '16px 20px' }}>
                       {doc.status === 'PENDING' && (
                         <span style={{ backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FCD34D', padding: '3px 10px', borderRadius: '999px', fontSize: '0.78rem', fontWeight: '700', display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
@@ -751,7 +688,7 @@ function HealthAuthorityDoctorsPage() {
               {filteredDoctors.length === 0 && (
                 <tr>
                   <td colSpan={7} style={{ textAlign: 'center', padding: '3.5rem', color: COLORS.muted }}>
-                    Aucune demande d'inscription médicale ne correspond à vos critères.
+                    Aucune demande d'inscription médicale publique ne correspond à vos critères.
                   </td>
                 </tr>
               )}
@@ -766,7 +703,7 @@ function HealthAuthorityDoctorsPage() {
           <div style={{ backgroundColor: 'white', width: '100%', maxWidth: '540px', height: '100%', overflowY: 'auto', boxShadow: '-10px 0 30px rgba(0,0,0,0.15)', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '24px', backgroundColor: COLORS.navy, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontSize: '0.78rem', color: COLORS.teal, textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.05em' }}>Fiche Médicale</div>
+                <div style={{ fontSize: '0.78rem', color: COLORS.teal, textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.05em' }}>Dossier Médical (Secteur Public)</div>
                 <h3 style={{ fontSize: '1.35rem', fontWeight: '800', margin: '4px 0 0 0' }}>
                   Dr. {getDoctorFullName(selectedDoctor)}
                 </h3>
@@ -797,159 +734,75 @@ function HealthAuthorityDoctorsPage() {
               </div>
 
               <div style={{ border: `1px solid ${COLORS.border}`, borderRadius: '12px', padding: '16px' }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', marginBottom: '4px' }}>Établissement</div>
-                <div style={{ fontSize: '1rem', fontWeight: '800', color: COLORS.navy }}>{selectedDoctor.facility?.name || 'Non spécifié'}</div>
-                <div style={{ fontSize: '0.82rem', color: COLORS.muted, marginTop: '2px' }}>{selectedDoctor.facility?.facility_type} • Wilaya de {selectedDoctor.facility?.wilaya}</div>
+                <div style={{ fontSize: '0.78rem', fontWeight: '700', color: COLORS.muted, textTransform: 'uppercase', marginBottom: '4px' }}>Établissement Public Rattaché</div>
+                <div style={{ fontSize: '1.05rem', fontWeight: '800', color: COLORS.navy }}>{selectedDoctor.facility?.name}</div>
+                <div style={{ fontSize: '0.85rem', color: COLORS.teal, fontWeight: '700', marginTop: '2px' }}>
+                  {selectedDoctor.facility?.facility_type} • Wilaya {selectedDoctor.facility?.wilaya}
+                </div>
               </div>
 
-              {/* Action Buttons */}
-              <div style={{ marginTop: 'auto', borderTop: `1px solid ${COLORS.border}`, paddingTop: '20px', display: 'flex', gap: '12px' }}>
-                <button
-                  onClick={() => {
-                    setActionError(null);
-                    setShowAcceptModal(true);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: 'none',
-                    backgroundColor: COLORS.teal,
-                    color: 'white',
-                    fontWeight: '700',
-                    fontSize: '0.92rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <CheckCircle2 size={18} /> Accepter le médecin
-                </button>
+              {selectedDoctor.status === 'PENDING' && (
+                <div style={{ marginTop: 'auto', display: 'flex', gap: '12px', paddingTop: '20px', borderTop: `1px solid ${COLORS.border}` }}>
+                  <button
+                    onClick={() => setShowRejectModal(true)}
+                    style={{ flex: 1, padding: '12px', backgroundColor: '#FEE2E2', color: '#DC2626', border: '1px solid #FCA5A5', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Refuser
+                  </button>
 
-                <button
-                  onClick={() => {
-                    setActionError(null);
-                    setShowRejectModal(true);
-                  }}
-                  style={{
-                    flex: 1,
-                    padding: '12px',
-                    borderRadius: '10px',
-                    border: '1px solid #FECACA',
-                    backgroundColor: '#FEF2F2',
-                    color: '#DC2626',
-                    fontWeight: '700',
-                    fontSize: '0.92rem',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: '8px'
-                  }}
-                >
-                  <XCircle size={18} /> Refuser la demande
-                </button>
-              </div>
+                  <button
+                    onClick={() => setShowAcceptModal(true)}
+                    style={{ flex: 1, padding: '12px', backgroundColor: COLORS.teal, color: 'white', border: 'none', borderRadius: '10px', fontWeight: '700', cursor: 'pointer' }}
+                  >
+                    Accepter & Valider
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* 1. SIMPLE & FOCUSED ACCEPTANCE CONFIRMATION MODAL */}
+      {/* Confirmation Modal Accept */}
       {showAcceptModal && selectedDoctor && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.5)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '440px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-            <div style={{ padding: '20px 24px', backgroundColor: COLORS.navy, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: '700', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <CheckCircle2 size={20} color={COLORS.teal} /> Confirmer l’acceptation
-              </div>
-              <button onClick={() => setShowAcceptModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
-                <X size={20} />
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '440px', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: COLORS.navy, margin: '0 0 10px 0' }}>
+              Valider l'inscription médicale
+            </h3>
+            <p style={{ fontSize: '0.9rem', color: COLORS.text, marginBottom: '20px' }}>
+              Voulez-vous confirmer l'inscription du <strong>Dr. {getDoctorFullName(selectedDoctor)}</strong> au sein de l'établissement public <strong>{selectedDoctor.facility?.name}</strong> ?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowAcceptModal(false)} style={{ padding: '10px 16px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', fontWeight: '600', cursor: 'pointer' }}>Annuler</button>
+              <button onClick={handleConfirmAccept} disabled={submittingAction} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: COLORS.teal, color: 'white', fontWeight: '700', cursor: 'pointer' }}>
+                {submittingAction ? "Enregistrement..." : "Confirmer la validation"}
               </button>
-            </div>
-
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              {actionError && (
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: '0.85rem' }}>
-                  {actionError}
-                </div>
-              )}
-
-              <p style={{ fontSize: '0.98rem', color: COLORS.text, lineHeight: '1.6', margin: 0 }}>
-                Vous êtes sur le point d’accepter le <strong>Dr. {getDoctorFullName(selectedDoctor)}</strong>.
-              </p>
-              <p style={{ fontSize: '0.9rem', color: COLORS.muted, lineHeight: '1.5', margin: 0 }}>
-                Une fois accepté, son profil sera vérifié et il pourra accéder à la plateforme.
-              </p>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                <button 
-                  onClick={() => setShowAcceptModal(false)} 
-                  style={{ padding: '10px 18px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer' }}
-                >
-                  Annuler
-                </button>
-                <button 
-                  onClick={handleConfirmAccept} 
-                  disabled={submittingAction} 
-                  style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: COLORS.teal, color: 'white', fontWeight: '700', cursor: 'pointer' }}
-                >
-                  {submittingAction ? "Validation..." : "Confirmer l’acceptation"}
-                </button>
-              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 2. SIMPLE & FOCUSED REJECTION CONFIRMATION MODAL */}
+      {/* Confirmation Modal Reject */}
       {showRejectModal && selectedDoctor && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.5)', zIndex: 110, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '440px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)' }}>
-            <div style={{ padding: '20px 24px', backgroundColor: '#DC2626', color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: '700', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <XCircle size={20} /> Refuser la demande
-              </div>
-              <button onClick={() => setShowRejectModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
-                <X size={20} />
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '440px', padding: '24px' }}>
+            <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: '#DC2626', margin: '0 0 10px 0' }}>
+              Refuser la demande
+            </h3>
+            <p style={{ fontSize: '0.9rem', color: COLORS.text, marginBottom: '20px' }}>
+              Voulez-vous rejeter la demande d'inscription du <strong>Dr. {getDoctorFullName(selectedDoctor)}</strong> ?
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button onClick={() => setShowRejectModal(false)} style={{ padding: '10px 16px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', fontWeight: '600', cursor: 'pointer' }}>Annuler</button>
+              <button onClick={handleConfirmReject} disabled={submittingAction} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: '#DC2626', color: 'white', fontWeight: '700', cursor: 'pointer' }}>
+                {submittingAction ? "Traitement..." : "Confirmer le refus"}
               </button>
-            </div>
-
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
-              {actionError && (
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: '0.85rem' }}>
-                  {actionError}
-                </div>
-              )}
-
-              <p style={{ fontSize: '0.98rem', color: COLORS.text, lineHeight: '1.6', margin: 0 }}>
-                Vous êtes sur le point de refuser la demande du <strong>Dr. {getDoctorFullName(selectedDoctor)}</strong>.
-              </p>
-              <p style={{ fontSize: '0.9rem', color: COLORS.muted, lineHeight: '1.5', margin: 0 }}>
-                Le médecin ne pourra pas accéder à la plateforme tant que sa demande reste refusée.
-              </p>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                <button 
-                  onClick={() => setShowRejectModal(false)} 
-                  style={{ padding: '10px 18px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer' }}
-                >
-                  Annuler
-                </button>
-                <button 
-                  onClick={handleConfirmReject} 
-                  disabled={submittingAction} 
-                  style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: '#DC2626', color: 'white', fontWeight: '700', cursor: 'pointer' }}
-                >
-                  {submittingAction ? "Traitement..." : "Refuser la demande"}
-                </button>
-              </div>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

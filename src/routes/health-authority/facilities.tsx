@@ -19,6 +19,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { SelectDropdown } from "@/components/ui/select-dropdown";
+import { WILAYAS_LIST_NAMES as ALGERIA_WILAYAS } from "@/lib/wilayas";
 
 export const Route = createFileRoute("/health-authority/facilities")({
   component: HealthAuthorityFacilitiesPage,
@@ -34,8 +35,13 @@ const COLORS = {
   bgLight: "#f8fafc"
 };
 
-import { FACILITY_TYPES, FACILITY_TYPE_LABELS as FACILITY_LABELS } from "@/lib/facilities";
-import { WILAYAS_LIST_NAMES as ALGERIA_WILAYAS } from "@/lib/wilayas";
+// PUBLIC FACILITY TYPES ONLY FOR HEALTH AUTHORITY (NO PRIVATE CLINICS)
+const PUBLIC_FACILITY_TYPES = ["EPSP", "EPH", "CHU"];
+const PUBLIC_FACILITY_LABELS: Record<string, string> = {
+  EPSP: "EPSP — Établissement Public de Santé de Proximité",
+  EPH: "EPH — Établissement Public Hospitalier",
+  CHU: "CHU — Centre Hospitalier Universitaire",
+};
 
 function HealthAuthorityFacilitiesPage() {
   const [facilities, setFacilities] = useState<any[]>([]);
@@ -55,7 +61,7 @@ function HealthAuthorityFacilitiesPage() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [activeFacility, setActiveFacility] = useState<any>(null);
 
-  // Form State for Add / Edit
+  // Form State for Add / Edit (PUBLIC SECTOR ONLY)
   const [form, setForm] = useState({
     name: "",
     facility_type: "EPSP",
@@ -65,7 +71,7 @@ function HealthAuthorityFacilitiesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  // Fetch facilities & creators
+  // Fetch facilities & creators (QUERY LEVEL FILTER: PUBLIC SECTOR ONLY)
   const fetchFacilitiesData = async () => {
     setLoading(true);
     try {
@@ -88,7 +94,7 @@ function HealthAuthorityFacilitiesPage() {
         setCurrentUserId(authData.user_id);
       }
 
-      // Fetch facilities with creator (joining facilities.created_by -> users.id)
+      // QUERY-LEVEL FILTER: Fetch ONLY public facilities (EPSP, EPH, CHU)
       const { data, error } = await supabase
         .from('facilities')
         .select(`
@@ -101,6 +107,7 @@ function HealthAuthorityFacilitiesPage() {
             role
           )
         `)
+        .in('facility_type', PUBLIC_FACILITY_TYPES)
         .order('created_at', { ascending: false });
 
       if (!error && data) {
@@ -149,22 +156,36 @@ function HealthAuthorityFacilitiesPage() {
     setForm({
       name: "",
       facility_type: "EPSP",
-      wilaya: ALGERIA_WILAYAS[15] || "16 - Alger",
+      wilaya: "16 - Alger",
       address: ""
     });
     setFormError(null);
     setShowAddModal(true);
   };
 
-  // Submit Add Facility (created_by is set automatically to currentUserId, NEVER user-editable)
+  // Open Edit Modal
+  const handleOpenEditModal = (fac: any) => {
+    setActiveFacility(fac);
+    setForm({
+      name: fac.name || "",
+      facility_type: PUBLIC_FACILITY_TYPES.includes(fac.facility_type) ? fac.facility_type : "EPSP",
+      wilaya: fac.wilaya || "16 - Alger",
+      address: fac.address || ""
+    });
+    setFormError(null);
+    setShowEditModal(true);
+  };
+
+  // Handle Add Submit (Strictly public facility)
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name.trim()) {
-      setFormError("Le nom de l'établissement est requis.");
+      setFormError("Le nom de l'établissement est obligatoire.");
       return;
     }
-    if (!form.address.trim()) {
-      setFormError("L'adresse de l'établissement est requise.");
+
+    if (!PUBLIC_FACILITY_TYPES.includes(form.facility_type)) {
+      setFormError("La Direction de la Santé gère exclusivement les établissements publics (CHU, EPH, EPSP).");
       return;
     }
 
@@ -172,55 +193,40 @@ function HealthAuthorityFacilitiesPage() {
     setFormError(null);
 
     try {
-      const payload: any = {
-        name: form.name.trim(),
-        facility_type: form.facility_type,
-        wilaya: form.wilaya,
-        address: form.address.trim()
-      };
+      const { error } = await supabase
+        .from('facilities')
+        .insert([
+          {
+            name: form.name.trim(),
+            facility_type: form.facility_type,
+            wilaya: form.wilaya,
+            address: form.address.trim() || null,
+            created_by: currentUserId || null
+          }
+        ]);
 
-      if (currentUserId) {
-        payload.created_by = currentUserId;
-      }
-
-      const { error } = await supabase.from('facilities').insert([payload]);
-
-      if (error) {
-        throw new Error(error.message || "Erreur lors de la création de l'établissement.");
-      }
+      if (error) throw new Error(error.message);
 
       setShowAddModal(false);
       fetchFacilitiesData();
     } catch (err: any) {
-      setFormError(err.message || "Une erreur s'est produite.");
+      setFormError(err.message || "Erreur lors de la création de l'établissement.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Open Edit Modal
-  const handleOpenEditModal = (facility: any) => {
-    setActiveFacility(facility);
-    setForm({
-      name: facility.name || "",
-      facility_type: facility.facility_type || "EPSP",
-      wilaya: facility.wilaya || ALGERIA_WILAYAS[15] || "16 - Alger",
-      address: facility.address || ""
-    });
-    setFormError(null);
-    setShowEditModal(true);
-  };
-
-  // Submit Edit Facility
+  // Handle Edit Submit
   const handleEditSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeFacility) return;
     if (!form.name.trim()) {
-      setFormError("Le nom de l'établissement est requis.");
+      setFormError("Le nom de l'établissement est obligatoire.");
       return;
     }
-    if (!form.address.trim()) {
-      setFormError("L'adresse de l'établissement est requise.");
+
+    if (!PUBLIC_FACILITY_TYPES.includes(form.facility_type)) {
+      setFormError("La Direction de la Santé gère exclusivement les établissements publics (CHU, EPH, EPSP).");
       return;
     }
 
@@ -234,56 +240,55 @@ function HealthAuthorityFacilitiesPage() {
           name: form.name.trim(),
           facility_type: form.facility_type,
           wilaya: form.wilaya,
-          address: form.address.trim()
+          address: form.address.trim() || null,
+          updated_at: new Date().toISOString()
         })
         .eq('id', activeFacility.id);
 
-      if (error) {
-        throw new Error(error.message || "Erreur lors de la mise à jour de l'établissement.");
-      }
+      if (error) throw new Error(error.message);
 
       setShowEditModal(false);
       fetchFacilitiesData();
     } catch (err: any) {
-      setFormError(err.message || "Une erreur s'est produite.");
+      setFormError(err.message || "Erreur lors de la modification de l'établissement.");
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Delete Facility
-  const handleDeleteFacility = async (facilityId: string, facilityName: string) => {
-    if (!confirm(`Êtes-vous sûr de vouloir supprimer l'établissement "${facilityName}" ? Cette action est irréversible.`)) {
-      return;
-    }
+  // Handle Delete Facility
+  const handleDeleteFacility = async (facId: string) => {
+    if (!window.confirm("Êtes-vous sûr de vouloir supprimer cet établissement ?")) return;
 
     try {
-      const { error } = await supabase.from('facilities').delete().eq('id', facilityId);
-      if (error) {
-        alert("Erreur lors de la suppression : " + error.message);
-      } else {
-        fetchFacilitiesData();
-      }
-    } catch (err) {
-      console.error("Error deleting facility:", err);
+      const { error } = await supabase
+        .from('facilities')
+        .delete()
+        .eq('id', facId);
+
+      if (error) throw error;
+      fetchFacilitiesData();
+    } catch (err: any) {
+      alert("Impossible de supprimer cet établissement : " + err.message);
     }
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      {/* Header Banner */}
+      
+      {/* Top Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '16px' }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
             <div style={{ padding: '8px', borderRadius: '10px', backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
               <Building2 size={24} />
             </div>
-            <h2 style={{ fontSize: '1.75rem', fontWeight: '700', color: COLORS.navy, margin: 0 }}>
-              Gestion des Établissements de Santé
+            <h2 style={{ fontSize: '1.75rem', fontWeight: '800', color: COLORS.navy, margin: 0, letterSpacing: '-0.02em' }}>
+              Gestion des Établissements Publics
             </h2>
           </div>
           <p style={{ color: COLORS.muted, fontSize: '0.95rem', margin: 0 }}>
-            Administrez et filtrez l'ensemble des structures sanitaires publiques (EPSP, EPH, CHU) de votre juridiction.
+            Répertoire officiel des structures de santé publiques sous la responsabilité de la Direction de la Santé (EPSP, EPH, CHU).
           </p>
         </div>
 
@@ -315,288 +320,346 @@ function HealthAuthorityFacilitiesPage() {
               backgroundColor: COLORS.teal,
               color: 'white',
               border: 'none',
-              padding: '10px 22px',
+              padding: '10px 20px',
               borderRadius: '10px',
               fontWeight: '600',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: '8px',
-              boxShadow: '0 4px 14px rgba(15,162,155,0.3)'
+              boxShadow: '0 4px 14px rgba(15, 162, 155, 0.35)'
             }}
           >
             <Plus size={18} />
-            Ajouter un Établissement
+            Ajouter un Établissement Public
           </button>
         </div>
       </div>
 
-      {/* Modern Search & Filters Bar */}
-      <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, padding: '20px', boxShadow: '0 4px 16px rgba(0,0,0,0.02)', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
-          {/* Search Box */}
-          <div style={{ position: 'relative' }}>
-            <Search size={18} color={COLORS.muted} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-            <input
-              type="text"
-              placeholder="Rechercher par nom, wilaya, adresse..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                width: '100%',
-                padding: '10px 12px 10px 38px',
-                borderRadius: '10px',
-                border: `1px solid ${COLORS.border}`,
-                fontSize: '0.9rem',
-                outline: 'none'
-              }}
-            />
-          </div>
-
-          {/* Type Filter */}
-          <div>
-            <SelectDropdown
-              value={selectedType}
-              onChange={(val) => setSelectedType(val)}
-              placeholder="Tous les Types"
-              icon={Building2}
-              options={[
-                { value: "ALL", label: "Tous les Types (EPSP, EPH, CHU)" },
-                ...FACILITY_TYPES.map(t => ({ value: t.value, label: t.label }))
-              ]}
-            />
-          </div>
-
-          {/* Wilaya Filter */}
-          <div>
-            <SelectDropdown
-              value={selectedWilaya}
-              onChange={(val) => setSelectedWilaya(val)}
-              placeholder="Toutes les Wilayas"
-              icon={MapPin}
-              searchable={true}
-              options={[
-                { value: "ALL", label: "Toutes les Wilayas" },
-                ...ALGERIA_WILAYAS.map(w => ({ value: w, label: w }))
-              ]}
-            />
-          </div>
-
-          {/* Created By Filter */}
-          <div>
-            <SelectDropdown
-              value={selectedCreator}
-              onChange={(val) => setSelectedCreator(val)}
-              placeholder="Tous les Créateurs"
-              icon={Filter}
-              searchable={true}
-              options={[
-                { value: "ALL", label: "Tous les Créateurs" },
-                ...creatorsList.map(c => ({ value: c.id, label: c.name }))
-              ]}
-            />
-          </div>
+      {/* Filter & Search Bar */}
+      <div style={{ backgroundColor: 'white', padding: '20px', borderRadius: '16px', border: `1px solid ${COLORS.border}`, boxShadow: '0 4px 16px rgba(0,0,0,0.02)', display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center', justifyContent: 'space-between' }}>
+        
+        {/* Search Input */}
+        <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '240px' }}>
+          <Search size={18} color={COLORS.muted} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)' }} />
+          <input
+            type="text"
+            placeholder="Rechercher par nom, wilaya, adresse..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: '100%',
+              padding: '10px 14px 10px 42px',
+              borderRadius: '10px',
+              border: `1px solid ${COLORS.border}`,
+              fontSize: '0.9rem',
+              outline: 'none',
+              backgroundColor: COLORS.bgLight
+            }}
+          />
         </div>
 
-        <div style={{ fontSize: '0.85rem', color: COLORS.muted, borderTop: `1px solid ${COLORS.border}`, paddingTop: '12px', display: 'flex', justifyContent: 'space-between' }}>
-          <span>Résultats : <strong>{filteredFacilities.length}</strong> établissement(s) trouvé(s)</span>
-          {(searchQuery || selectedType !== "ALL" || selectedWilaya !== "ALL" || selectedCreator !== "ALL") && (
+        {/* Filter Dropdowns */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
+          {/* Type Filter */}
+          <SelectDropdown
+            value={selectedType}
+            onChange={setSelectedType}
+            options={[
+              { value: 'ALL', label: 'Tous les types publics' },
+              { value: 'EPSP', label: 'EPSP — Proximité' },
+              { value: 'EPH', label: 'EPH — Hospitalier' },
+              { value: 'CHU', label: 'CHU — Universitaire' }
+            ]}
+          />
+
+          {/* Wilaya Filter */}
+          <SelectDropdown
+            value={selectedWilaya}
+            onChange={setSelectedWilaya}
+            options={[
+              { value: 'ALL', label: 'Toutes les wilayas' },
+              ...ALGERIA_WILAYAS.map(w => ({ value: w, label: w }))
+            ]}
+          />
+
+          {/* Creator Filter */}
+          <SelectDropdown
+            value={selectedCreator}
+            onChange={setSelectedCreator}
+            options={[
+              { value: 'ALL', label: 'Tous les créateurs' },
+              ...creatorsList.map(c => ({ value: c.id, label: c.name }))
+            ]}
+          />
+
+          {(searchQuery || selectedType !== 'ALL' || selectedWilaya !== 'ALL' || selectedCreator !== 'ALL') && (
             <button
               onClick={() => {
-                setSearchQuery("");
-                setSelectedType("ALL");
-                setSelectedWilaya("ALL");
-                setSelectedCreator("ALL");
+                setSearchQuery('');
+                setSelectedType('ALL');
+                setSelectedWilaya('ALL');
+                setSelectedCreator('ALL');
               }}
-              style={{ background: 'none', border: 'none', color: COLORS.teal, cursor: 'pointer', fontWeight: '600', fontSize: '0.85rem' }}
+              style={{
+                backgroundColor: 'transparent',
+                border: 'none',
+                color: COLORS.teal,
+                fontWeight: '600',
+                fontSize: '0.85rem',
+                cursor: 'pointer',
+                padding: '8px 12px'
+              }}
             >
-              Réinitialiser les filtres
+              Réinitialiser
             </button>
           )}
         </div>
+
       </div>
 
-      {/* Facilities Data Table */}
-      <div style={{ backgroundColor: 'white', borderRadius: '16px', border: `1px solid ${COLORS.border}`, overflow: 'hidden', boxShadow: '0 4px 16px rgba(0,0,0,0.02)' }}>
-        {loading ? (
-          <div style={{ padding: '4rem', textAlign: 'center', color: COLORS.muted }}>Chargement des établissements...</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
-            <thead style={{ backgroundColor: '#f8fafc', borderBottom: `1px solid ${COLORS.border}` }}>
-              <tr>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Nom Établissement</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Type</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Wilaya</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Adresse</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Créé Par</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Créé le</th>
-                <th style={{ padding: '14px 20px', color: COLORS.navy, fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: '0.05em', textAlign: 'right' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredFacilities.map((fac, idx) => {
-                const creatorName = fac.creator?.first_name 
-                  ? `${fac.creator.first_name} ${fac.creator.last_name}`.trim()
-                  : "Autorité Sanitaire";
+      {/* Facilities Grid */}
+      {loading ? (
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '4rem', textAlign: 'center', color: COLORS.muted, border: `1px solid ${COLORS.border}` }}>
+          Chargement du répertoire des établissements publics...
+        </div>
+      ) : filteredFacilities.length === 0 ? (
+        <div style={{ backgroundColor: 'white', borderRadius: '16px', padding: '4rem', textAlign: 'center', color: COLORS.muted, border: `1px solid ${COLORS.border}` }}>
+          Aucun établissement public ne correspond à vos critères de recherche.
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '20px' }}>
+          {filteredFacilities.map((fac) => {
+            const creatorName = fac.creator?.first_name 
+              ? `${fac.creator.first_name} ${fac.creator.last_name}`.trim()
+              : "Direction de la Santé";
 
-                return (
-                  <tr key={fac.id} style={{ borderBottom: idx !== filteredFacilities.length - 1 ? `1px solid ${COLORS.border}` : 'none' }}>
-                    <td style={{ padding: '16px 20px', fontWeight: '700', color: COLORS.navy, fontSize: '0.95rem' }}>
-                      {fac.name}
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      <span style={{ 
-                        backgroundColor: COLORS.lightTeal, 
-                        color: COLORS.teal, 
-                        padding: '4px 10px', 
-                        borderRadius: '999px', 
-                        fontSize: '0.82rem', 
-                        fontWeight: '600' 
-                      }}>
-                        {fac.facility_type}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 20px', color: COLORS.text, fontSize: '0.9rem' }}>
-                      {fac.wilaya}
-                    </td>
-                    <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem', maxWidth: '200px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            return (
+              <div
+                key={fac.id}
+                style={{
+                  backgroundColor: 'white',
+                  borderRadius: '16px',
+                  border: `1px solid ${COLORS.border}`,
+                  padding: '22px',
+                  boxShadow: '0 4px 16px rgba(0,0,0,0.02)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '16px',
+                  transition: 'transform 0.15s ease, box-shadow 0.15s ease'
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                    <span style={{
+                      backgroundColor: COLORS.lightTeal,
+                      color: COLORS.teal,
+                      fontSize: '0.78rem',
+                      fontWeight: '800',
+                      padding: '4px 10px',
+                      borderRadius: '8px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.05em'
+                    }}>
+                      {fac.facility_type}
+                    </span>
+
+                    <span style={{ fontSize: '0.8rem', color: COLORS.muted, fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <MapPin size={14} color={COLORS.teal} /> {fac.wilaya}
+                    </span>
+                  </div>
+
+                  <h3 style={{ fontSize: '1.2rem', fontWeight: '800', color: COLORS.navy, margin: '0 0 8px 0', lineHeight: '1.3' }}>
+                    {fac.name}
+                  </h3>
+
+                  {fac.address && (
+                    <p style={{ fontSize: '0.85rem', color: COLORS.muted, margin: '0 0 14px 0', lineHeight: '1.4' }}>
                       {fac.address}
-                    </td>
-                    <td style={{ padding: '16px 20px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.88rem', fontWeight: '600', color: COLORS.navy }}>
-                        <UserCheck size={14} color={COLORS.teal} />
-                        <span>{creatorName}</span>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 20px', color: COLORS.muted, fontSize: '0.85rem' }}>
-                      {formatDateTime(fac.created_at)}
-                    </td>
-                    <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                      <div style={{ display: 'inline-flex', gap: '8px' }}>
-                        <button
-                          onClick={() => {
-                            setActiveFacility(fac);
-                            setShowDetailsModal(true);
-                          }}
-                          style={{ padding: '6px', border: `1px solid ${COLORS.border}`, borderRadius: '6px', background: 'white', color: COLORS.teal, cursor: 'pointer' }}
-                          title="Détails"
-                        >
-                          <Eye size={16} />
-                        </button>
+                    </p>
+                  )}
 
-                        <button
-                          onClick={() => handleOpenEditModal(fac)}
-                          style={{ padding: '6px', border: `1px solid ${COLORS.border}`, borderRadius: '6px', background: 'white', color: COLORS.navy, cursor: 'pointer' }}
-                          title="Modifier"
-                        >
-                          <Edit3 size={16} />
-                        </button>
+                  <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: '12px', fontSize: '0.78rem', color: COLORS.muted, display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <UserCheck size={14} color={COLORS.teal} /> Créé par : <strong style={{ color: COLORS.navy }}>{creatorName}</strong>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <Calendar size={14} color={COLORS.muted} /> Enregistré le : {formatDateTime(fac.created_at)}
+                    </div>
+                  </div>
+                </div>
 
-                        <button
-                          onClick={() => handleDeleteFacility(fac.id, fac.name)}
-                          style={{ padding: '6px', border: `1px solid #FECACA`, borderRadius: '6px', background: '#FEF2F2', color: '#DC2626', cursor: 'pointer' }}
-                          title="Supprimer"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredFacilities.length === 0 && (
-                <tr>
-                  <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: COLORS.muted }}>
-                    Aucun établissement de santé ne correspond aux critères.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        )}
-      </div>
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: '8px', borderTop: `1px solid ${COLORS.border}`, paddingTop: '14px' }}>
+                  <button
+                    onClick={() => {
+                      setActiveFacility(fac);
+                      setShowDetailsModal(true);
+                    }}
+                    style={{
+                      flex: 1,
+                      backgroundColor: COLORS.bgLight,
+                      color: COLORS.navy,
+                      border: `1px solid ${COLORS.border}`,
+                      padding: '8px',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Eye size={15} /> Détails
+                  </button>
 
-      {/* Add Facility Modal */}
+                  <button
+                    onClick={() => handleOpenEditModal(fac)}
+                    style={{
+                      backgroundColor: COLORS.bgLight,
+                      color: COLORS.teal,
+                      border: `1px solid ${COLORS.border}`,
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Edit3 size={15} /> Éditer
+                  </button>
+
+                  <button
+                    onClick={() => handleDeleteFacility(fac.id)}
+                    style={{
+                      backgroundColor: '#FEF2F2',
+                      color: '#DC2626',
+                      border: '1px solid #FCA5A5',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      fontWeight: '600',
+                      fontSize: '0.82rem',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '4px'
+                    }}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Modal: Ajouter un Établissement Public */}
       {showAddModal && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '520px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', animation: 'fadeIn 0.2s' }}>
-            <div style={{ padding: '20px 24px', backgroundColor: COLORS.navy, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: '700', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Building2 size={20} color={COLORS.teal} /> Ajouter un Établissement
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '520px', padding: '28px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{ padding: '8px', borderRadius: '8px', backgroundColor: COLORS.lightTeal, color: COLORS.teal }}>
+                  <Building2 size={20} />
+                </div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: COLORS.navy, margin: 0 }}>
+                  Nouveau Établissement Public
+                </h3>
               </div>
-              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+              <button onClick={() => setShowAddModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.muted }}>
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleAddSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {formError && (
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <AlertCircle size={16} /> {formError}
-                </div>
-              )}
+            {formError && (
+              <div style={{ backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FCA5A5', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <AlertCircle size={16} /> {formError}
+              </div>
+            )}
 
+            <form onSubmit={handleAddSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>
-                  Nom de l'établissement *
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                  Nom de l'établissement public *
                 </label>
                 <input
                   type="text"
-                  placeholder="ex: Hôpital Mustapha Pacha"
+                  placeholder="ex: CHU Mustapha Pacha, EPH Bologhine..."
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
-                  required
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>
-                  Type d'établissement *
-                </label>
-                <SelectDropdown
-                  value={form.facility_type}
-                  onChange={(val) => setForm({ ...form, facility_type: val })}
-                  placeholder="Sélectionner le type..."
-                  icon={Building2}
-                  options={FACILITY_TYPES.map(t => ({ value: t.value, label: t.label }))}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                    Type d'Établissement (Secteur Public) *
+                  </label>
+                  <select
+                    value={form.facility_type}
+                    onChange={(e) => setForm({ ...form, facility_type: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    {PUBLIC_FACILITY_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {PUBLIC_FACILITY_LABELS[type]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                    Wilaya *
+                  </label>
+                  <select
+                    value={form.wilaya}
+                    onChange={(e) => setForm({ ...form, wilaya: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    {ALGERIA_WILAYAS.map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>
-                  Wilaya *
-                </label>
-                <SelectDropdown
-                  value={form.wilaya}
-                  onChange={(val) => setForm({ ...form, wilaya: val })}
-                  placeholder="Sélectionner la wilaya..."
-                  icon={MapPin}
-                  searchable={true}
-                  options={ALGERIA_WILAYAS.map(w => ({ value: w, label: w }))}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>
-                  Adresse *
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                  Adresse complète
                 </label>
                 <textarea
-                  placeholder="Adresse précise de l'établissement..."
+                  placeholder="Adresse géographique exacte..."
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                   rows={3}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', resize: 'vertical' }}
-                  required
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', resize: 'vertical' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                <button type="button" onClick={() => setShowAddModal(false)} style={{ padding: '10px 18px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer' }}>
-                  Annuler (ESC)
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  style={{ backgroundColor: COLORS.bgLight, border: `1px solid ${COLORS.border}`, color: COLORS.navy, padding: '10px 18px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  Annuler
                 </button>
-                <button type="submit" disabled={submitting} style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: COLORS.teal, color: 'white', fontWeight: '600', cursor: 'pointer' }}>
-                  {submitting ? "Création en cours..." : "Créer l'Établissement"}
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{ backgroundColor: COLORS.teal, border: 'none', color: 'white', padding: '10px 22px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+                >
+                  {submitting ? "Enregistrement..." : "Créer l'établissement"}
                 </button>
               </div>
             </form>
@@ -604,76 +667,98 @@ function HealthAuthorityFacilitiesPage() {
         </div>
       )}
 
-      {/* Edit Facility Modal */}
+      {/* Modal: Éditer un Établissement Public */}
       {showEditModal && activeFacility && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '520px', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', animation: 'fadeIn 0.2s' }}>
-            <div style={{ padding: '20px 24px', backgroundColor: COLORS.navy, color: 'white', borderRadius: '20px 20px 0 0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: '700', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Edit3 size={20} color={COLORS.teal} /> Modifier l'Établissement
-              </div>
-              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '520px', padding: '28px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: '800', color: COLORS.navy, margin: 0 }}>
+                Modifier l'Établissement Public
+              </h3>
+              <button onClick={() => setShowEditModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.muted }}>
                 <X size={20} />
               </button>
             </div>
 
-            <form onSubmit={handleEditSubmit} style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-              {formError && (
-                <div style={{ padding: '12px', borderRadius: '8px', backgroundColor: '#FEF2F2', border: '1px solid #FECACA', color: '#DC2626', fontSize: '0.85rem' }}>
-                  {formError}
-                </div>
-              )}
+            {formError && (
+              <div style={{ backgroundColor: '#FEF2F2', color: '#DC2626', border: '1px solid #FCA5A5', padding: '10px 14px', borderRadius: '10px', fontSize: '0.85rem', marginBottom: '16px' }}>
+                {formError}
+              </div>
+            )}
 
+            <form onSubmit={handleEditSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>Nom de l'établissement *</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                  Nom de l'établissement public *
+                </label>
                 <input
                   type="text"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
-                  required
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none' }}
                 />
               </div>
 
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>Type d'établissement *</label>
-                <SelectDropdown
-                  value={form.facility_type}
-                  onChange={(val) => setForm({ ...form, facility_type: val })}
-                  placeholder="Sélectionner le type..."
-                  icon={Building2}
-                  options={FACILITY_TYPES.map(t => ({ value: t.value, label: t.label }))}
-                />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                    Type *
+                  </label>
+                  <select
+                    value={form.facility_type}
+                    onChange={(e) => setForm({ ...form, facility_type: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    {PUBLIC_FACILITY_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {PUBLIC_FACILITY_LABELS[type]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                    Wilaya *
+                  </label>
+                  <select
+                    value={form.wilaya}
+                    onChange={(e) => setForm({ ...form, wilaya: e.target.value })}
+                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
+                  >
+                    {ALGERIA_WILAYAS.map((w) => (
+                      <option key={w} value={w}>{w}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>Wilaya *</label>
-                <SelectDropdown
-                  value={form.wilaya}
-                  onChange={(val) => setForm({ ...form, wilaya: val })}
-                  placeholder="Sélectionner la wilaya..."
-                  icon={MapPin}
-                  searchable={true}
-                  options={ALGERIA_WILAYAS.map(w => ({ value: w, label: w }))}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '600', color: COLORS.navy, marginBottom: '6px' }}>Adresse *</label>
+                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
+                  Adresse
+                </label>
                 <textarea
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                   rows={3}
-                  style={{ width: '100%', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', resize: 'vertical' }}
-                  required
+                  style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', resize: 'vertical' }}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '12px' }}>
-                <button type="button" onClick={() => setShowEditModal(false)} style={{ padding: '10px 18px', borderRadius: '8px', border: `1px solid ${COLORS.border}`, background: 'white', color: COLORS.text, fontWeight: '600', cursor: 'pointer' }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowEditModal(false)}
+                  style={{ backgroundColor: COLORS.bgLight, border: `1px solid ${COLORS.border}`, color: COLORS.navy, padding: '10px 18px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+                >
                   Annuler
                 </button>
-                <button type="submit" disabled={submitting} style={{ padding: '10px 22px', borderRadius: '8px', border: 'none', background: COLORS.teal, color: 'white', fontWeight: '600', cursor: 'pointer' }}>
+
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{ backgroundColor: COLORS.teal, border: 'none', color: 'white', padding: '10px 22px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+                >
                   {submitting ? "Mise à jour..." : "Enregistrer les modifications"}
                 </button>
               </div>
@@ -682,73 +767,59 @@ function HealthAuthorityFacilitiesPage() {
         </div>
       )}
 
-      {/* Facility Details Modal */}
+      {/* Modal: Détails d'un Établissement */}
       {showDetailsModal && activeFacility && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(6, 44, 84, 0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(4px)' }}>
-          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '500px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', animation: 'fadeIn 0.2s' }}>
-            <div style={{ padding: '20px 24px', backgroundColor: COLORS.navy, color: 'white', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ fontWeight: '700', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Building2 size={20} color={COLORS.teal} /> Fiche de l'Établissement
+          <div style={{ backgroundColor: 'white', borderRadius: '20px', width: '100%', maxWidth: '500px', padding: '28px', boxShadow: '0 20px 40px rgba(0,0,0,0.2)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+              <div>
+                <span style={{ fontSize: '0.78rem', fontWeight: '800', color: COLORS.teal, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                  {activeFacility.facility_type} • Wilaya {activeFacility.wilaya}
+                </span>
+                <h3 style={{ fontSize: '1.4rem', fontWeight: '800', color: COLORS.navy, margin: '4px 0 0 0' }}>
+                  {activeFacility.name}
+                </h3>
               </div>
-              <button onClick={() => setShowDetailsModal(false)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer' }}>
+              <button onClick={() => setShowDetailsModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: COLORS.muted }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: COLORS.bgLight, padding: '16px', borderRadius: '12px', border: `1px solid ${COLORS.border}`, marginBottom: '20px' }}>
               <div>
-                <div style={{ fontSize: '0.8rem', color: COLORS.muted }}>Nom de l'établissement</div>
-                <div style={{ fontSize: '1.15rem', fontWeight: '800', color: COLORS.navy, marginTop: '2px' }}>{activeFacility.name}</div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
-                <div>
-                  <div style={{ fontSize: '0.8rem', color: COLORS.muted }}>Type</div>
-                  <div style={{ fontWeight: '700', color: COLORS.teal, marginTop: '2px' }}>{activeFacility.facility_type}</div>
-                </div>
-                <div>
-                  <div style={{ fontSize: '0.8rem', color: COLORS.muted }}>Wilaya</div>
-                  <div style={{ fontWeight: '700', color: COLORS.navy, marginTop: '2px' }}>{activeFacility.wilaya}</div>
+                <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Adresse géographique</div>
+                <div style={{ fontSize: '0.9rem', color: COLORS.navy, fontWeight: '600', marginTop: '2px' }}>
+                  {activeFacility.address || "Non renseignée"}
                 </div>
               </div>
 
               <div>
-                <div style={{ fontSize: '0.8rem', color: COLORS.muted }}>Adresse complète</div>
-                <div style={{ fontWeight: '600', color: COLORS.text, marginTop: '2px' }}>{activeFacility.address}</div>
-              </div>
-
-              <div style={{ borderTop: `1px solid ${COLORS.border}`, paddingTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: COLORS.muted }}>Créé par :</span>
-                  <span style={{ fontWeight: '700', color: COLORS.navy }}>
-                    {activeFacility.creator?.first_name 
-                      ? `${activeFacility.creator.first_name} ${activeFacility.creator.last_name}` 
-                      : 'Autorité Sanitaire'}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: COLORS.muted }}>Date de création :</span>
-                  <span style={{ fontWeight: '600', color: COLORS.text }}>
-                    {formatDateTime(activeFacility.created_at)}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
-                  <span style={{ color: COLORS.muted }}>Dernière mise à jour :</span>
-                  <span style={{ fontWeight: '600', color: COLORS.text }}>
-                    {formatDateTime(activeFacility.updated_at)}
-                  </span>
+                <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Créé par</div>
+                <div style={{ fontSize: '0.9rem', color: COLORS.navy, fontWeight: '600', marginTop: '2px' }}>
+                  {activeFacility.creator?.first_name ? `${activeFacility.creator.first_name} ${activeFacility.creator.last_name}` : "Direction de la Santé"}
                 </div>
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                <button onClick={() => setShowDetailsModal(false)} style={{ padding: '10px 20px', borderRadius: '8px', border: 'none', background: COLORS.navy, color: 'white', fontWeight: '600', cursor: 'pointer' }}>
-                  Fermer
-                </button>
+              <div>
+                <div style={{ fontSize: '0.75rem', color: COLORS.muted, fontWeight: '700', textTransform: 'uppercase' }}>Date d'enregistrement</div>
+                <div style={{ fontSize: '0.9rem', color: COLORS.navy, fontWeight: '600', marginTop: '2px' }}>
+                  {formatDateTime(activeFacility.created_at)}
+                </div>
               </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowDetailsModal(false)}
+                style={{ backgroundColor: COLORS.navy, color: 'white', border: 'none', padding: '10px 20px', borderRadius: '10px', fontWeight: '600', cursor: 'pointer' }}
+              >
+                Fermer
+              </button>
             </div>
           </div>
         </div>
       )}
+
     </div>
   );
 }

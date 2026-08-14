@@ -85,6 +85,7 @@ function HealthAuthorityDashboard() {
             email
           )
         `)
+        .in('facility_type', ['CHU', 'EPH', 'EPSP'])
         .order('created_at', { ascending: false });
 
       if (!facError && facilitiesData) {
