@@ -85,9 +85,10 @@ export function InspectorRequestsPage() {
         const facList = facsData || [];
         const facIds = facList.map(f => f.id);
 
+        let docsData: any[] = [];
         if (facIds.length > 0) {
           // 3. Fetch Doctors attached to facilities in this Wilaya
-          const { data: docsData } = await supabase
+          const { data: fetchDocs } = await supabase
             .from("doctors")
             .select(`
               *,
@@ -97,10 +98,53 @@ export function InspectorRequestsPage() {
             .in("facility_id", facIds)
             .order("created_at", { ascending: false });
 
-          setRequests(docsData || []);
-        } else {
-          setRequests([]);
+          docsData = fetchDocs || [];
         }
+
+        // 4. Fetch Unlisted Private Clinic Requests for this Wilaya
+        let formattedUnlisted: any[] = [];
+        try {
+          const { data: unlistedReqs } = await supabase
+            .from("unlisted_clinic_requests")
+            .select("*")
+            .ilike("wilaya", `%${normCode}%`)
+            .order("created_at", { ascending: false });
+
+          if (unlistedReqs) {
+            formattedUnlisted = unlistedReqs.map((u) => ({
+              id: u.id,
+              is_unlisted_clinic_req: true,
+              status: u.status === 'APPROVED' ? 'ACCEPTED' : u.status,
+              created_at: u.created_at,
+              specialty: u.doctor_specialty,
+              nin: u.doctor_nin,
+              phone: u.doctor_phone,
+              order_number: u.doctor_order_number,
+              users: {
+                first_name: u.doctor_first_name,
+                last_name: u.doctor_last_name,
+                email: u.doctor_email
+              },
+              facility: {
+                id: null,
+                name: u.clinic_name,
+                facility_type: u.facility_type || 'Clinique privée',
+                wilaya: u.wilaya,
+                address: u.address || 'Adresse non renseignée'
+              },
+              raw: u
+            }));
+          }
+        } catch (unlistedErr) {
+          console.warn("unlisted_clinic_requests table query deferred:", unlistedErr);
+        }
+
+        // Merge standard doctor requests and unlisted clinic requests
+        const combined = [...formattedUnlisted, ...docsData].sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+
+        setRequests(combined);
       }
     } catch (err) {
       console.error("Error loading requests for inspector:", err);
@@ -113,19 +157,113 @@ export function InspectorRequestsPage() {
     loadRequests();
   }, []);
 
-  // Handle Accept Doctor Request
+  // Handle Accept Doctor / Clinic Request
   const handleAcceptRequest = async (doc: any) => {
     setProcessingAction(true);
     setActionError(null);
     setActionSuccess(null);
 
     try {
-      // Update Doctor status in Supabase backend
+      if (doc.is_unlisted_clinic_req) {
+        const raw = doc.raw;
+        const authResult = await validateCurrentSession(["INSPECTOR"]);
+
+        // 1. Create or retrieve existing private clinic facility
+        let facilityId: string | null = null;
+        const { data: existingFac } = await supabase
+          .from("facilities")
+          .select("id")
+          .eq("name", raw.clinic_name.trim())
+          .eq("facility_type", "Clinique privée")
+          .maybeSingle();
+
+        if (existingFac) {
+          facilityId = existingFac.id;
+        } else {
+          const { data: newFac, error: facErr } = await supabase
+            .from("facilities")
+            .insert([{
+              name: raw.clinic_name.trim(),
+              facility_type: "Clinique privée",
+              wilaya: raw.wilaya,
+              address: raw.address || "Adresse non renseignée",
+              created_by: authResult.user?.id
+            }])
+            .select("id")
+            .single();
+
+          if (facErr || !newFac) throw new Error("Erreur lors de l'enregistrement de la clinique privée.");
+          facilityId = newFac.id;
+        }
+
+        // 2. Create user account for doctor if not already created
+        let userId: string | null = null;
+        const { data: existingUser } = await supabase
+          .from("users")
+          .select("id")
+          .eq("email", raw.doctor_email.trim().toLowerCase())
+          .maybeSingle();
+
+        if (existingUser) {
+          userId = existingUser.id;
+        } else {
+          const { data: newUser, error: userErr } = await supabase
+            .from("users")
+            .insert([{
+              email: raw.doctor_email.trim().toLowerCase(),
+              password_hash: raw.doctor_password_hash,
+              first_name: raw.doctor_first_name.trim(),
+              last_name: raw.doctor_last_name.trim(),
+              role: "DOCTOR",
+              is_active: true
+            }])
+            .select("id")
+            .single();
+
+          if (userErr || !newUser) throw new Error(userErr?.message || "Erreur lors de la création du compte médecin.");
+          userId = newUser.id;
+        }
+
+        // 3. Create doctor record linked to newly validated facility
+        const { error: docErr } = await supabase
+          .from("doctors")
+          .insert([{
+            user_id: userId,
+            nin: raw.doctor_nin,
+            specialty: raw.doctor_specialty,
+            facility_id: facilityId,
+            order_number: raw.doctor_order_number,
+            phone: raw.doctor_phone,
+            status: "ACCEPTED",
+            verified_by_facility: facilityId,
+            verified_at: new Date().toISOString()
+          }]);
+
+        if (docErr && docErr.code !== "23505") {
+          throw new Error(docErr.message || "Erreur lors de l'association du médecin à la clinique.");
+        }
+
+        // 4. Mark unlisted clinic request as APPROVED
+        await supabase
+          .from("unlisted_clinic_requests")
+          .update({
+            status: "APPROVED",
+            reviewed_by: authResult.user?.id,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq("id", raw.id);
+
+        setActionSuccess(`La clinique privée "${raw.clinic_name}" et le Dr. ${raw.doctor_first_name} ${raw.doctor_last_name} ont été validés et homologués.`);
+        await loadRequests();
+        return;
+      }
+
+      // Existing doctor status update
       const { error } = await supabase
         .from("doctors")
         .update({
           status: "ACCEPTED",
-          verified_by_facility: true,
+          verified_by_facility: doc.facility_id || null,
           verified_at: new Date().toISOString()
         })
         .eq("id", doc.id);
@@ -154,6 +292,27 @@ export function InspectorRequestsPage() {
     setActionSuccess(null);
 
     try {
+      if (rejectingDoctor.is_unlisted_clinic_req) {
+        const raw = rejectingDoctor.raw;
+        const authResult = await validateCurrentSession(["INSPECTOR"]);
+
+        await supabase
+          .from("unlisted_clinic_requests")
+          .update({
+            status: "REJECTED",
+            reviewed_by: authResult.user?.id,
+            reviewed_at: new Date().toISOString(),
+            rejection_reason: rejectReason
+          })
+          .eq("id", raw.id);
+
+        setActionSuccess(`La demande d'homologation de la clinique "${raw.clinic_name}" a été refusée.`);
+        setRejectingDoctor(null);
+        setRejectReason("");
+        await loadRequests();
+        return;
+      }
+
       const { error } = await supabase
         .from("doctors")
         .update({

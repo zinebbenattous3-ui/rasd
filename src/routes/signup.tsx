@@ -314,64 +314,51 @@ function SignupPage() {
     setNetworkState('done');
 
     try {
-      let doctorFacilityId = form.facility_id || null;
-
-      // Unlisted private clinic registration handling
+      // 1. UNLISTED PRIVATE CLINIC FLOW (Case 2: Clinic Not Registered)
       if (form.role === 'DOCTOR' && form.sector === 'PRIVATE' && form.is_unlisted_clinic && form.unlisted_clinic_name.trim()) {
-        const { data: newFac, error: newFacErr } = await supabase
-          .from('facilities')
+        // Create an unlisted_clinic_requests record for Inspector review
+        const { error: reqError } = await supabase
+          .from('unlisted_clinic_requests')
           .insert([{
-            name: form.unlisted_clinic_name.trim(),
+            doctor_first_name: form.first_name.trim(),
+            doctor_last_name: form.last_name.trim(),
+            doctor_email: form.email.trim().toLowerCase(),
+            doctor_nin: form.nin.trim(),
+            doctor_specialty: form.specialty.trim(),
+            doctor_phone: form.phone.trim(),
+            doctor_order_number: form.order_number.trim() || null,
+            doctor_password_hash: hashPassword(form.password),
+            clinic_name: form.unlisted_clinic_name.trim(),
             facility_type: 'Clinique privée',
             wilaya: form.unlisted_clinic_wilaya || form.wilaya || '16 - Alger',
-            address: form.unlisted_clinic_address.trim() || null
-          }])
-          .select('id')
-          .single();
+            address: form.unlisted_clinic_address.trim() || null,
+            status: 'PENDING'
+          }]);
 
-        if (!newFacErr && newFac) {
-          doctorFacilityId = newFac.id;
-        } else {
-          const { data: existingFac } = await supabase
-            .from('facilities')
-            .select('id')
-            .eq('name', form.unlisted_clinic_name.trim())
-            .maybeSingle();
-          if (existingFac) {
-            doctorFacilityId = existingFac.id;
-          }
-        }
-      }
-
-      if (form.role === 'DOCTOR') {
-        // 1. Try RPC registration procedure for Doctors
-        const { data, error } = await supabase.rpc('register_doctor', {
-          email_input: form.email.trim(),
-          password_input: form.password,
-          nin_input: form.nin.trim(),
-          first_name_input: form.first_name.trim(),
-          last_name_input: form.last_name.trim(),
-          specialty_input: form.specialty.trim(),
-          phone_input: form.phone.trim()
-        });
-
-        if (!error && data && data.success !== false) {
-          await supabase
-            .from('doctors')
-            .update({
-              facility_id: doctorFacilityId,
-              order_number: form.sector === 'PRIVATE' ? (form.order_number.trim() || null) : null,
-              status: 'PENDING'
-            })
-            .eq('nin', form.nin.trim());
-
+        if (reqError) {
+          console.error("Error creating unlisted clinic request:", reqError);
+          // If table doesn't exist yet or fails, provide clear feedback
           setLoading(false);
-          setDone(true);
+          setNetworkState('error');
+          setErrors({ form: "Erreur lors de l'enregistrement de la demande de création de la clinique. Veuillez réessayer ou contacter l'administration." });
           return;
         }
+
+        setLoading(false);
+        setDone(true);
+        return;
       }
 
-      // 2. Direct table insertion (users table as single source of identity)
+      // 2. EXISTING FACILITY FLOW (Case 1: Public or Existing Private Clinic)
+      let doctorFacilityId = form.facility_id || null;
+      if (form.role === 'DOCTOR' && !doctorFacilityId) {
+        setLoading(false);
+        setNetworkState('error');
+        setErrors({ form: "Veuillez sélectionner un établissement de santé existant." });
+        return;
+      }
+
+      // Direct table insertion (users table as single source of identity)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .insert([{
@@ -409,6 +396,7 @@ function SignupPage() {
         }]);
 
         if (doctorError) {
+          // Transaction cleanup: delete user record if doctor insert fails
           await supabase.from('users').delete().eq('id', userData.id);
           setLoading(false);
           setNetworkState('error');
@@ -499,13 +487,21 @@ function SignupPage() {
                   ✓
                 </div>
                 <h2 style={{ fontSize: "1.75rem", color: "#062C54", fontWeight: "800", marginBottom: "0.75rem" }}>
-                  {form.role === 'DOCTOR' ? 'Demande enregistrée !' : 'Compte créé avec succès !'}
+                  {form.role === 'DOCTOR' 
+                    ? (form.is_unlisted_clinic ? 'Demande transmise à l\'Inspecteur !' : 'Demande enregistrée !')
+                    : 'Compte créé avec succès !'}
                 </h2>
                 <p style={{ color: "#4a5568", lineHeight: "1.6", fontSize: "0.95rem", marginBottom: "2rem" }}>
                   {form.role === 'DOCTOR' ? (
-                    <>
-                      Votre compte médecin a été créé avec le statut <strong>En attente (PENDING)</strong>. Votre établissement validera votre raccordement sous peu. Un e-mail d'information vous a été transmis sur <strong>{form.email}</strong>.
-                    </>
+                    form.is_unlisted_clinic ? (
+                      <>
+                        Votre demande d'inscription et le dossier de la clinique <strong>{form.unlisted_clinic_name}</strong> (Wilaya <strong>{form.unlisted_clinic_wilaya || form.wilaya}</strong>) ont été transmis à l'<strong>Inspecteur Régional</strong> pour vérification et homologation administrative.
+                      </>
+                    ) : (
+                      <>
+                        Votre compte médecin a été créé avec le statut <strong>En attente (PENDING)</strong>. L'établissement et les autorités compétentes procéderont à la validation de votre accès.
+                      </>
+                    )
                   ) : (
                     <>
                       Bienvenue sur le réseau RASED. Votre compte a été initialisé. Vous pouvez désormais accéder à votre espace sécurisé.
@@ -1429,7 +1425,13 @@ function SignupPage() {
                             opacity: loading ? 0.75 : 1
                           }}
                         >
-                          <span>{loading ? "Création en cours..." : "Créer mon compte"}</span>
+                          <span>
+                            {loading
+                              ? "Traitement en cours..."
+                              : (form.role === 'DOCTOR' && form.sector === 'PRIVATE' && form.is_unlisted_clinic)
+                                ? "Soumettre la demande à l'Inspecteur"
+                                : "Créer mon compte"}
+                          </span>
                           <ArrowRight size={16} />
                         </button>
                       </div>
