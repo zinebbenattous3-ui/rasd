@@ -18,7 +18,7 @@ import {
   CheckCircle2,
   AlertCircle
 } from "lucide-react";
-import { SelectDropdown } from "@/components/ui/select-dropdown";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import { WILAYAS_LIST_NAMES as ALGERIA_WILAYAS } from "@/lib/wilayas";
 
 export const Route = createFileRoute("/health-authority/facilities")({
@@ -362,7 +362,7 @@ function HealthAuthorityFacilitiesPage() {
         {/* Filter Dropdowns */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', alignItems: 'center' }}>
           {/* Type Filter */}
-          <SelectDropdown
+          <UnifiedSelect
             value={selectedType}
             onChange={setSelectedType}
             options={[
@@ -374,7 +374,7 @@ function HealthAuthorityFacilitiesPage() {
           />
 
           {/* Wilaya Filter */}
-          <SelectDropdown
+          <UnifiedSelect
             value={selectedWilaya}
             onChange={setSelectedWilaya}
             options={[
@@ -384,7 +384,7 @@ function HealthAuthorityFacilitiesPage() {
           />
 
           {/* Creator Filter */}
-          <SelectDropdown
+          <UnifiedSelect
             value={selectedCreator}
             onChange={setSelectedCreator}
             options={[

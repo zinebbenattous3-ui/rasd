@@ -5,6 +5,7 @@ import { validateCurrentSession } from "@/lib/auth";
 import { normalizeWilayaCode } from "@/lib/wilayas";
 import { formatDateTime } from "@/lib/utils";
 import { isPrivateClinic } from "@/lib/facilities";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import { 
   Stethoscope, 
   Search, 
@@ -20,7 +21,11 @@ import {
   Clock,
   AlertCircle,
   FileCheck,
-  UserCheck
+  UserCheck,
+  Check,
+  AlertTriangle,
+  ShieldAlert,
+  ShieldCheck
 } from "lucide-react";
 
 export const Route = createFileRoute("/inspector/doctors")({
@@ -48,6 +53,15 @@ export function InspectorDoctorsPage() {
   const [doctors, setDoctors] = useState<any[]>([]);
   const [facilities, setFacilities] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<"ACCEPTED" | "PENDING">("ACCEPTED");
+
+  // Action states
+  const [processingAction, setProcessingAction] = useState(false);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // Rejection modal
+  const [rejectingDoc, setRejectingDoc] = useState<any | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   // Filters State
   const [searchQuery, setSearchQuery] = useState("");
@@ -90,22 +104,71 @@ export function InspectorDoctorsPage() {
 
         const facIds = facList.map(f => f.id);
 
+        let docsData: any[] = [];
         if (facIds.length > 0) {
-          // 3. Fetch Doctors in those facilities
-          const { data: docsData } = await supabase
+          // Fetch Doctors in those facilities
+          const { data: fetchDocs } = await supabase
             .from("doctors")
             .select(`
               *,
-              users:user_id (first_name, last_name, email),
+              users:user_id (id, first_name, last_name, email),
               facility:facility_id (id, name, facility_type, wilaya, address)
             `)
             .in("facility_id", facIds)
             .order("created_at", { ascending: false });
 
-          setDoctors(docsData || []);
-        } else {
-          setDoctors([]);
+          docsData = fetchDocs || [];
         }
+
+        // 3. Fetch Unlisted Private Clinic Requests for this Wilaya
+        let formattedUnlisted: any[] = [];
+        try {
+          const { data: unlistedReqs } = await supabase
+            .from("unlisted_clinic_requests")
+            .select(`
+              *,
+              users:user_id (id, first_name, last_name, email)
+            `)
+            .ilike("wilaya", `%${normCode}%`)
+            .order("created_at", { ascending: false });
+
+          if (unlistedReqs) {
+            formattedUnlisted = unlistedReqs.map((u) => ({
+              id: u.id,
+              is_unlisted_clinic_req: true,
+              status: u.status === 'APPROVED' ? 'ACCEPTED' : u.status,
+              created_at: u.created_at,
+              specialty: u.specialty,
+              nin: u.nin,
+              phone: u.phone,
+              order_number: u.order_number,
+              user_id: u.user_id,
+              users: u.users ? {
+                id: u.users.id,
+                first_name: u.users.first_name,
+                last_name: u.users.last_name,
+                email: u.users.email
+              } : null,
+              facility: {
+                id: null,
+                name: u.clinic_name,
+                facility_type: u.facility_type || 'Clinique privée',
+                wilaya: u.wilaya,
+                address: u.address || 'Adresse non renseignée'
+              },
+              raw: u
+            }));
+          }
+        } catch (unlistedErr) {
+          console.warn("unlisted_clinic_requests query error:", unlistedErr);
+        }
+
+        // Merge standard doctor records and unlisted clinic doctor requests
+        const combined = [...formattedUnlisted, ...docsData].sort(
+          (a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        );
+
+        setDoctors(combined);
       }
     } catch (err) {
       console.error("Error loading doctors for inspector:", err);
@@ -117,6 +180,162 @@ export function InspectorDoctorsPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  // Handle Accept Doctor Request
+  const handleAcceptDoctor = async (doc: any) => {
+    setProcessingAction(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const authResult = await validateCurrentSession(["INSPECTOR"]);
+
+      if (doc.is_unlisted_clinic_req) {
+        const raw = doc.raw;
+
+        // 1. Create or retrieve existing private clinic facility
+        let facilityId: string | null = null;
+        const { data: existingFac } = await supabase
+          .from("facilities")
+          .select("id")
+          .eq("name", raw.clinic_name.trim())
+          .eq("facility_type", "Clinique privée")
+          .maybeSingle();
+
+        if (existingFac) {
+          facilityId = existingFac.id;
+        } else {
+          const { data: newFac, error: facErr } = await supabase
+            .from("facilities")
+            .insert([{
+              name: raw.clinic_name.trim(),
+              facility_type: "Clinique privée",
+              wilaya: raw.wilaya,
+              address: raw.address || "Adresse non renseignée",
+              created_by: authResult.user?.id
+            }])
+            .select("id")
+            .single();
+
+          if (facErr || !newFac) throw new Error("Erreur lors de l'enregistrement de la clinique privée.");
+          facilityId = newFac.id;
+        }
+
+        // 2. Link or create doctor record
+        const userId = raw.user_id;
+        const { data: existingDoc } = await supabase
+          .from("doctors")
+          .select("id")
+          .eq("user_id", userId)
+          .maybeSingle();
+
+        if (!existingDoc) {
+          const { error: docErr } = await supabase
+            .from("doctors")
+            .insert([{
+              user_id: userId,
+              nin: raw.nin,
+              specialty: raw.specialty,
+              facility_id: facilityId,
+              order_number: raw.order_number,
+              phone: raw.phone,
+              status: "ACCEPTED",
+              verified_by_facility: facilityId,
+              verified_at: new Date().toISOString()
+            }]);
+
+          if (docErr) throw new Error(docErr.message || "Erreur lors du rattachement du médecin.");
+        } else {
+          await supabase
+            .from("doctors")
+            .update({
+              facility_id: facilityId,
+              order_number: raw.order_number,
+              status: "ACCEPTED",
+              verified_by_facility: facilityId,
+              verified_at: new Date().toISOString()
+            })
+            .eq("id", existingDoc.id);
+        }
+
+        // 3. Mark unlisted clinic request as APPROVED
+        await supabase
+          .from("unlisted_clinic_requests")
+          .update({
+            status: "APPROVED",
+            reviewed_by: authResult.user?.id,
+            reviewed_at: new Date().toISOString()
+          })
+          .eq("id", raw.id);
+
+        const docName = doc.users ? `Dr. ${doc.users.first_name} ${doc.users.last_name}` : "Médecin";
+        setActionSuccess(`La demande de ${docName} et l'homologation de "${raw.clinic_name}" ont été validées.`);
+      } else {
+        // Standard doctor record update
+        const { error } = await supabase
+          .from("doctors")
+          .update({
+            status: "ACCEPTED",
+            verified_at: new Date().toISOString()
+          })
+          .eq("id", doc.id);
+
+        if (error) throw error;
+        setActionSuccess(`Le médecin Dr. ${doc.users?.first_name || ""} ${doc.users?.last_name || ""} a été validé.`);
+      }
+
+      await loadData();
+    } catch (err: any) {
+      setActionError(err.message || "Erreur lors de la validation du médecin.");
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  // Handle Reject Doctor Request
+  const handleConfirmReject = async () => {
+    if (!rejectingDoc) return;
+    setProcessingAction(true);
+    setActionError(null);
+    setActionSuccess(null);
+
+    try {
+      const authResult = await validateCurrentSession(["INSPECTOR"]);
+
+      if (rejectingDoc.is_unlisted_clinic_req) {
+        const { error } = await supabase
+          .from("unlisted_clinic_requests")
+          .update({
+            status: "REJECTED",
+            reviewed_by: authResult.user?.id,
+            reviewed_at: new Date().toISOString(),
+            rejection_reason: rejectReason
+          })
+          .eq("id", rejectingDoc.id);
+
+        if (error) throw error;
+        setActionSuccess("La demande de clinique privée et du médecin a été refusée.");
+      } else {
+        const { error } = await supabase
+          .from("doctors")
+          .update({
+            status: "REJECTED"
+          })
+          .eq("id", rejectingDoc.id);
+
+        if (error) throw error;
+        setActionSuccess("La demande d'inscription du médecin a été refusée.");
+      }
+
+      setRejectingDoc(null);
+      setRejectReason("");
+      await loadData();
+    } catch (err: any) {
+      setActionError(err.message || "Erreur lors du refus.");
+    } finally {
+      setProcessingAction(false);
+    }
+  };
 
   // Filter Action Handlers
   const handleApplyFilters = () => {
@@ -157,7 +376,8 @@ export function InspectorDoctorsPage() {
       fullName.includes(appliedSearchQuery.toLowerCase()) ||
       email.toLowerCase().includes(appliedSearchQuery.toLowerCase()) ||
       (doc.nin && doc.nin.includes(appliedSearchQuery)) ||
-      (doc.order_number && doc.order_number.toLowerCase().includes(appliedSearchQuery.toLowerCase()));
+      (doc.order_number && doc.order_number.toLowerCase().includes(appliedSearchQuery.toLowerCase())) ||
+      (doc.facility?.name && doc.facility.name.toLowerCase().includes(appliedSearchQuery.toLowerCase()));
 
     const matchesSpecialty = 
       appliedSpecialtyFilter === "ALL" || doc.specialty === appliedSpecialtyFilter;
@@ -203,6 +423,18 @@ export function InspectorDoctorsPage() {
           </button>
         </div>
       </div>
+
+      {/* FEEDBACK ALERTS */}
+      {actionSuccess && (
+        <div style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0", color: "#166534", padding: "12px 16px", borderRadius: "12px", fontSize: "0.88rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+          <ShieldCheck size={18} /> {actionSuccess}
+        </div>
+      )}
+      {actionError && (
+        <div style={{ backgroundColor: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", padding: "12px 16px", borderRadius: "12px", fontSize: "0.88rem", fontWeight: "700", display: "flex", alignItems: "center", gap: "8px" }}>
+          <ShieldAlert size={18} /> {actionError}
+        </div>
+      )}
 
       {/* SECTION TABS */}
       <div style={{ display: "flex", gap: "12px", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "12px" }}>
@@ -256,7 +488,7 @@ export function InspectorDoctorsPage() {
             <Search size={18} color={COLORS.muted} style={{ position: "absolute", left: "14px", top: "50%", transform: "translateY(-50%)" }} />
             <input
               type="text"
-              placeholder="Rechercher par nom, email, NIN ou N° d'ordre..."
+              placeholder="Rechercher par nom, email, NIN, N° d'ordre..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleApplyFilters()}
@@ -271,47 +503,31 @@ export function InspectorDoctorsPage() {
             />
           </div>
 
-          {/* Specialty Filter */}
-          <select
-            value={specialtyFilter}
-            onChange={(e) => setSpecialtyFilter(e.target.value)}
-            style={{
-              padding: "9px 14px",
-              borderRadius: "10px",
-              border: `1px solid ${COLORS.border}`,
-              fontSize: "0.9rem",
-              backgroundColor: "white",
-              color: COLORS.navy,
-              outline: "none",
-              cursor: "pointer"
-            }}
-          >
-            <option value="ALL">Toutes les spécialités</option>
-            {specialties.map(s => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
+          {/* Unified Select for Specialty */}
+          <div style={{ width: "200px" }}>
+            <UnifiedSelect
+              icon={Stethoscope}
+              value={specialtyFilter}
+              onChange={(val) => setSpecialtyFilter(val)}
+              options={[
+                { value: "ALL", label: "Toutes spécialités" },
+                ...specialties.map((s) => ({ value: s, label: s }))
+              ]}
+            />
+          </div>
 
-          {/* Facility Filter */}
-          <select
-            value={facilityFilter}
-            onChange={(e) => setFacilityFilter(e.target.value)}
-            style={{
-              padding: "9px 14px",
-              borderRadius: "10px",
-              border: `1px solid ${COLORS.border}`,
-              fontSize: "0.9rem",
-              backgroundColor: "white",
-              color: COLORS.navy,
-              outline: "none",
-              cursor: "pointer"
-            }}
-          >
-            <option value="ALL">Tous les établissements</option>
-            {facilities.map(f => (
-              <option key={f.id} value={f.id}>{f.name} ({f.facility_type})</option>
-            ))}
-          </select>
+          {/* Unified Select for Facility */}
+          <div style={{ width: "220px" }}>
+            <UnifiedSelect
+              icon={Building2}
+              value={facilityFilter}
+              onChange={(val) => setFacilityFilter(val)}
+              options={[
+                { value: "ALL", label: "Tous les établissements" },
+                ...facilities.map((f) => ({ value: f.id, label: f.name, sublabel: f.facility_type }))
+              ]}
+            />
+          </div>
         </div>
 
         {/* Filter Action Buttons */}
@@ -340,16 +556,16 @@ export function InspectorDoctorsPage() {
               onClick={handleResetFilters}
               style={{
                 backgroundColor: COLORS.bgLight,
-                color: COLORS.muted,
+                color: COLORS.navy,
                 border: `1px solid ${COLORS.border}`,
-                padding: "9px 12px",
+                padding: "9px 14px",
                 borderRadius: "10px",
-                fontWeight: "600",
-                fontSize: "0.85rem",
+                fontWeight: "700",
+                fontSize: "0.88rem",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
-                gap: "4px"
+                gap: "6px"
               }}
             >
               <RotateCcw size={14} /> Réinitialiser
@@ -358,126 +574,172 @@ export function InspectorDoctorsPage() {
         </div>
       </div>
 
-      {/* DOCTORS LIST VIEW */}
-      <div style={{ backgroundColor: "white", borderRadius: "18px", border: `1px solid ${COLORS.border}`, padding: "20px", boxShadow: "0 2px 10px rgba(0,0,0,0.02)" }}>
+      {/* DOCTORS TABLE / LIST */}
+      <div style={{ backgroundColor: "white", borderRadius: "16px", border: `1px solid ${COLORS.border}`, overflow: "hidden", boxShadow: "0 4px 16px rgba(0,0,0,0.02)" }}>
         {loading ? (
-          <div style={{ padding: "40px", textAlign: "center", color: COLORS.muted }}>
-            Chargement des praticiens de la Wilaya...
-          </div>
-        ) : filteredDoctors.length === 0 ? (
-          <div style={{ padding: "40px", textAlign: "center", color: COLORS.muted }}>
-            {activeTab === "PENDING" ? "Aucune demande de validation en attente." : "Aucun médecin ne correspond aux critères de recherche."}
+          <div style={{ padding: "60px", textAlign: "center", color: COLORS.navy }}>
+            <RefreshCw size={32} className="animate-spin" style={{ margin: "0 auto 12px auto", color: COLORS.teal }} />
+            <div style={{ fontWeight: "700", fontSize: "1.05rem" }}>Chargement des fiches médecins...</div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "16px" }}>
-            {filteredDoctors.map((doc) => {
-              const isPrivate = isPrivateClinic(doc.facility?.facility_type);
-              const isPending = doc.status === "PENDING";
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
+              <thead style={{ backgroundColor: "#F8FAFC", borderBottom: `1px solid ${COLORS.border}` }}>
+                <tr>
+                  <th style={{ padding: "14px 20px", color: COLORS.navy, fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "800" }}>Médecin</th>
+                  <th style={{ padding: "14px 20px", color: COLORS.navy, fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "800" }}>Spécialité & NIN</th>
+                  <th style={{ padding: "14px 20px", color: COLORS.navy, fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "800" }}>Établissement / Clinique</th>
+                  <th style={{ padding: "14px 20px", color: COLORS.navy, fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "800" }}>N° Ordre</th>
+                  <th style={{ padding: "14px 20px", color: COLORS.navy, fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "800" }}>Statut</th>
+                  <th style={{ padding: "14px 20px", color: COLORS.navy, fontSize: "0.82rem", textTransform: "uppercase", letterSpacing: "0.05em", fontWeight: "800", textAlign: "right" }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredDoctors.map((doc, idx) => {
+                  const firstName = doc.users?.first_name || "";
+                  const lastName = doc.users?.last_name || "";
+                  const fullName = `Dr. ${firstName} ${lastName}`.trim() || "Médecin";
+                  const email = doc.users?.email || "Email non disponible";
+                  const isUnlistedReq = doc.is_unlisted_clinic_req;
 
-              return (
-                <div
-                  key={doc.id}
-                  style={{
-                    border: `1px solid ${isPending ? "#FDE68A" : COLORS.border}`,
-                    borderRadius: "16px",
-                    padding: "20px",
-                    backgroundColor: isPending ? "#fffbeb" : COLORS.bgLight,
-                    display: "flex",
-                    flexDirection: "column",
-                    justifyContent: "space-between",
-                    gap: "14px"
-                  }}
-                >
-                  <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" }}>
-                      <span
-                        style={{
-                          fontSize: "0.75rem",
-                          fontWeight: "800",
-                          padding: "3px 8px",
-                          borderRadius: "6px",
-                          backgroundColor: isPending ? "#FEF3C7" : COLORS.lightTeal,
-                          color: isPending ? "#B45309" : COLORS.teal,
-                        }}
-                      >
-                        {isPending ? "Attente de validation" : "Compte Validé"}
-                      </span>
-
-                      <span style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "600" }}>
-                        {doc.created_at ? formatDateTime(doc.created_at) : "Inscrit"}
-                      </span>
-                    </div>
-
-                    <h3 style={{ fontSize: "1.1rem", fontWeight: "900", color: COLORS.navy, margin: "0 0 4px 0" }}>
-                      Dr. {doc.users?.first_name} {doc.users?.last_name}
-                    </h3>
-                    
-                    <div style={{ fontSize: "0.85rem", color: COLORS.teal, fontWeight: "700", marginBottom: "8px" }}>
-                      {doc.specialty}
-                    </div>
-
-                    <div style={{ fontSize: "0.82rem", color: COLORS.text, backgroundColor: "white", padding: "10px", borderRadius: "10px", border: `1px solid ${COLORS.border}` }}>
-                      <div style={{ fontWeight: "700", color: COLORS.navy, marginBottom: "2px", display: "flex", alignItems: "center", gap: "4px" }}>
-                        <Building2 size={14} color={COLORS.teal} />
-                        {doc.facility?.name || "Établissement non assigné"}
-                      </div>
-                      <div style={{ fontSize: "0.75rem", color: COLORS.muted }}>
-                        Type: <strong>{doc.facility?.facility_type || "N/A"}</strong> • Wilaya {doc.facility?.wilaya || inspectorWilaya}
-                      </div>
-                      {isPrivate && doc.order_number && (
-                        <div style={{ fontSize: "0.75rem", color: COLORS.navy, marginTop: "4px", fontWeight: "700" }}>
-                          N° d'ordre: {doc.order_number}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "8px" }}>
-                    <button
-                      onClick={() => setSelectedDoctor(doc)}
+                  return (
+                    <tr
+                      key={doc.id}
                       style={{
-                        flex: 1,
-                        backgroundColor: "white",
-                        border: `1.5px solid ${COLORS.navy}`,
-                        color: COLORS.navy,
-                        padding: "8px 12px",
-                        borderRadius: "10px",
-                        fontWeight: "700",
-                        fontSize: "0.82rem",
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: "4px"
+                        borderBottom: idx !== filteredDoctors.length - 1 ? `1px solid ${COLORS.border}` : "none",
+                        transition: "background-color 0.1s"
                       }}
+                      onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#F8FAFC")}
+                      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
                     >
-                      <Eye size={14} /> Fiche Profil
-                    </button>
+                      {/* Doctor Name & Contact */}
+                      <td style={{ padding: "16px 20px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          <div style={{ width: "38px", height: "38px", borderRadius: "10px", backgroundColor: COLORS.lightTeal, color: COLORS.teal, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "800", fontSize: "0.95rem" }}>
+                            {firstName ? firstName.charAt(0).toUpperCase() : "D"}
+                          </div>
+                          <div>
+                            <div style={{ fontWeight: "800", color: COLORS.navy, fontSize: "0.95rem" }}>{fullName}</div>
+                            <div style={{ fontSize: "0.8rem", color: COLORS.muted, marginTop: "2px" }}>{email} • {doc.phone || "Tél non renseigné"}</div>
+                          </div>
+                        </div>
+                      </td>
 
-                    {isPending && (
-                      <Link
-                        to="/inspector/requests"
-                        style={{
-                          backgroundColor: COLORS.navy,
-                          color: "white",
-                          padding: "8px 12px",
-                          borderRadius: "10px",
-                          fontWeight: "700",
-                          fontSize: "0.82rem",
-                          textDecoration: "none",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: "4px"
-                        }}
-                      >
-                        <FileCheck size={14} /> Examiner
-                      </Link>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                      {/* Specialty & NIN */}
+                      <td style={{ padding: "16px 20px" }}>
+                        <div style={{ fontWeight: "700", color: COLORS.navy, fontSize: "0.9rem" }}>{doc.specialty}</div>
+                        <div style={{ fontSize: "0.78rem", color: COLORS.muted, marginTop: "2px" }}>NIN: {doc.nin}</div>
+                      </td>
+
+                      {/* Facility */}
+                      <td style={{ padding: "16px 20px" }}>
+                        <div style={{ fontWeight: "700", color: COLORS.navy, fontSize: "0.9rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                          <Building2 size={15} color={COLORS.teal} />
+                          <span>{doc.facility?.name || "Clinique non répertoriée"}</span>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: COLORS.muted, marginTop: "2px" }}>
+                          {doc.facility?.facility_type || "Clinique privée"} {isUnlistedReq ? "(Demande d'homologation)" : ""}
+                        </div>
+                      </td>
+
+                      {/* N° Ordre */}
+                      <td style={{ padding: "16px 20px", fontSize: "0.88rem", fontWeight: "700", color: COLORS.navy }}>
+                        {doc.order_number || <span style={{ color: COLORS.muted, fontWeight: "400" }}>—</span>}
+                      </td>
+
+                      {/* Status */}
+                      <td style={{ padding: "16px 20px" }}>
+                        {doc.status === "PENDING" ? (
+                          <span style={{ backgroundColor: "#FEF3C7", color: "#B45309", padding: "4px 10px", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <Clock size={14} /> En attente
+                          </span>
+                        ) : (
+                          <span style={{ backgroundColor: "#DCFCE7", color: "#15803D", padding: "4px 10px", borderRadius: "8px", fontSize: "0.8rem", fontWeight: "800", display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <CheckCircle2 size={14} /> Validé
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Actions */}
+                      <td style={{ padding: "16px 20px", textAlign: "right" }}>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px" }}>
+                          {doc.status === "PENDING" ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleAcceptDoctor(doc)}
+                                disabled={processingAction}
+                                style={{
+                                  backgroundColor: COLORS.teal,
+                                  color: "white",
+                                  border: "none",
+                                  padding: "6px 12px",
+                                  borderRadius: "8px",
+                                  fontSize: "0.82rem",
+                                  fontWeight: "700",
+                                  cursor: "pointer",
+                                  display: "flex",
+                                  alignItems: "center",
+                                  gap: "4px"
+                                }}
+                              >
+                                <Check size={14} /> Valider
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setRejectingDoc(doc)}
+                                disabled={processingAction}
+                                style={{
+                                  backgroundColor: "#FEF2F2",
+                                  color: "#DC2626",
+                                  border: "1px solid #FCA5A5",
+                                  padding: "6px 10px",
+                                  borderRadius: "8px",
+                                  fontSize: "0.82rem",
+                                  fontWeight: "700",
+                                  cursor: "pointer"
+                                }}
+                              >
+                                <X size={14} />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setSelectedDoctor(doc)}
+                              style={{
+                                backgroundColor: COLORS.bgLight,
+                                color: COLORS.navy,
+                                border: `1px solid ${COLORS.border}`,
+                                padding: "6px 12px",
+                                borderRadius: "8px",
+                                fontSize: "0.82rem",
+                                fontWeight: "700",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px"
+                              }}
+                            >
+                              <Eye size={14} /> Profil
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {filteredDoctors.length === 0 && (
+                  <tr>
+                    <td colSpan={6} style={{ textAlign: "center", padding: "40px 20px", color: COLORS.muted }}>
+                      <div style={{ fontSize: "1rem", fontWeight: "700", color: COLORS.navy }}>Aucun médecin trouvé</div>
+                      <div style={{ fontSize: "0.85rem", marginTop: "4px" }}>Ajustez vos critères de recherche.</div>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
@@ -487,69 +749,79 @@ export function InspectorDoctorsPage() {
         <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6, 44, 84, 0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", zIndex: 50 }}>
           <div style={{ backgroundColor: "white", borderRadius: "20px", width: "100%", maxWidth: "520px", padding: "24px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
             
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
-              <div>
-                <span style={{ fontSize: "0.75rem", fontWeight: "800", color: COLORS.teal, textTransform: "uppercase" }}>
-                  Profil Praticien • {selectedDoctor.status === "PENDING" ? "En attente de validation" : "Validé"}
-                </span>
-                <h2 style={{ fontSize: "1.35rem", fontWeight: "900", color: COLORS.navy, margin: "4px 0 0 0" }}>
-                  Dr. {selectedDoctor.users?.first_name} {selectedDoctor.users?.last_name}
-                </h2>
-                <div style={{ fontSize: "0.85rem", color: COLORS.teal, fontWeight: "700" }}>
-                  {selectedDoctor.specialty}
-                </div>
-              </div>
-
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: `1px solid ${COLORS.border}`, paddingBottom: "12px" }}>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: "900", color: COLORS.navy, margin: 0 }}>
+                Profil Médecin
+              </h3>
               <button onClick={() => setSelectedDoctor(null)} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.muted }}>
                 <X size={20} />
               </button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px", backgroundColor: COLORS.bgLight, padding: "16px", borderRadius: "14px", border: `1px solid ${COLORS.border}` }}>
-              <div>
-                <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700", textTransform: "uppercase" }}>Email institutionnel</div>
-                <div style={{ fontSize: "0.9rem", fontWeight: "700", color: COLORS.navy }}>{selectedDoctor.users?.email || "Non renseigné"}</div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700", textTransform: "uppercase" }}>Numéro d'Identification National (NIN)</div>
-                <div style={{ fontSize: "0.9rem", fontWeight: "700", color: COLORS.navy }}>{selectedDoctor.nin || "Non renseigné"}</div>
-              </div>
-
-              {selectedDoctor.order_number && (
-                <div>
-                  <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700", textTransform: "uppercase" }}>Numéro d'ordre des médecins</div>
-                  <div style={{ fontSize: "0.9rem", fontWeight: "800", color: COLORS.navy }}>{selectedDoctor.order_number}</div>
-                </div>
-              )}
-
-              <div>
-                <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700", textTransform: "uppercase" }}>Téléphone de contact</div>
-                <div style={{ fontSize: "0.9rem", fontWeight: "700", color: COLORS.navy }}>{selectedDoctor.phone || "Non renseigné"}</div>
-              </div>
-
-              <div style={{ paddingTop: "10px", borderTop: `1px solid ${COLORS.border}` }}>
-                <div style={{ fontSize: "0.75rem", color: COLORS.muted, fontWeight: "700", textTransform: "uppercase" }}>Établissement d'exercice</div>
-                <div style={{ fontSize: "0.92rem", fontWeight: "800", color: COLORS.navy }}>{selectedDoctor.facility?.name || "Non spécifié"}</div>
-                <div style={{ fontSize: "0.78rem", color: COLORS.muted }}>{selectedDoctor.facility?.facility_type} • Wilaya {selectedDoctor.facility?.wilaya || inspectorWilaya}</div>
-              </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px", fontSize: "0.9rem", color: COLORS.navy }}>
+              <div><strong>Nom complet:</strong> Dr. {selectedDoctor.users?.first_name} {selectedDoctor.users?.last_name}</div>
+              <div><strong>Email:</strong> {selectedDoctor.users?.email}</div>
+              <div><strong>Spécialité:</strong> {selectedDoctor.specialty}</div>
+              <div><strong>NIN:</strong> {selectedDoctor.nin}</div>
+              <div><strong>N° Ordre des Médecins:</strong> {selectedDoctor.order_number || "Non renseigné"}</div>
+              <div><strong>Établissement rattaché:</strong> {selectedDoctor.facility?.name} ({selectedDoctor.facility?.facility_type})</div>
+              <div><strong>Wilaya:</strong> {selectedDoctor.facility?.wilaya}</div>
+              <div><strong>Téléphone:</strong> {selectedDoctor.phone}</div>
             </div>
 
-            <div style={{ marginTop: "20px", display: "flex", justifyContent: "flex-end" }}>
-              <button
-                onClick={() => setSelectedDoctor(null)}
-                style={{
-                  backgroundColor: COLORS.navy,
-                  color: "white",
-                  border: "none",
-                  padding: "10px 20px",
-                  borderRadius: "10px",
-                  fontWeight: "700",
-                  fontSize: "0.88rem",
-                  cursor: "pointer"
-                }}
-              >
+            <div style={{ marginTop: "20px", textAlign: "right" }}>
+              <button onClick={() => setSelectedDoctor(null)} style={{ backgroundColor: COLORS.navy, color: "white", border: "none", padding: "10px 20px", borderRadius: "10px", fontWeight: "700", cursor: "pointer" }}>
                 Fermer
+              </button>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* REJECTION MODAL */}
+      {rejectingDoc && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(6, 44, 84, 0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", zIndex: 50 }}>
+          <div style={{ backgroundColor: "white", borderRadius: "20px", width: "100%", maxWidth: "480px", padding: "24px", boxShadow: "0 20px 40px rgba(0,0,0,0.2)" }}>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <h3 style={{ fontSize: "1.2rem", fontWeight: "900", color: "#991b1b", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                <AlertTriangle size={20} /> Refuser l'inscription
+              </h3>
+              <button onClick={() => setRejectingDoc(null)} style={{ background: "none", border: "none", cursor: "pointer", color: COLORS.muted }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            <p style={{ fontSize: "0.88rem", color: COLORS.text, marginBottom: "14px" }}>
+              Spécifiez le motif de refus de l'inscription pour <strong>Dr. {rejectingDoc.users?.first_name} {rejectingDoc.users?.last_name}</strong>.
+            </p>
+
+            <div style={{ marginBottom: "16px" }}>
+              <textarea
+                placeholder="Motif du refus..."
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={3}
+                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+              <button
+                onClick={() => setRejectingDoc(null)}
+                disabled={processingAction}
+                style={{ backgroundColor: COLORS.bgLight, color: COLORS.navy, border: `1px solid ${COLORS.border}`, padding: "10px 16px", borderRadius: "10px", fontWeight: "700", cursor: "pointer" }}
+              >
+                Annuler
+              </button>
+
+              <button
+                onClick={handleConfirmReject}
+                disabled={processingAction}
+                style={{ backgroundColor: "#991b1b", color: "white", border: "none", padding: "10px 20px", borderRadius: "10px", fontWeight: "700", cursor: "pointer" }}
+              >
+                {processingAction ? "Traitement..." : "Confirmer le refus"}
               </button>
             </div>
 

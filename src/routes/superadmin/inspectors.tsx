@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { hashPassword } from "@/lib/auth-hash";
 import { validateCurrentSession } from "@/lib/auth";
 import { ALGERIA_WILAYAS_69 } from "@/lib/wilayas";
-import { SelectDropdown } from "@/components/ui/select-dropdown";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import { 
   Plus, 
   ShieldCheck, 
@@ -533,7 +533,7 @@ export function InspectorsPage() {
           </div>
 
           {/* Wilaya Filter Dropdown */}
-          <SelectDropdown
+          <UnifiedSelect
             icon={MapPin}
             searchable={true}
             placeholder="Toutes les Wilayas"
@@ -546,7 +546,7 @@ export function InspectorsPage() {
           />
 
           {/* Statut Filter Dropdown */}
-          <SelectDropdown
+          <UnifiedSelect
             icon={Filter}
             placeholder="Tous les statuts"
             value={selectedStatusFilter}
