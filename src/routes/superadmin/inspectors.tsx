@@ -848,12 +848,12 @@ export function InspectorsPage() {
               {/* Wilaya Selector (Single Source of Truth 69 Wilayas) */}
               <div>
                 <label style={{ fontSize: "0.82rem", fontWeight: "700", color: COLORS.navy, display: "block", marginBottom: "6px" }}>Wilaya d'Affectation *</label>
-                <SelectDropdown
+                <UnifiedSelect
                   icon={MapPin}
                   searchable={true}
                   placeholder="Sélectionner la Wilaya..."
                   value={addForm.wilaya}
-                  onChange={(val) => setAddForm({ ...addForm, wilaya: val })}
+                  onChange={(val: string) => setAddForm({ ...addForm, wilaya: val })}
                   options={ALGERIA_WILAYAS_69.map((w) => ({
                     value: `${w.code} - ${w.name}`,
                     label: `${w.code} - ${w.name}`
@@ -971,11 +971,11 @@ export function InspectorsPage() {
 
               <div>
                 <label style={{ fontSize: "0.82rem", fontWeight: "700", color: COLORS.navy, display: "block", marginBottom: "6px" }}>Wilaya *</label>
-                <SelectDropdown
+                <UnifiedSelect
                   icon={MapPin}
                   searchable={true}
                   value={editForm.wilaya}
-                  onChange={(val) => setEditForm({ ...editForm, wilaya: val })}
+                  onChange={(val: string) => setEditForm({ ...editForm, wilaya: val })}
                   options={ALGERIA_WILAYAS_69.map((w) => ({
                     value: `${w.code} - ${w.name}`,
                     label: `${w.code} - ${w.name}`

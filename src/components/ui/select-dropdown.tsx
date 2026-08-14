@@ -13,10 +13,10 @@ export interface SelectDropdownProps {
   onChange: (val: string) => void;
   options: SelectOption[];
   placeholder?: string;
-  icon?: LucideIcon;
+  icon?: LucideIcon | undefined;
   searchable?: boolean;
   disabled?: boolean;
-  style?: React.CSSProperties;
+  style?: React.CSSProperties | undefined;
 }
 
 export function SelectDropdown({
