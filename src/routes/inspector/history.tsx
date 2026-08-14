@@ -4,6 +4,8 @@ import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/utils";
 import { validateCurrentSession } from "@/lib/auth";
 import { normalizeWilayaCode } from "@/lib/wilayas";
+import { DatePicker } from "@/components/ui/date-picker";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import { 
   History, 
   Clock, 
@@ -247,15 +249,17 @@ export function InspectorHistoryPage() {
             <label style={{ fontSize: "0.8rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "6px" }}>
               Type d'Activité
             </label>
-            <select
+            <UnifiedSelect
+              icon={Filter}
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              style={{ width: "100%", padding: "10px 14px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.88rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
-            >
-              <option value="ALL">Tous les types d'événements</option>
-              <option value="EVENT">Signalements Sanitaires</option>
-              <option value="FACILITY">Enregistrements d'Établissements</option>
-            </select>
+              onChange={(val: string) => setTypeFilter(val)}
+              placeholder="Tous les types d'événements"
+              options={[
+                { value: "ALL", label: "Tous les types d'événements" },
+                { value: "EVENT", label: "Signalements Sanitaires" },
+                { value: "FACILITY", label: "Enregistrements d'Établissements" }
+              ]}
+            />
           </div>
 
           {/* WILAYA (LOCKED) */}

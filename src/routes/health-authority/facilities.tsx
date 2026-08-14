@@ -603,32 +603,32 @@ function HealthAuthorityFacilitiesPage() {
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
                     Type d'Établissement (Secteur Public) *
                   </label>
-                  <select
+                  <UnifiedSelect
                     value={form.facility_type}
-                    onChange={(e) => setForm({ ...form, facility_type: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
-                  >
-                    {PUBLIC_FACILITY_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {PUBLIC_FACILITY_LABELS[type]}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val: string) => setForm({ ...form, facility_type: val })}
+                    placeholder="Sélectionner le type..."
+                    options={PUBLIC_FACILITY_TYPES.map((type) => ({
+                      value: type,
+                      label: PUBLIC_FACILITY_LABELS[type] || type
+                    }))}
+                  />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
                     Wilaya *
                   </label>
-                  <select
+                  <UnifiedSelect
+                    icon={MapPin}
+                    searchable={true}
                     value={form.wilaya}
-                    onChange={(e) => setForm({ ...form, wilaya: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
-                  >
-                    {ALGERIA_WILAYAS.map((w) => (
-                      <option key={w} value={w}>{w}</option>
-                    ))}
-                  </select>
+                    onChange={(val: string) => setForm({ ...form, wilaya: val })}
+                    placeholder="Sélectionner la wilaya..."
+                    options={ALGERIA_WILAYAS.map((w) => ({
+                      value: w,
+                      label: w
+                    }))}
+                  />
                 </div>
               </div>
 
@@ -704,32 +704,32 @@ function HealthAuthorityFacilitiesPage() {
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
                     Type *
                   </label>
-                  <select
+                  <UnifiedSelect
                     value={form.facility_type}
-                    onChange={(e) => setForm({ ...form, facility_type: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
-                  >
-                    {PUBLIC_FACILITY_TYPES.map((type) => (
-                      <option key={type} value={type}>
-                        {PUBLIC_FACILITY_LABELS[type]}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val: string) => setForm({ ...form, facility_type: val })}
+                    placeholder="Sélectionner le type..."
+                    options={PUBLIC_FACILITY_TYPES.map((type) => ({
+                      value: type,
+                      label: PUBLIC_FACILITY_LABELS[type] || type
+                    }))}
+                  />
                 </div>
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: '700', color: COLORS.navy, marginBottom: '6px' }}>
                     Wilaya *
                   </label>
-                  <select
+                  <UnifiedSelect
+                    icon={MapPin}
+                    searchable={true}
                     value={form.wilaya}
-                    onChange={(e) => setForm({ ...form, wilaya: e.target.value })}
-                    style={{ width: '100%', padding: '10px 14px', borderRadius: '10px', border: `1px solid ${COLORS.border}`, fontSize: '0.9rem', outline: 'none', backgroundColor: 'white' }}
-                  >
-                    {ALGERIA_WILAYAS.map((w) => (
-                      <option key={w} value={w}>{w}</option>
-                    ))}
-                  </select>
+                    onChange={(val: string) => setForm({ ...form, wilaya: val })}
+                    placeholder="Sélectionner la wilaya..."
+                    options={ALGERIA_WILAYAS.map((w) => ({
+                      value: w,
+                      label: w
+                    }))}
+                  />
                 </div>
               </div>
 

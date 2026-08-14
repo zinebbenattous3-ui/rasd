@@ -8,6 +8,7 @@ import { generateReportExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
 import { formatDateTime } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import {
   FileText,
   FileSpreadsheet,
@@ -371,18 +372,20 @@ export function SuperadminReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
               Wilaya (69)
             </label>
-            <select
+            <UnifiedSelect
+              icon={MapPin}
+              searchable={true}
               value={selectedWilaya}
-              onChange={(e) => setSelectedWilaya(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Toutes les 69 wilayas</option>
-              {ALGERIA_WILAYAS_69.map((w) => (
-                <option key={w.code} value={w.code}>
-                  {w.code} - {w.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val: string) => setSelectedWilaya(val)}
+              placeholder="Toutes les 69 wilayas"
+              options={[
+                { value: "", label: "Toutes les 69 wilayas" },
+                ...ALGERIA_WILAYAS_69.map((w) => ({
+                  value: w.code,
+                  label: `${w.code} - ${w.name}`
+                }))
+              ]}
+            />
           </div>
 
           {/* FACILITY FILTER */}
@@ -390,18 +393,19 @@ export function SuperadminReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
               Établissement
             </label>
-            <select
+            <UnifiedSelect
+              icon={Building2}
               value={selectedFacilityId}
-              onChange={(e) => setSelectedFacilityId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Tous les établissements</option>
-              {facilitiesList.map((fac) => (
-                <option key={fac.id} value={fac.id}>
-                  {fac.name} ({fac.wilaya})
-                </option>
-              ))}
-            </select>
+              onChange={(val: string) => setSelectedFacilityId(val)}
+              placeholder="Tous les établissements"
+              options={[
+                { value: "", label: "Tous les établissements" },
+                ...facilitiesList.map((fac) => ({
+                  value: fac.id,
+                  label: `${fac.name} (${fac.wilaya})`
+                }))
+              ]}
+            />
           </div>
 
           {/* DATE RANGE */}
@@ -430,18 +434,16 @@ export function SuperadminReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
               Pathologie
             </label>
-            <select
+            <UnifiedSelect
+              icon={Stethoscope}
               value={selectedDiseaseId}
-              onChange={(e) => setSelectedDiseaseId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Toutes les pathologies</option>
-              {diseasesList.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name}
-                </option>
-              ))}
-            </select>
+              onChange={(val: string) => setSelectedDiseaseId(val)}
+              placeholder="Toutes les pathologies"
+              options={[
+                { value: "", label: "Toutes les pathologies" },
+                ...diseasesList.map((d) => ({ value: d.id, label: d.name }))
+              ]}
+            />
           </div>
 
           {/* SEVERITY */}
@@ -449,17 +451,19 @@ export function SuperadminReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.text, display: "block", marginBottom: "4px" }}>
               Gravité
             </label>
-            <select
+            <UnifiedSelect
+              icon={AlertTriangle}
               value={selectedSeverity}
-              onChange={(e) => setSelectedSeverity(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight }}
-            >
-              <option value="">Toutes les gravités</option>
-              <option value="CRITICAL">🔴 CRITIQUE</option>
-              <option value="HIGH">🟠 ÉLEVÉE</option>
-              <option value="MEDIUM">🟡 MOYENNE</option>
-              <option value="LOW">🔵 FAIBLE</option>
-            </select>
+              onChange={(val: string) => setSelectedSeverity(val)}
+              placeholder="Toutes les gravités"
+              options={[
+                { value: "", label: "Toutes les gravités" },
+                { value: "CRITICAL", label: "🔴 CRITIQUE" },
+                { value: "HIGH", label: "🟠 ÉLEVÉE" },
+                { value: "MEDIUM", label: "🟡 MOYENNE" },
+                { value: "LOW", label: "🔵 FAIBLE" }
+              ]}
+            />
           </div>
 
           <button

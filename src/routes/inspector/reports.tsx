@@ -8,6 +8,7 @@ import { generateModelExcel } from "@/lib/excelGenerator";
 import { supabase } from "@/lib/supabase";
 import { MedicalProofModal } from "@/components/MedicalProofModal";
 import { DatePicker } from "@/components/ui/date-picker";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import {
   FileText,
   FileSpreadsheet,
@@ -409,16 +410,16 @@ export function InspectorReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
               Établissement
             </label>
-            <select
+            <UnifiedSelect
+              icon={Building2}
               value={selectedFacilityId}
-              onChange={(e) => setSelectedFacilityId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
-            >
-              <option value="">Tous les établissements</option>
-              {facilitiesList.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
+              onChange={(val: string) => setSelectedFacilityId(val)}
+              placeholder="Tous les établissements"
+              options={[
+                { value: "", label: "Tous les établissements" },
+                ...facilitiesList.map((f) => ({ value: f.id, label: f.name }))
+              ]}
+            />
           </div>
 
           {/* DISEASE */}
@@ -426,16 +427,16 @@ export function InspectorReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
               Pathologie
             </label>
-            <select
+            <UnifiedSelect
+              icon={Stethoscope}
               value={selectedDiseaseId}
-              onChange={(e) => setSelectedDiseaseId(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
-            >
-              <option value="">Toutes les pathologies</option>
-              {diseasesList.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
+              onChange={(val: string) => setSelectedDiseaseId(val)}
+              placeholder="Toutes les pathologies"
+              options={[
+                { value: "", label: "Toutes les pathologies" },
+                ...diseasesList.map((d) => ({ value: d.id, label: d.name }))
+              ]}
+            />
           </div>
 
           {/* SEVERITY */}
@@ -443,17 +444,19 @@ export function InspectorReportsPage() {
             <label style={{ fontSize: "0.78rem", fontWeight: "800", color: COLORS.navy, display: "block", marginBottom: "4px" }}>
               Niveau de Gravité
             </label>
-            <select
+            <UnifiedSelect
+              icon={AlertTriangle}
               value={selectedSeverity}
-              onChange={(e) => setSelectedSeverity(e.target.value)}
-              style={{ width: "100%", padding: "9px 12px", borderRadius: "10px", border: `1px solid ${COLORS.border}`, fontSize: "0.85rem", outline: "none", backgroundColor: COLORS.bgLight, color: COLORS.navy, fontWeight: "600" }}
-            >
-              <option value="">Toutes les gravités</option>
-              <option value="CRITICAL">Critique</option>
-              <option value="HIGH">Élevée</option>
-              <option value="MEDIUM">Moyenne</option>
-              <option value="LOW">Faible</option>
-            </select>
+              onChange={(val: string) => setSelectedSeverity(val)}
+              placeholder="Toutes les gravités"
+              options={[
+                { value: "", label: "Toutes les gravités" },
+                { value: "CRITICAL", label: "Critique" },
+                { value: "HIGH", label: "Élevée" },
+                { value: "MEDIUM", label: "Moyenne" },
+                { value: "LOW", label: "Faible" }
+              ]}
+            />
           </div>
 
           {/* DATE FROM */}

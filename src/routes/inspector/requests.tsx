@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { UnifiedSelect } from "@/components/ui/UnifiedSelect";
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { validateCurrentSession } from "@/lib/auth";
@@ -649,17 +650,17 @@ export function InspectorRequestsPage() {
               <label style={{ display: "block", fontSize: "0.82rem", fontWeight: "700", color: COLORS.navy, marginBottom: "4px" }}>
                 Motif du refus *
               </label>
-              <select
+              <UnifiedSelect
                 value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: `1px solid ${COLORS.border}`, fontSize: "0.9rem", outline: "none", marginBottom: "8px" }}
-              >
-                <option value="">Sélectionner un motif...</option>
-                <option value="Numéro d'ordre invalide ou non conforme">Numéro d'ordre invalide ou non conforme</option>
-                <option value="Établissement non reconnu dans la Wilaya">Établissement non reconnu dans la Wilaya</option>
-                <option value="Informations administratives erronées">Informations administratives erronées</option>
-                <option value="Non-conformité de la spécialité médicale">Non-conformité de la spécialité médicale</option>
-              </select>
+                onChange={(val: string) => setRejectReason(val)}
+                placeholder="Sélectionner un motif..."
+                options={[
+                  { value: "Numéro d'ordre invalide ou non conforme", label: "Numéro d'ordre invalide ou non conforme" },
+                  { value: "Établissement non reconnu dans la Wilaya", label: "Établissement non reconnu dans la Wilaya" },
+                  { value: "Informations administratives erronées", label: "Informations administratives erronées" },
+                  { value: "Non-conformité de la spécialité médicale", label: "Non-conformité de la spécialité médicale" }
+                ]}
+              />
 
               <textarea
                 placeholder="Ou précisez le motif détaillé du refus..."
