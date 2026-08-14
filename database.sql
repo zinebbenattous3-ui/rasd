@@ -45,15 +45,15 @@ CREATE TABLE public.doctors (
 );
 CREATE TABLE public.patients (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
-  user_id uuid NOT NULL UNIQUE,
   nin character varying NOT NULL UNIQUE,
   date_of_birth date NOT NULL,
   gender character varying NOT NULL CHECK (gender::text = ANY (ARRAY['M'::character varying, 'F'::character varying]::text[])),
   blood_type character varying CHECK (blood_type::text = ANY (ARRAY['A+'::character varying, 'A-'::character varying, 'B+'::character varying, 'B-'::character varying, 'AB+'::character varying, 'AB-'::character varying, 'O+'::character varying, 'O-'::character varying]::text[])),
   created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT patients_pkey PRIMARY KEY (id),
-  CONSTRAINT patients_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+  first_name character varying NOT NULL,
+  last_name character varying NOT NULL,
+  CONSTRAINT patients_pkey PRIMARY KEY (id)
 );
 CREATE TABLE public.inspectors (
   id uuid NOT NULL DEFAULT uuid_generate_v4(),
@@ -124,4 +124,25 @@ CREATE TABLE public.doctor_facility_change_requests (
   CONSTRAINT doctor_facility_change_requests_current_facility_fkey FOREIGN KEY (current_facility_id) REFERENCES public.facilities(id),
   CONSTRAINT doctor_facility_change_requests_requested_facility_fkey FOREIGN KEY (requested_facility_id) REFERENCES public.facilities(id),
   CONSTRAINT doctor_facility_change_requests_reviewer_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
+);
+CREATE TABLE public.unlisted_clinic_requests (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid NOT NULL,
+  clinic_name character varying NOT NULL,
+  facility_type character varying NOT NULL DEFAULT 'Clinique privée'::character varying CHECK (facility_type::text = 'Clinique privée'::text),
+  wilaya text NOT NULL,
+  address text,
+  nin character varying NOT NULL,
+  specialty character varying NOT NULL,
+  phone character varying NOT NULL,
+  order_number character varying,
+  status character varying NOT NULL DEFAULT 'PENDING'::character varying CHECK (status::text = ANY (ARRAY['PENDING'::character varying, 'APPROVED'::character varying, 'REJECTED'::character varying]::text[])),
+  reviewed_by uuid,
+  reviewed_at timestamp with time zone,
+  rejection_reason text,
+  created_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT unlisted_clinic_requests_pkey PRIMARY KEY (id),
+  CONSTRAINT unlisted_clinic_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT unlisted_clinic_requests_reviewed_by_fkey FOREIGN KEY (reviewed_by) REFERENCES public.users(id)
 );

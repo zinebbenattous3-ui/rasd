@@ -106,7 +106,10 @@ export function InspectorRequestsPage() {
         try {
           const { data: unlistedReqs } = await supabase
             .from("unlisted_clinic_requests")
-            .select("*")
+            .select(`
+              *,
+              users:user_id (id, first_name, last_name, email)
+            `)
             .ilike("wilaya", `%${normCode}%`)
             .order("created_at", { ascending: false });
 
@@ -116,15 +119,15 @@ export function InspectorRequestsPage() {
               is_unlisted_clinic_req: true,
               status: u.status === 'APPROVED' ? 'ACCEPTED' : u.status,
               created_at: u.created_at,
-              specialty: u.doctor_specialty,
-              nin: u.doctor_nin,
-              phone: u.doctor_phone,
-              order_number: u.doctor_order_number,
-              users: {
-                first_name: u.doctor_first_name,
-                last_name: u.doctor_last_name,
-                email: u.doctor_email
-              },
+              specialty: u.specialty,
+              nin: u.nin,
+              phone: u.phone,
+              order_number: u.order_number,
+              users: u.users ? {
+                first_name: u.users.first_name,
+                last_name: u.users.last_name,
+                email: u.users.email
+              } : null,
               facility: {
                 id: null,
                 name: u.clinic_name,
@@ -196,54 +199,44 @@ export function InspectorRequestsPage() {
           facilityId = newFac.id;
         }
 
-        // 2. Create user account for doctor if not already created
-        let userId: string | null = null;
-        const { data: existingUser } = await supabase
-          .from("users")
+        // 2. Link or create doctor record linked to user_id and new facility_id
+        const userId = raw.user_id;
+        const { data: existingDoc } = await supabase
+          .from("doctors")
           .select("id")
-          .eq("email", raw.doctor_email.trim().toLowerCase())
+          .eq("user_id", userId)
           .maybeSingle();
 
-        if (existingUser) {
-          userId = existingUser.id;
-        } else {
-          const { data: newUser, error: userErr } = await supabase
-            .from("users")
+        if (!existingDoc) {
+          const { error: docErr } = await supabase
+            .from("doctors")
             .insert([{
-              email: raw.doctor_email.trim().toLowerCase(),
-              password_hash: raw.doctor_password_hash,
-              first_name: raw.doctor_first_name.trim(),
-              last_name: raw.doctor_last_name.trim(),
-              role: "DOCTOR",
-              is_active: true
-            }])
-            .select("id")
-            .single();
+              user_id: userId,
+              nin: raw.nin,
+              specialty: raw.specialty,
+              facility_id: facilityId,
+              order_number: raw.order_number,
+              phone: raw.phone,
+              status: "ACCEPTED",
+              verified_by_facility: facilityId,
+              verified_at: new Date().toISOString()
+            }]);
 
-          if (userErr || !newUser) throw new Error(userErr?.message || "Erreur lors de la création du compte médecin.");
-          userId = newUser.id;
+          if (docErr) throw new Error(docErr.message || "Erreur lors de la création du profil médecin.");
+        } else {
+          await supabase
+            .from("doctors")
+            .update({
+              facility_id: facilityId,
+              order_number: raw.order_number,
+              status: "ACCEPTED",
+              verified_by_facility: facilityId,
+              verified_at: new Date().toISOString()
+            })
+            .eq("id", existingDoc.id);
         }
 
-        // 3. Create doctor record linked to newly validated facility
-        const { error: docErr } = await supabase
-          .from("doctors")
-          .insert([{
-            user_id: userId,
-            nin: raw.doctor_nin,
-            specialty: raw.doctor_specialty,
-            facility_id: facilityId,
-            order_number: raw.doctor_order_number,
-            phone: raw.doctor_phone,
-            status: "ACCEPTED",
-            verified_by_facility: facilityId,
-            verified_at: new Date().toISOString()
-          }]);
-
-        if (docErr && docErr.code !== "23505") {
-          throw new Error(docErr.message || "Erreur lors de l'association du médecin à la clinique.");
-        }
-
-        // 4. Mark unlisted clinic request as APPROVED
+        // 3. Mark unlisted clinic request as APPROVED
         await supabase
           .from("unlisted_clinic_requests")
           .update({
@@ -253,7 +246,8 @@ export function InspectorRequestsPage() {
           })
           .eq("id", raw.id);
 
-        setActionSuccess(`La clinique privée "${raw.clinic_name}" et le Dr. ${raw.doctor_first_name} ${raw.doctor_last_name} ont été validés et homologués.`);
+        const docName = raw.users ? `${raw.users.first_name} ${raw.users.last_name}` : "Médecin";
+        setActionSuccess(`La clinique privée "${raw.clinic_name}" et Dr. ${docName} ont été validés et homologués avec succès.`);
         await loadRequests();
         return;
       }

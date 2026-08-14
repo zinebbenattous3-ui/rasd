@@ -314,51 +314,22 @@ function SignupPage() {
     setNetworkState('done');
 
     try {
-      // 1. UNLISTED PRIVATE CLINIC FLOW (Case 2: Clinic Not Registered)
-      if (form.role === 'DOCTOR' && form.sector === 'PRIVATE' && form.is_unlisted_clinic && form.unlisted_clinic_name.trim()) {
-        // Create an unlisted_clinic_requests record for Inspector review
-        const { error: reqError } = await supabase
-          .from('unlisted_clinic_requests')
-          .insert([{
-            doctor_first_name: form.first_name.trim(),
-            doctor_last_name: form.last_name.trim(),
-            doctor_email: form.email.trim().toLowerCase(),
-            doctor_nin: form.nin.trim(),
-            doctor_specialty: form.specialty.trim(),
-            doctor_phone: form.phone.trim(),
-            doctor_order_number: form.order_number.trim() || null,
-            doctor_password_hash: hashPassword(form.password),
-            clinic_name: form.unlisted_clinic_name.trim(),
-            facility_type: 'Clinique privée',
-            wilaya: form.unlisted_clinic_wilaya || form.wilaya || '16 - Alger',
-            address: form.unlisted_clinic_address.trim() || null,
-            status: 'PENDING'
-          }]);
-
-        if (reqError) {
-          console.error("Error creating unlisted clinic request:", reqError);
-          // If table doesn't exist yet or fails, provide clear feedback
-          setLoading(false);
-          setNetworkState('error');
-          setErrors({ form: "Erreur lors de l'enregistrement de la demande de création de la clinique. Veuillez réessayer ou contacter l'administration." });
-          return;
-        }
-
-        setLoading(false);
-        setDone(true);
-        return;
-      }
-
-      // 2. EXISTING FACILITY FLOW (Case 1: Public or Existing Private Clinic)
+      // 1. Validation check for existing facility selection if not unlisted clinic
       let doctorFacilityId = form.facility_id || null;
-      if (form.role === 'DOCTOR' && !doctorFacilityId) {
+      if (form.role === 'DOCTOR' && form.sector === 'PUBLIC' && !doctorFacilityId) {
         setLoading(false);
         setNetworkState('error');
-        setErrors({ form: "Veuillez sélectionner un établissement de santé existant." });
+        setErrors({ form: "Veuillez sélectionner un établissement public existant (EPSP, EPH ou CHU)." });
+        return;
+      }
+      if (form.role === 'DOCTOR' && form.sector === 'PRIVATE' && !form.is_unlisted_clinic && !doctorFacilityId) {
+        setLoading(false);
+        setNetworkState('error');
+        setErrors({ form: "Veuillez sélectionner une clinique privée existante ou cocher 'Non répertoriée'." });
         return;
       }
 
-      // Direct table insertion (users table as single source of identity)
+      // 2. Direct table insertion into users (single source of user identity)
       const { data: userData, error: userError } = await supabase
         .from('users')
         .insert([{
@@ -383,7 +354,39 @@ function SignupPage() {
         return;
       }
 
-      // Role specific table creation
+      // 3. UNLISTED PRIVATE CLINIC FLOW
+      if (form.role === 'DOCTOR' && form.sector === 'PRIVATE' && form.is_unlisted_clinic && form.unlisted_clinic_name.trim()) {
+        const { error: reqError } = await supabase
+          .from('unlisted_clinic_requests')
+          .insert([{
+            user_id: userData.id,
+            clinic_name: form.unlisted_clinic_name.trim(),
+            facility_type: 'Clinique privée',
+            wilaya: form.unlisted_clinic_wilaya || form.wilaya || '16 - Alger',
+            address: form.unlisted_clinic_address.trim() || null,
+            nin: form.nin.trim(),
+            specialty: form.specialty.trim(),
+            phone: form.phone.trim(),
+            order_number: form.order_number.trim() || null,
+            status: 'PENDING'
+          }]);
+
+        if (reqError) {
+          console.error("Error creating unlisted clinic request:", reqError);
+          // Rollback user record creation on request error
+          await supabase.from('users').delete().eq('id', userData.id);
+          setLoading(false);
+          setNetworkState('error');
+          setErrors({ form: reqError.message || "Erreur lors de l'enregistrement de la demande de création de clinique." });
+          return;
+        }
+
+        setLoading(false);
+        setDone(true);
+        return;
+      }
+
+      // 4. EXISTING FACILITY FLOW (Public EPSP/EPH/CHU or Existing Private Clinic)
       if (form.role === 'DOCTOR') {
         const { error: doctorError } = await supabase.from('doctors').insert([{
           user_id: userData.id,
@@ -400,7 +403,7 @@ function SignupPage() {
           await supabase.from('users').delete().eq('id', userData.id);
           setLoading(false);
           setNetworkState('error');
-          setErrors({ form: doctorError.message || "Erreur enregistrement profil médecin." });
+          setErrors({ form: doctorError.message || "Erreur lors de l'enregistrement du profil médecin." });
           return;
         }
       } else if (form.role === 'PATIENT') {
