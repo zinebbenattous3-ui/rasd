@@ -28,6 +28,7 @@ export async function generateGeminiMedicalResponse(
   }
 
   const { messages, systemInstruction, attachments } = options;
+  const hasAttachments = Boolean(attachments && attachments.length > 0);
 
   try {
     const ai = new GoogleGenAI({ apiKey });
@@ -50,8 +51,8 @@ export async function generateGeminiMedicalResponse(
         parts.push({ text: msg.content.trim() });
       }
 
-      // If this is the latest user message and contains attachments, append them as inlineData parts
-      if (isLatest && role === "user" && attachments && attachments.length > 0) {
+      // ONLY if this is the latest user message AND user explicitly attached files, append inlineData parts
+      if (isLatest && role === "user" && hasAttachments && attachments) {
         for (const file of attachments) {
           let base64Data = file.data;
           if (base64Data.includes(",")) {
@@ -76,7 +77,7 @@ export async function generateGeminiMedicalResponse(
     if (contents.length === 0) {
       return {
         success: false,
-        error: "Veuillez saisir un message ou joindre un fichier.",
+        error: "Veuillez saisir un message.",
       };
     }
 
@@ -107,15 +108,20 @@ export async function generateGeminiMedicalResponse(
       }
     }
 
+    // Contextual error message depending on whether attachments were present
+    const genericErrorMessage = hasAttachments
+      ? "Impossible d'analyser le fichier joint. Veuillez vérifier son format et réessayer."
+      : "Désolé, l'assistant n'a pas pu répondre. Veuillez réessayer dans un instant.";
+
     return {
       success: false,
-      error: "Impossible d'analyser ce fichier. Veuillez réessayer ou vérifier son format.",
+      error: genericErrorMessage,
     };
   } catch (err: any) {
     console.error("[GeminiProvider] Exception:", err);
     return {
       success: false,
-      error: "Désolé, l'assistant a rencontré une erreur. Veuillez réessayer.",
+      error: "Désolé, l'assistant a rencontré une erreur réseau. Veuillez réessayer.",
     };
   }
 }

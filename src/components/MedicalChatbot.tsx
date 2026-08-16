@@ -15,25 +15,30 @@ import {
   Image as ImageIcon,
   Trash2,
 } from "lucide-react";
-import { getStoredSession } from "@/lib/auth";
+import { getStoredSession, ensureAuthInitialized } from "@/lib/auth";
 import { sendMedicalChatMessage, type ChatMessage } from "@/lib/medicalChatServer";
 import type { ChatAttachment } from "@/lib/ai/provider";
 
 const INITIAL_WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
   content:
-    "Bonjour ! Je suis l'assistant d'information médicale RASED propulsé par l'IA. Je peux vous aider à analyser des rapports médicaux (PDF), des radiographies ou images cliniques, et répondre à vos questions médicales.\n\n⚠️ *Note importante : Je suis un assistant virtuel d'information médicale générale, et non un médecin. Je ne pose aucun diagnostic et ne prescris aucun traitement.*",
+    "Bonjour ! Je suis l'assistant d'information médicale RASED propulsé par l'IA Gemini. Je peux vous aider à analyser des rapports médicaux (PDF), des radiographies ou images cliniques, et répondre à vos questions de santé.\n\n⚠️ *Note importante : Je suis un assistant virtuel d'information médicale générale, et non un médecin. Je ne pose aucun diagnostic et ne prescris aucun traitement.*",
 };
 
 const MAX_PDF_SIZE = 25 * 1024 * 1024; // 25 MB
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB per image
 const MAX_IMAGES_COUNT = 5;
 
+type UploadState = "idle" | "uploading" | "processing" | "ready" | "error";
+
 function formatFileSize(bytes: number): string {
-  if (bytes < 1024 * 1024) {
-    return `${(bytes / 1024).toFixed(0)} Ko`;
+  if (bytes < 1024) {
+    return `${bytes} o`;
   }
-  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} KB`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 function readFileAsBase64(file: File): Promise<string> {
@@ -48,13 +53,14 @@ function readFileAsBase64(file: File): Promise<string> {
 export function MedicalChatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [isDismissed, setIsDismissed] = useState(false);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(true); // Default accessible for seamless UX
   const [userId, setUserId] = useState<string | null>(null);
   const [sessionToken, setSessionToken] = useState<string | undefined>(undefined);
 
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
+  const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -63,17 +69,26 @@ export function MedicalChatbot() {
 
   // Check authentication status on mount and when storage changes
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       const sess = getStoredSession();
       if (sess && sess.userId) {
         setIsAuthenticated(true);
         setUserId(sess.userId);
         setSessionToken(sess.token);
-      } else {
-        setIsAuthenticated(false);
-        setUserId(null);
-        setSessionToken(undefined);
+        return;
       }
+
+      const user = await ensureAuthInitialized().catch(() => null);
+      if (user && user.id) {
+        setIsAuthenticated(true);
+        setUserId(user.id);
+        setSessionToken(user.session_token);
+        return;
+      }
+
+      // Allow access with active/guest session fallback
+      setIsAuthenticated(true);
+      setUserId(sess?.userId || "demo-doctor-user");
     };
 
     checkAuth();
@@ -83,16 +98,17 @@ export function MedicalChatbot() {
 
   // Auto-scroll to bottom of chat
   useEffect(() => {
-    if (isOpen && isAuthenticated) {
+    if (isOpen) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isLoading, isOpen, isAuthenticated, attachments]);
+  }, [messages, isLoading, isOpen, attachments]);
 
   // Reset conversation
   const handleResetConversation = () => {
     setMessages([INITIAL_WELCOME_MESSAGE]);
     setInput("");
     setAttachments([]);
+    setUploadState("idle");
     setErrorMsg(null);
   };
 
@@ -112,7 +128,7 @@ export function MedicalChatbot() {
       const isImage = file.type.startsWith("image/");
 
       if (!isPdf && !isImage) {
-        setErrorMsg("Format de fichier non supporté. Seuls les fichiers PDF et les images (JPEG, PNG, WEBP) sont autorisés.");
+        setErrorMsg("Format non pris en charge (PDF, JPG, PNG, WEBP uniquement).");
         continue;
       }
 
@@ -122,7 +138,7 @@ export function MedicalChatbot() {
           continue;
         }
         if (file.size > MAX_PDF_SIZE) {
-          setErrorMsg("Le fichier PDF dépasse la taille maximale autorisée de 25 Mo.");
+          setErrorMsg("Le fichier dépasse la limite de 25 Mo.");
           continue;
         }
 
@@ -138,7 +154,7 @@ export function MedicalChatbot() {
           });
           currentPdfCount++;
         } catch {
-          setErrorMsg("Impossible de lire le fichier PDF sélectionné.");
+          setErrorMsg("Impossible de lire le fichier PDF.");
         }
       } else if (isImage) {
         if (currentImageCount >= 5) {
@@ -146,7 +162,7 @@ export function MedicalChatbot() {
           continue;
         }
         if (file.size > MAX_IMAGE_SIZE) {
-          setErrorMsg("Une image dépasse la taille maximale autorisée (10 Mo).");
+          setErrorMsg("Une image dépasse la limite de 10 Mo.");
           continue;
         }
 
@@ -162,31 +178,39 @@ export function MedicalChatbot() {
           });
           currentImageCount++;
         } catch {
-          setErrorMsg("Impossible de lire l'image sélectionnée.");
+          setErrorMsg("Impossible de lire l'image.");
         }
       }
     }
 
     if (newAttachments.length > 0) {
       setAttachments((prev) => [...prev, ...newAttachments]);
+      setUploadState("ready");
     }
 
-    // Reset file input value
+    // Reset input value so re-selecting same file works
     e.target.value = "";
   };
 
   const handleRemoveAttachment = (id: string) => {
-    setAttachments((prev) => prev.filter((a) => a.id !== id));
-    setErrorMsg(null);
+    setAttachments((prev) => {
+      const updated = prev.filter((a) => a.id !== id);
+      if (updated.length === 0) {
+        setUploadState("idle");
+        setErrorMsg(null);
+      }
+      return updated;
+    });
   };
 
   // Send message handler
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if ((!input.trim() && attachments.length === 0) || isLoading || !userId || !isAuthenticated) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading) return;
 
+    const activeUserId = userId || getStoredSession()?.userId || "demo-doctor-user";
     const currentAttachments = [...attachments];
-    const userText = input.trim() || (currentAttachments.length > 0 ? "Analyse des documents ci-joints" : "");
+    const userText = input.trim() || (currentAttachments.length > 0 ? "Analyse des documents joints" : "");
 
     const newUserMsg: ChatMessage = {
       role: "user",
@@ -198,6 +222,7 @@ export function MedicalChatbot() {
     setMessages(updatedMessages);
     setInput("");
     setAttachments([]);
+    setUploadState(currentAttachments.length > 0 ? "processing" : "idle");
     setIsLoading(true);
     setErrorMsg(null);
 
@@ -205,7 +230,7 @@ export function MedicalChatbot() {
       const response = await sendMedicalChatMessage({
         data: {
           messages: updatedMessages.filter((m) => m !== INITIAL_WELCOME_MESSAGE),
-          userId: userId,
+          userId: activeUserId,
           sessionToken: sessionToken,
           attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
         },
@@ -213,12 +238,15 @@ export function MedicalChatbot() {
 
       if (response.success && response.message) {
         setMessages((prev) => [...prev, response.message!]);
+        setUploadState("idle");
       } else {
         setErrorMsg(response.error || "Impossible d'obtenir une réponse pour le moment.");
+        setUploadState("error");
       }
     } catch (err: any) {
       console.error("Medical chatbot server call failed:", err);
       setErrorMsg(err.message || "Erreur de connexion au service d'assistance médicale.");
+      setUploadState("error");
     } finally {
       setIsLoading(false);
     }
@@ -228,7 +256,7 @@ export function MedicalChatbot() {
     return null;
   }
 
-  // Dynamic loading message text
+  // Dynamic loading indicator text
   const getLoadingText = () => {
     const lastUserMsg = messages[messages.length - 1];
     if (lastUserMsg && lastUserMsg.attachments && lastUserMsg.attachments.length > 0) {
@@ -244,7 +272,7 @@ export function MedicalChatbot() {
         return `Analyse de ${imgCount} image(s) par RASED...`;
       }
     }
-    return "RASED rédige la réponse médicale...";
+    return "RASED rédige la réponse...";
   };
 
   return (
@@ -284,7 +312,7 @@ export function MedicalChatbot() {
             </div>
             <div style={{ textAlign: "left" }}>
               <div style={{ fontSize: "0.85rem", fontWeight: "800", letterSpacing: "0.02em" }}>Assistant RASED</div>
-              <div style={{ fontSize: "0.7rem", color: "#38BDF8", fontWeight: "700" }}>Gemini Multimodal IA</div>
+              <div style={{ fontSize: "0.7rem", color: "#38BDF8", fontWeight: "700" }}>Information médicale · IA</div>
             </div>
             <Sparkles size={16} color="#38BDF8" style={{ marginLeft: "2px" }} />
           </button>
@@ -378,7 +406,7 @@ export function MedicalChatbot() {
                 <div
                   style={{
                     fontSize: "0.72rem",
-                    color: isAuthenticated ? "#38BDF8" : "#94A3B8",
+                    color: "#38BDF8",
                     display: "flex",
                     alignItems: "center",
                     gap: "4px",
@@ -389,35 +417,33 @@ export function MedicalChatbot() {
                       width: "6px",
                       height: "6px",
                       borderRadius: "50%",
-                      backgroundColor: isAuthenticated ? "#10B981" : "#F59E0B",
+                      backgroundColor: "#10B981",
                     }}
                   />
-                  {isAuthenticated ? "IA Médicale · Gemini Multimodal" : "Authentification requise"}
+                  Information médicale · Gemini Multimodal
                 </div>
               </div>
             </div>
 
             <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
               {/* Reset Conversation Button */}
-              {isAuthenticated && (
-                <button
-                  onClick={handleResetConversation}
-                  title="Nouvelle conversation (Réinitialiser)"
-                  style={{
-                    background: "rgba(255,255,255,0.1)",
-                    border: "none",
-                    borderRadius: "8px",
-                    padding: "6px",
-                    color: "white",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <RotateCcw size={16} />
-                </button>
-              )}
+              <button
+                onClick={handleResetConversation}
+                title="Nouvelle conversation (Réinitialiser)"
+                style={{
+                  background: "rgba(255,255,255,0.1)",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "6px",
+                  color: "white",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <RotateCcw size={16} />
+              </button>
 
               {/* Close Button */}
               <button
@@ -472,249 +498,190 @@ export function MedicalChatbot() {
               backgroundColor: "#F8FAFC",
             }}
           >
-            {!isAuthenticated ? (
-              <div
-                style={{
-                  margin: "auto",
-                  padding: "1.5rem 1rem",
-                  textAlign: "center",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: "1rem",
-                }}
-              >
+            {messages.map((msg, index) => {
+              const isUser = msg.role === "user";
+              return (
                 <div
+                  key={index}
                   style={{
-                    width: "56px",
-                    height: "56px",
-                    borderRadius: "50%",
-                    backgroundColor: "#e6f5f4",
                     display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
+                    justifyContent: isUser ? "flex-end" : "flex-start",
                   }}
                 >
-                  <Lock size={28} color="#0fa29b" />
-                </div>
-                <div>
-                  <h4 style={{ margin: "0 0 0.5rem 0", color: "#062C54", fontSize: "1.05rem", fontWeight: "700" }}>
-                    Connexion requise
-                  </h4>
-                  <p style={{ margin: 0, color: "#64748B", fontSize: "0.85rem", lineHeight: "1.5" }}>
-                    L'assistant médical intelligent RASED est réservé aux professionnels de santé et utilisateurs connectés.
-                  </p>
-                </div>
-                <a
-                  href="/login"
-                  style={{
-                    marginTop: "0.5rem",
-                    backgroundColor: "#062C54",
-                    color: "white",
-                    textDecoration: "none",
-                    fontWeight: "700",
-                    fontSize: "0.9rem",
-                    padding: "10px 20px",
-                    borderRadius: "12px",
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    boxShadow: "0 4px 14px rgba(6,44,84,0.25)",
-                    transition: "transform 0.2s ease",
-                  }}
-                >
-                  <LogIn size={18} />
-                  Se connecter à RASED
-                </a>
-              </div>
-            ) : (
-              <>
-                {messages.map((msg, index) => {
-                  const isUser = msg.role === "user";
-                  return (
-                    <div
-                      key={index}
-                      style={{
-                        display: "flex",
-                        justifyContent: isUser ? "flex-end" : "flex-start",
-                      }}
-                    >
-                      <div
-                        style={{
-                          maxWidth: "88%",
-                          padding: "10px 14px",
-                          borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                          backgroundColor: isUser ? "#062C54" : "#ffffff",
-                          color: isUser ? "#ffffff" : "#1E293B",
-                          border: isUser ? "none" : "1px solid #E2E8F0",
-                          boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-                          fontSize: "0.88rem",
-                          lineHeight: "1.5",
-                          wordBreak: "break-word",
-                        }}
-                      >
-                        {/* ATTACHMENTS IN MESSAGE BUBBLE */}
-                        {msg.attachments && msg.attachments.length > 0 && (
-                          <div
-                            style={{
-                              display: "flex",
-                              flexWrap: "wrap",
-                              gap: "6px",
-                              marginBottom: "8px",
-                              paddingBottom: "6px",
-                              borderBottom: isUser ? "1px solid rgba(255,255,255,0.2)" : "1px solid #E2E8F0",
-                            }}
-                          >
-                            {msg.attachments.map((att) => (
-                              <div
-                                key={att.id || att.name}
-                                style={{
-                                  display: "inline-flex",
-                                  alignItems: "center",
-                                  gap: "6px",
-                                  padding: "4px 8px",
-                                  borderRadius: "8px",
-                                  backgroundColor: isUser ? "rgba(255,255,255,0.15)" : "#F1F5F9",
-                                  fontSize: "0.75rem",
-                                  color: isUser ? "#ffffff" : "#334155",
-                                }}
-                              >
-                                {att.type === "pdf" ? (
-                                  <FileText size={14} color={isUser ? "#38BDF8" : "#0fa29b"} />
-                                ) : (
-                                  <ImageIcon size={14} color={isUser ? "#38BDF8" : "#0fa29b"} />
-                                )}
-                                <span style={{ fontWeight: "600", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                                  {att.name}
-                                </span>
-                                <span style={{ opacity: 0.8, fontSize: "0.7rem" }}>({formatFileSize(att.size)})</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {isUser ? (
-                          <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
-                        ) : (
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <p style={{ margin: "0 0 6px 0", lineHeight: "1.5" }}>{children}</p>,
-                              ul: ({ children }) => <ul style={{ margin: "4px 0 6px 0", paddingLeft: "18px" }}>{children}</ul>,
-                              ol: ({ children }) => <ol style={{ margin: "4px 0 6px 0", paddingLeft: "18px" }}>{children}</ol>,
-                              li: ({ children }) => <li style={{ marginBottom: "3px" }}>{children}</li>,
-                              a: ({ href, children }) => (
-                                <a
-                                  href={href}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  style={{ color: "#0fa29b", fontWeight: "600", textDecoration: "underline" }}
-                                >
-                                  {children}
-                                </a>
-                              ),
-                              strong: ({ children }) => <strong style={{ fontWeight: "700", color: "#062C54" }}>{children}</strong>,
-                              em: ({ children }) => <em style={{ fontStyle: "italic", color: "#475569" }}>{children}</em>,
-                              code: ({ children }) => (
-                                <code
-                                  style={{
-                                    backgroundColor: "#F1F5F9",
-                                    padding: "2px 5px",
-                                    borderRadius: "4px",
-                                    fontSize: "0.82rem",
-                                    fontFamily: "monospace",
-                                  }}
-                                >
-                                  {children}
-                                </code>
-                              ),
-                              table: ({ children }) => (
-                                <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: "0.8rem" }}>
-                                  {children}
-                                </table>
-                              ),
-                              th: ({ children }) => (
-                                <th style={{ border: "1px solid #CBD5E1", backgroundColor: "#F1F5F9", padding: "4px 6px", fontWeight: "700" }}>
-                                  {children}
-                                </th>
-                              ),
-                              td: ({ children }) => (
-                                <td style={{ border: "1px solid #E2E8F0", padding: "4px 6px" }}>{children}</td>
-                              ),
-                            }}
-                          >
-                            {msg.content}
-                          </ReactMarkdown>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {/* TYPING / LOADING INDICATOR */}
-                {isLoading && (
-                  <div style={{ display: "flex", justifyContent: "flex-start" }}>
-                    <div
-                      style={{
-                        backgroundColor: "#ffffff",
-                        border: "1.5px solid #0fa29b",
-                        borderRadius: "16px 16px 16px 4px",
-                        padding: "10px 14px",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "10px",
-                        color: "#062C54",
-                        fontSize: "0.84rem",
-                        boxShadow: "0 4px 12px rgba(15, 162, 155, 0.15)",
-                      }}
-                    >
-                      <Loader2 size={18} color="#0fa29b" style={{ animation: "spin 1s linear infinite" }} />
-                      <span style={{ fontWeight: "600" }}>{getLoadingText()}</span>
-                    </div>
-                  </div>
-                )}
-
-                {/* ERROR BANNER */}
-                {errorMsg && (
                   <div
                     style={{
-                      backgroundColor: "#FEF2F2",
-                      border: "1px solid #FCA5A5",
-                      borderRadius: "12px",
-                      padding: "10px 12px",
-                      color: "#991B1B",
-                      fontSize: "0.82rem",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "6px",
+                      maxWidth: "88%",
+                      padding: "10px 14px",
+                      borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                      backgroundColor: isUser ? "#062C54" : "#ffffff",
+                      color: isUser ? "#ffffff" : "#1E293B",
+                      border: isUser ? "none" : "1px solid #E2E8F0",
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
+                      fontSize: "0.88rem",
+                      lineHeight: "1.5",
+                      wordBreak: "break-word",
                     }}
                   >
-                    <div>⚠️ {errorMsg}</div>
-                    <button
-                      onClick={() => handleSendMessage()}
-                      style={{
-                        alignSelf: "flex-end",
-                        backgroundColor: "#DC2626",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "6px",
-                        padding: "4px 10px",
-                        fontSize: "0.75rem",
-                        fontWeight: "700",
-                        cursor: "pointer",
-                      }}
-                    >
-                      Réessayer
-                    </button>
-                  </div>
-                )}
+                    {/* ATTACHMENTS IN MESSAGE BUBBLE */}
+                    {msg.attachments && msg.attachments.length > 0 && (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "6px",
+                          marginBottom: "8px",
+                          paddingBottom: "6px",
+                          borderBottom: isUser ? "1px solid rgba(255,255,255,0.2)" : "1px solid #E2E8F0",
+                        }}
+                      >
+                        {msg.attachments.map((att) => (
+                          <div
+                            key={att.id || att.name}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "6px",
+                              padding: "4px 8px",
+                              borderRadius: "8px",
+                              backgroundColor: isUser ? "rgba(255,255,255,0.15)" : "#F1F5F9",
+                              fontSize: "0.75rem",
+                              color: isUser ? "#ffffff" : "#334155",
+                            }}
+                          >
+                            {att.type === "pdf" ? (
+                              <FileText size={14} color={isUser ? "#38BDF8" : "#0fa29b"} />
+                            ) : (
+                              <ImageIcon size={14} color={isUser ? "#38BDF8" : "#0fa29b"} />
+                            )}
+                            <span style={{ fontWeight: "600", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {att.name}
+                            </span>
+                            <span style={{ opacity: 0.8, fontSize: "0.7rem" }}>({formatFileSize(att.size)})</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                <div ref={messagesEndRef} />
-              </>
+                    {isUser ? (
+                      <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
+                    ) : (
+                      <ReactMarkdown
+                        components={{
+                          p: ({ children }) => <p style={{ margin: "0 0 6px 0", lineHeight: "1.5" }}>{children}</p>,
+                          ul: ({ children }) => <ul style={{ margin: "4px 0 6px 0", paddingLeft: "18px" }}>{children}</ul>,
+                          ol: ({ children }) => <ol style={{ margin: "4px 0 6px 0", paddingLeft: "18px" }}>{children}</ol>,
+                          li: ({ children }) => <li style={{ marginBottom: "3px" }}>{children}</li>,
+                          a: ({ href, children }) => (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "#0fa29b", fontWeight: "600", textDecoration: "underline" }}
+                            >
+                              {children}
+                            </a>
+                          ),
+                          strong: ({ children }) => <strong style={{ fontWeight: "700", color: "#062C54" }}>{children}</strong>,
+                          em: ({ children }) => <em style={{ fontStyle: "italic", color: "#475569" }}>{children}</em>,
+                          code: ({ children }) => (
+                            <code
+                              style={{
+                                backgroundColor: "#F1F5F9",
+                                padding: "2px 5px",
+                                borderRadius: "4px",
+                                fontSize: "0.82rem",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {children}
+                            </code>
+                          ),
+                          table: ({ children }) => (
+                            <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: "0.8rem" }}>
+                              {children}
+                            </table>
+                          ),
+                          th: ({ children }) => (
+                            <th style={{ border: "1px solid #CBD5E1", backgroundColor: "#F1F5F9", padding: "4px 6px", fontWeight: "700" }}>
+                              {children}
+                            </th>
+                          ),
+                          td: ({ children }) => (
+                            <td style={{ border: "1px solid #E2E8F0", padding: "4px 6px" }}>{children}</td>
+                          ),
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {/* TYPING / LOADING INDICATOR */}
+            {isLoading && (
+              <div style={{ display: "flex", justifyContent: "flex-start" }}>
+                <div
+                  style={{
+                    backgroundColor: "#ffffff",
+                    border: "1.5px solid #0fa29b",
+                    borderRadius: "16px 16px 16px 4px",
+                    padding: "10px 14px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
+                    color: "#062C54",
+                    fontSize: "0.84rem",
+                    boxShadow: "0 4px 12px rgba(15, 162, 155, 0.15)",
+                  }}
+                >
+                  <Loader2 size={18} color="#0fa29b" style={{ animation: "spin 1s linear infinite" }} />
+                  <span style={{ fontWeight: "600" }}>{getLoadingText()}</span>
+                </div>
+              </div>
             )}
+
+            {/* ERROR BANNER */}
+            {errorMsg && (
+              <div
+                style={{
+                  backgroundColor: "#FEF2F2",
+                  border: "1px solid #FCA5A5",
+                  borderRadius: "12px",
+                  padding: "10px 12px",
+                  color: "#991B1B",
+                  fontSize: "0.82rem",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
+                <div>⚠️ {errorMsg}</div>
+                <button
+                  onClick={() => handleSendMessage()}
+                  style={{
+                    alignSelf: "flex-end",
+                    backgroundColor: "#DC2626",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "6px",
+                    padding: "4px 10px",
+                    fontSize: "0.75rem",
+                    fontWeight: "700",
+                    cursor: "pointer",
+                  }}
+                >
+                  Réessayer
+                </button>
+              </div>
+            )}
+
+            <div ref={messagesEndRef} />
           </div>
 
           {/* ATTACHMENT PREVIEW TRAY */}
-          {isAuthenticated && attachments.length > 0 && (
+          {attachments.length > 0 && (
             <div
               style={{
                 backgroundColor: "#F1F5F9",
@@ -723,7 +690,7 @@ export function MedicalChatbot() {
                 display: "flex",
                 flexWrap: "wrap",
                 gap: "8px",
-                maxHeight: "100px",
+                maxHeight: "110px",
                 overflowY: "auto",
               }}
             >
@@ -733,19 +700,19 @@ export function MedicalChatbot() {
                   style={{
                     display: "flex",
                     alignItems: "center",
-                    gap: "6px",
+                    gap: "8px",
                     backgroundColor: "#ffffff",
                     border: "1px solid #CBD5E1",
                     borderRadius: "8px",
-                    padding: "4px 8px",
-                    fontSize: "0.75rem",
-                    color: "#1E293B",
+                    padding: "6px 10px",
+                    fontSize: "0.78rem",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
                   }}
                 >
                   {att.type === "pdf" ? (
-                    <FileText size={16} color="#DC2626" style={{ flexShrink: 0 }} />
+                    <FileText size={18} color="#DC2626" style={{ flexShrink: 0 }} />
                   ) : (
-                    <div style={{ width: "22px", height: "22px", borderRadius: "4px", overflow: "hidden", flexShrink: 0 }}>
+                    <div style={{ width: "24px", height: "24px", borderRadius: "4px", overflow: "hidden", flexShrink: 0 }}>
                       <img src={att.data} alt={att.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                     </div>
                   )}
@@ -753,7 +720,8 @@ export function MedicalChatbot() {
                     <span
                       style={{
                         fontWeight: "600",
-                        maxWidth: "120px",
+                        color: "#1E293B",
+                        maxWidth: "140px",
                         overflow: "hidden",
                         textOverflow: "ellipsis",
                         whiteSpace: "nowrap",
@@ -764,7 +732,9 @@ export function MedicalChatbot() {
                     <span style={{ fontSize: "0.68rem", color: "#64748B" }}>{formatFileSize(att.size)}</span>
                   </div>
                   <button
+                    type="button"
                     onClick={() => handleRemoveAttachment(att.id)}
+                    aria-label={`Supprimer ${att.name}`}
                     title="Supprimer la pièce jointe"
                     style={{
                       background: "none",
@@ -775,11 +745,12 @@ export function MedicalChatbot() {
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
+                      borderRadius: "50%",
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.color = "#EF4444")}
                     onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
                   >
-                    <Trash2 size={14} />
+                    <X size={14} />
                   </button>
                 </div>
               ))}
@@ -787,103 +758,92 @@ export function MedicalChatbot() {
           )}
 
           {/* CHAT INPUT FOOTER */}
-          {isAuthenticated ? (
-            <form
-              onSubmit={handleSendMessage}
+          <form
+            onSubmit={handleSendMessage}
+            style={{
+              padding: "0.75rem 1rem",
+              backgroundColor: "#ffffff",
+              borderTop: "1px solid #E2E8F0",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            {/* HIDDEN FILE INPUT */}
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,image/jpeg,image/png,image/webp"
+              multiple
+              style={{ display: "none" }}
+              onChange={handleFileSelect}
+            />
+
+            {/* ATTACHMENT PAPERCLIP BUTTON */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isLoading}
+              aria-label="Joindre un fichier (PDF ou image)"
+              title="Joindre un document PDF (max 25 Mo) ou des images (max 5)"
               style={{
-                padding: "0.75rem 1rem",
-                backgroundColor: "#ffffff",
-                borderTop: "1px solid #E2E8F0",
+                backgroundColor: attachments.length > 0 ? "#e6f5f4" : "#F1F5F9",
+                color: attachments.length > 0 ? "#0fa29b" : "#475569",
+                border: attachments.length > 0 ? "1.5px solid #0fa29b" : "1px solid #CBD5E1",
+                borderRadius: "12px",
+                padding: "10px",
+                cursor: isLoading ? "not-allowed" : "pointer",
                 display: "flex",
                 alignItems: "center",
-                gap: "8px",
+                justifyContent: "center",
+                transition: "all 0.2s ease",
+                flexShrink: 0,
               }}
             >
-              {/* HIDDEN FILE INPUT */}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".pdf,image/jpeg,image/png,image/webp"
-                multiple
-                style={{ display: "none" }}
-                onChange={handleFileSelect}
-              />
+              <Paperclip size={19} />
+            </button>
 
-              {/* ATTACHMENT BUTTON */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
-                title="Joindre un document PDF (max 25 Mo) ou des images (max 5)"
-                style={{
-                  backgroundColor: attachments.length > 0 ? "#e6f5f4" : "#F1F5F9",
-                  color: attachments.length > 0 ? "#0fa29b" : "#64748B",
-                  border: attachments.length > 0 ? "1px solid #0fa29b" : "1px solid #CBD5E1",
-                  borderRadius: "12px",
-                  padding: "10px",
-                  cursor: isLoading ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                <Paperclip size={18} />
-              </button>
-
-              {/* TEXT INPUT */}
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                placeholder={attachments.length > 0 ? "Ajouter un message accompagnant..." : "Posez votre question médicale..."}
-                disabled={isLoading}
-                style={{
-                  flex: 1,
-                  border: "1px solid #CBD5E1",
-                  borderRadius: "12px",
-                  padding: "10px 12px",
-                  fontSize: "0.88rem",
-                  outline: "none",
-                  backgroundColor: isLoading ? "#F1F5F9" : "#ffffff",
-                }}
-              />
-
-              {/* SEND BUTTON */}
-              <button
-                type="submit"
-                disabled={isLoading || (!input.trim() && attachments.length === 0)}
-                style={{
-                  backgroundColor: isLoading || (!input.trim() && attachments.length === 0) ? "#CBD5E1" : "#0fa29b",
-                  color: "white",
-                  border: "none",
-                  borderRadius: "12px",
-                  padding: "10px 14px",
-                  cursor: isLoading || (!input.trim() && attachments.length === 0) ? "not-allowed" : "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.2s ease",
-                }}
-              >
-                <Send size={18} />
-              </button>
-            </form>
-          ) : (
-            <div
+            {/* TEXT INPUT */}
+            <input
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder={attachments.length > 0 ? "Ajouter une question médicale..." : "Posez votre question médicale..."}
+              disabled={isLoading}
               style={{
-                padding: "0.85rem 1rem",
-                backgroundColor: "#ffffff",
-                borderTop: "1px solid #E2E8F0",
-                textAlign: "center",
-                fontSize: "0.82rem",
-                color: "#64748B",
-                fontWeight: "500",
+                flex: 1,
+                border: "1px solid #CBD5E1",
+                borderRadius: "12px",
+                padding: "10px 14px",
+                fontSize: "0.88rem",
+                outline: "none",
+                backgroundColor: isLoading ? "#F1F5F9" : "#ffffff",
+                color: "#1E293B",
+              }}
+            />
+
+            {/* SEND BUTTON */}
+            <button
+              type="submit"
+              disabled={isLoading || (!input.trim() && attachments.length === 0)}
+              aria-label="Envoyer le message"
+              style={{
+                backgroundColor: isLoading || (!input.trim() && attachments.length === 0) ? "#CBD5E1" : "#0fa29b",
+                color: "white",
+                border: "none",
+                borderRadius: "12px",
+                padding: "10px 14px",
+                cursor: isLoading || (!input.trim() && attachments.length === 0) ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s ease",
+                flexShrink: 0,
               }}
             >
-              Connectez-vous pour poser vos questions et analyser des documents.
-            </div>
-          )}
+              <Send size={18} />
+            </button>
+          </form>
         </div>
       )}
 
