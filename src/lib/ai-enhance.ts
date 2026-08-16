@@ -172,95 +172,37 @@ const enhanceMedicalObservationServerFn = createServerFn({ method: "POST" })
 
     try {
       const processEnv = typeof process !== "undefined" ? process.env : {};
-      const apiKey = processEnv['GROQ_AI1'] || processEnv['GROQ_API_KEY'];
+      const hasApiKey = processEnv['RASD_GEMENI'] || processEnv['GROQ_AI1'] || processEnv['GROQ_API_KEY'] || processEnv['GEMINI_API_KEY'];
 
-      if (!apiKey) {
+      if (!hasApiKey) {
         return {
           success: false,
           error: "L'amélioration par IA est temporairement indisponible (Clé API non configurée)."
         };
       }
 
-      // Models to attempt on Groq API
-      const modelsToTry = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
-      let lastError = "";
+      const { generateMedicalResponse } = await import("./ai/provider");
 
-      for (const model of modelsToTry) {
-        try {
-          const groqRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${apiKey}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [
-                { role: "system", content: SYSTEM_PROMPT },
-                { role: "user", content: `Observations cliniques à améliorer (sans répétition) :\n\n${observation.trim()}` }
-              ],
-              temperature: 0.2,
-              response_format: { type: "json_object" }
-            })
-          });
+      const response = await generateMedicalResponse({
+        messages: [
+          { role: "user", content: `Observations cliniques à améliorer (sans répétition) :\n\n${observation.trim()}` }
+        ],
+        systemInstruction: SYSTEM_PROMPT
+      });
 
-          if (!groqRes.ok) {
-            // Fallback retry without response_format if json_object mode not supported
-            const fallbackRes = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                model: model,
-                messages: [
-                  { role: "system", content: SYSTEM_PROMPT },
-                  { role: "user", content: `Observations cliniques à améliorer (sans répétition) :\n\n${observation.trim()}` }
-                ],
-                temperature: 0.2
-              })
-            });
-
-            if (!fallbackRes.ok) {
-              const errJson = await fallbackRes.json().catch(() => ({}));
-              lastError = errJson.error?.message || `HTTP ${fallbackRes.status}`;
-              continue;
-            }
-
-            const groqData = await fallbackRes.json();
-            const outputText = groqData.choices?.[0]?.message?.content?.trim();
-            if (outputText) {
-              const structured = parseOrConvertTextToStructured(outputText);
-              const plainText = toCleanPlainText(structured);
-              return {
-                success: true,
-                structuredObservation: structured,
-                formattedPlainText: plainText
-              };
-            }
-          }
-
-          const groqData = await groqRes.json();
-          const outputText = groqData.choices?.[0]?.message?.content?.trim();
-
-          if (outputText) {
-            const structured = parseOrConvertTextToStructured(outputText);
-            const plainText = toCleanPlainText(structured);
-            return {
-              success: true,
-              structuredObservation: structured,
-              formattedPlainText: plainText
-            };
-          }
-        } catch (err: any) {
-          lastError = err.message || "Erreur réseau";
-        }
+      if (response.success && response.content) {
+        const structured = parseOrConvertTextToStructured(response.content);
+        const plainText = toCleanPlainText(structured);
+        return {
+          success: true,
+          structuredObservation: structured,
+          formattedPlainText: plainText
+        };
       }
 
       return {
         success: false,
-        error: `⚠️ Impossible d'améliorer le texte : ${lastError || "Réessayer"}`
+        error: response.error || "⚠️ Impossible d'améliorer le texte pour le moment."
       };
     } catch (error: any) {
       console.error("AI enhancement failed:", error);

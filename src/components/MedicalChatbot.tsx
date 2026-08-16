@@ -1,14 +1,49 @@
 import React, { useState, useEffect, useRef } from "react";
 import ReactMarkdown from "react-markdown";
-import { Bot, X, Send, RotateCcw, AlertTriangle, ShieldCheck, Sparkles, Loader2, Lock, LogIn } from "lucide-react";
+import {
+  Bot,
+  X,
+  Send,
+  RotateCcw,
+  AlertTriangle,
+  Sparkles,
+  Loader2,
+  Lock,
+  LogIn,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Trash2,
+} from "lucide-react";
 import { getStoredSession } from "@/lib/auth";
 import { sendMedicalChatMessage, type ChatMessage } from "@/lib/medicalChatServer";
+import type { ChatAttachment } from "@/lib/ai/provider";
 
 const INITIAL_WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
   content:
-    "Bonjour ! Je suis l'assistant d'information médicale RASED. Je peux vous aider à comprendre des termes médicaux, vous fournir des informations de santé générale ou vous guider sur la plateforme.\n\n⚠️ *Note importante : Je suis un assistant virtuel d'information générale, et non un médecin. Je ne pose aucun diagnostic et ne prescris aucun traitement.*",
+    "Bonjour ! Je suis l'assistant d'information médicale RASED propulsé par l'IA. Je peux vous aider à analyser des rapports médicaux (PDF), des radiographies ou images cliniques, et répondre à vos questions médicales.\n\n⚠️ *Note importante : Je suis un assistant virtuel d'information médicale générale, et non un médecin. Je ne pose aucun diagnostic et ne prescris aucun traitement.*",
 };
+
+const MAX_PDF_SIZE = 25 * 1024 * 1024; // 25 MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB per image
+const MAX_IMAGES_COUNT = 5;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(0)} Ko`;
+  }
+  return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
+}
+
+function readFileAsBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+}
 
 export function MedicalChatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,10 +54,12 @@ export function MedicalChatbot() {
 
   const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_WELCOME_MESSAGE]);
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Check authentication status on mount and when storage changes
   useEffect(() => {
@@ -49,36 +86,128 @@ export function MedicalChatbot() {
     if (isOpen && isAuthenticated) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isLoading, isOpen, isAuthenticated]);
+  }, [messages, isLoading, isOpen, isAuthenticated, attachments]);
 
-  // Reset conversation to fresh start
+  // Reset conversation
   const handleResetConversation = () => {
     setMessages([INITIAL_WELCOME_MESSAGE]);
     setInput("");
+    setAttachments([]);
+    setErrorMsg(null);
+  };
+
+  // Handle file selection (PDF & Images)
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    setErrorMsg(null);
+    const newAttachments: ChatAttachment[] = [];
+
+    let currentPdfCount = attachments.filter((a) => a.type === "pdf").length;
+    let currentImageCount = attachments.filter((a) => a.type === "image").length;
+
+    for (const file of files) {
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      const isImage = file.type.startsWith("image/");
+
+      if (!isPdf && !isImage) {
+        setErrorMsg("Format de fichier non supporté. Seuls les fichiers PDF et les images (JPEG, PNG, WEBP) sont autorisés.");
+        continue;
+      }
+
+      if (isPdf) {
+        if (currentPdfCount >= 1) {
+          setErrorMsg("Un seul fichier PDF est autorisé par message.");
+          continue;
+        }
+        if (file.size > MAX_PDF_SIZE) {
+          setErrorMsg("Le fichier PDF dépasse la taille maximale autorisée de 25 Mo.");
+          continue;
+        }
+
+        try {
+          const base64Data = await readFileAsBase64(file);
+          newAttachments.push({
+            id: Math.random().toString(36).substring(2, 9),
+            name: file.name,
+            type: "pdf",
+            mimeType: "application/pdf",
+            data: base64Data,
+            size: file.size,
+          });
+          currentPdfCount++;
+        } catch {
+          setErrorMsg("Impossible de lire le fichier PDF sélectionné.");
+        }
+      } else if (isImage) {
+        if (currentImageCount >= 5) {
+          setErrorMsg("Vous pouvez joindre jusqu'à 5 images par message.");
+          continue;
+        }
+        if (file.size > MAX_IMAGE_SIZE) {
+          setErrorMsg("Une image dépasse la taille maximale autorisée (10 Mo).");
+          continue;
+        }
+
+        try {
+          const base64Data = await readFileAsBase64(file);
+          newAttachments.push({
+            id: Math.random().toString(36).substring(2, 9),
+            name: file.name,
+            type: "image",
+            mimeType: file.type || "image/jpeg",
+            data: base64Data,
+            size: file.size,
+          });
+          currentImageCount++;
+        } catch {
+          setErrorMsg("Impossible de lire l'image sélectionnée.");
+        }
+      }
+    }
+
+    if (newAttachments.length > 0) {
+      setAttachments((prev) => [...prev, ...newAttachments]);
+    }
+
+    // Reset file input value
+    e.target.value = "";
+  };
+
+  const handleRemoveAttachment = (id: string) => {
+    setAttachments((prev) => prev.filter((a) => a.id !== id));
     setErrorMsg(null);
   };
 
   // Send message handler
   const handleSendMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!input.trim() || isLoading || !userId || !isAuthenticated) return;
+    if ((!input.trim() && attachments.length === 0) || isLoading || !userId || !isAuthenticated) return;
 
-    const userText = input.trim();
-    const newUserMsg: ChatMessage = { role: "user", content: userText };
+    const currentAttachments = [...attachments];
+    const userText = input.trim() || (currentAttachments.length > 0 ? "Analyse des documents ci-joints" : "");
+
+    const newUserMsg: ChatMessage = {
+      role: "user",
+      content: userText,
+      attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
+    };
 
     const updatedMessages = [...messages, newUserMsg];
     setMessages(updatedMessages);
     setInput("");
+    setAttachments([]);
     setIsLoading(true);
     setErrorMsg(null);
 
     try {
-      // Call server function (executes strictly on backend server)
       const response = await sendMedicalChatMessage({
         data: {
           messages: updatedMessages.filter((m) => m !== INITIAL_WELCOME_MESSAGE),
           userId: userId,
           sessionToken: sessionToken,
+          attachments: currentAttachments.length > 0 ? currentAttachments : undefined,
         },
       });
 
@@ -98,6 +227,25 @@ export function MedicalChatbot() {
   if (isDismissed) {
     return null;
   }
+
+  // Dynamic loading message text
+  const getLoadingText = () => {
+    const lastUserMsg = messages[messages.length - 1];
+    if (lastUserMsg && lastUserMsg.attachments && lastUserMsg.attachments.length > 0) {
+      const hasPdf = lastUserMsg.attachments.some((a) => a.type === "pdf");
+      const imgCount = lastUserMsg.attachments.filter((a) => a.type === "image").length;
+      if (hasPdf && imgCount > 0) {
+        return "RASED analyse vos documents et images...";
+      }
+      if (hasPdf) {
+        return "Analyse du document PDF par RASED...";
+      }
+      if (imgCount > 0) {
+        return `Analyse de ${imgCount} image(s) par RASED...`;
+      }
+    }
+    return "RASED rédige la réponse médicale...";
+  };
 
   return (
     <div style={{ position: "fixed", bottom: "24px", left: "24px", zIndex: 9999, fontFamily: "sans-serif" }}>
@@ -136,12 +284,12 @@ export function MedicalChatbot() {
             </div>
             <div style={{ textAlign: "left" }}>
               <div style={{ fontSize: "0.85rem", fontWeight: "800", letterSpacing: "0.02em" }}>Assistant RASED</div>
-              <div style={{ fontSize: "0.7rem", color: "#38BDF8", fontWeight: "700" }}>Information médicale</div>
+              <div style={{ fontSize: "0.7rem", color: "#38BDF8", fontWeight: "700" }}>Gemini Multimodal IA</div>
             </div>
             <Sparkles size={16} color="#38BDF8" style={{ marginLeft: "2px" }} />
           </button>
 
-          {/* CLOSE / DISMISS BADGE BUTTON */}
+          {/* CLOSE / DISMISS BUTTON */}
           <button
             onClick={(e) => {
               e.stopPropagation();
@@ -186,9 +334,9 @@ export function MedicalChatbot() {
       {isOpen && (
         <div
           style={{
-            width: "380px",
+            width: "410px",
             maxWidth: "calc(100vw - 32px)",
-            height: "540px",
+            height: "580px",
             maxHeight: "calc(100vh - 48px)",
             backgroundColor: "#ffffff",
             borderRadius: "20px",
@@ -226,10 +374,25 @@ export function MedicalChatbot() {
                 <Bot size={22} color="white" />
               </div>
               <div>
-                <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "white" }}>Assistant Médical</div>
-                <div style={{ fontSize: "0.72rem", color: isAuthenticated ? "#38BDF8" : "#94A3B8", display: "flex", alignItems: "center", gap: "4px" }}>
-                  <span style={{ width: "6px", height: "6px", borderRadius: "50%", backgroundColor: isAuthenticated ? "#10B981" : "#F59E0B" }} />
-                  {isAuthenticated ? "Information générale · En direct" : "Authentification requise"}
+                <div style={{ fontSize: "0.95rem", fontWeight: "800", color: "white" }}>Assistant Médical RASED</div>
+                <div
+                  style={{
+                    fontSize: "0.72rem",
+                    color: isAuthenticated ? "#38BDF8" : "#94A3B8",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "6px",
+                      height: "6px",
+                      borderRadius: "50%",
+                      backgroundColor: isAuthenticated ? "#10B981" : "#F59E0B",
+                    }}
+                  />
+                  {isAuthenticated ? "IA Médicale · Gemini Multimodal" : "Authentification requise"}
                 </div>
               </div>
             </div>
@@ -293,7 +456,7 @@ export function MedicalChatbot() {
           >
             <AlertTriangle size={15} color="#D97706" style={{ flexShrink: 0, marginTop: "2px" }} />
             <div>
-              <strong>Avertissement :</strong> Informations générales uniquement. Ne remplace pas un avis médical. En cas d'urgence, contactez les secours.
+              <strong>Avertissement :</strong> Information médicale assistée par IA. Ne remplace pas un médecin. En cas d'urgence, contactez le 14 ou les urgences.
             </div>
           </div>
 
@@ -310,14 +473,36 @@ export function MedicalChatbot() {
             }}
           >
             {!isAuthenticated ? (
-              <div style={{ margin: "auto", padding: "1.5rem 1rem", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
-                <div style={{ width: "56px", height: "56px", borderRadius: "50%", backgroundColor: "#e6f5f4", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div
+                style={{
+                  margin: "auto",
+                  padding: "1.5rem 1rem",
+                  textAlign: "center",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: "1rem",
+                }}
+              >
+                <div
+                  style={{
+                    width: "56px",
+                    height: "56px",
+                    borderRadius: "50%",
+                    backgroundColor: "#e6f5f4",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
                   <Lock size={28} color="#0fa29b" />
                 </div>
                 <div>
-                  <h4 style={{ margin: "0 0 0.5rem 0", color: "#062C54", fontSize: "1.05rem", fontWeight: "700" }}>Connexion requise</h4>
+                  <h4 style={{ margin: "0 0 0.5rem 0", color: "#062C54", fontSize: "1.05rem", fontWeight: "700" }}>
+                    Connexion requise
+                  </h4>
                   <p style={{ margin: 0, color: "#64748B", fontSize: "0.85rem", lineHeight: "1.5" }}>
-                    L'assistant médical intelligent RASED est réservé aux membres connectés. Veuillez vous connecter pour échanger avec l'IA.
+                    L'assistant médical intelligent RASED est réservé aux professionnels de santé et utilisateurs connectés.
                   </p>
                 </div>
                 <a
@@ -356,7 +541,7 @@ export function MedicalChatbot() {
                     >
                       <div
                         style={{
-                          maxWidth: "85%",
+                          maxWidth: "88%",
                           padding: "10px 14px",
                           borderRadius: isUser ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                           backgroundColor: isUser ? "#062C54" : "#ffffff",
@@ -368,6 +553,46 @@ export function MedicalChatbot() {
                           wordBreak: "break-word",
                         }}
                       >
+                        {/* ATTACHMENTS IN MESSAGE BUBBLE */}
+                        {msg.attachments && msg.attachments.length > 0 && (
+                          <div
+                            style={{
+                              display: "flex",
+                              flexWrap: "wrap",
+                              gap: "6px",
+                              marginBottom: "8px",
+                              paddingBottom: "6px",
+                              borderBottom: isUser ? "1px solid rgba(255,255,255,0.2)" : "1px solid #E2E8F0",
+                            }}
+                          >
+                            {msg.attachments.map((att) => (
+                              <div
+                                key={att.id || att.name}
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  padding: "4px 8px",
+                                  borderRadius: "8px",
+                                  backgroundColor: isUser ? "rgba(255,255,255,0.15)" : "#F1F5F9",
+                                  fontSize: "0.75rem",
+                                  color: isUser ? "#ffffff" : "#334155",
+                                }}
+                              >
+                                {att.type === "pdf" ? (
+                                  <FileText size={14} color={isUser ? "#38BDF8" : "#0fa29b"} />
+                                ) : (
+                                  <ImageIcon size={14} color={isUser ? "#38BDF8" : "#0fa29b"} />
+                                )}
+                                <span style={{ fontWeight: "600", maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                  {att.name}
+                                </span>
+                                <span style={{ opacity: 0.8, fontSize: "0.7rem" }}>({formatFileSize(att.size)})</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {isUser ? (
                           <div style={{ whiteSpace: "pre-wrap" }}>{msg.content}</div>
                         ) : (
@@ -378,13 +603,43 @@ export function MedicalChatbot() {
                               ol: ({ children }) => <ol style={{ margin: "4px 0 6px 0", paddingLeft: "18px" }}>{children}</ol>,
                               li: ({ children }) => <li style={{ marginBottom: "3px" }}>{children}</li>,
                               a: ({ href, children }) => (
-                                <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: "#0fa29b", fontWeight: "600", textDecoration: "underline" }}>
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  style={{ color: "#0fa29b", fontWeight: "600", textDecoration: "underline" }}
+                                >
                                   {children}
                                 </a>
                               ),
                               strong: ({ children }) => <strong style={{ fontWeight: "700", color: "#062C54" }}>{children}</strong>,
                               em: ({ children }) => <em style={{ fontStyle: "italic", color: "#475569" }}>{children}</em>,
-                              code: ({ children }) => <code style={{ backgroundColor: "#F1F5F9", padding: "2px 5px", borderRadius: "4px", fontSize: "0.82rem", fontFamily: "monospace" }}>{children}</code>
+                              code: ({ children }) => (
+                                <code
+                                  style={{
+                                    backgroundColor: "#F1F5F9",
+                                    padding: "2px 5px",
+                                    borderRadius: "4px",
+                                    fontSize: "0.82rem",
+                                    fontFamily: "monospace",
+                                  }}
+                                >
+                                  {children}
+                                </code>
+                              ),
+                              table: ({ children }) => (
+                                <table style={{ borderCollapse: "collapse", width: "100%", margin: "8px 0", fontSize: "0.8rem" }}>
+                                  {children}
+                                </table>
+                              ),
+                              th: ({ children }) => (
+                                <th style={{ border: "1px solid #CBD5E1", backgroundColor: "#F1F5F9", padding: "4px 6px", fontWeight: "700" }}>
+                                  {children}
+                                </th>
+                              ),
+                              td: ({ children }) => (
+                                <td style={{ border: "1px solid #E2E8F0", padding: "4px 6px" }}>{children}</td>
+                              ),
                             }}
                           >
                             {msg.content}
@@ -401,18 +656,19 @@ export function MedicalChatbot() {
                     <div
                       style={{
                         backgroundColor: "#ffffff",
-                        border: "1px solid #E2E8F0",
+                        border: "1.5px solid #0fa29b",
                         borderRadius: "16px 16px 16px 4px",
                         padding: "10px 14px",
                         display: "flex",
                         alignItems: "center",
-                        gap: "8px",
-                        color: "#64748B",
-                        fontSize: "0.82rem",
+                        gap: "10px",
+                        color: "#062C54",
+                        fontSize: "0.84rem",
+                        boxShadow: "0 4px 12px rgba(15, 162, 155, 0.15)",
                       }}
                     >
-                      <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
-                      <span>Rédaction de la réponse...</span>
+                      <Loader2 size={18} color="#0fa29b" style={{ animation: "spin 1s linear infinite" }} />
+                      <span style={{ fontWeight: "600" }}>{getLoadingText()}</span>
                     </div>
                   </div>
                 )}
@@ -457,6 +713,79 @@ export function MedicalChatbot() {
             )}
           </div>
 
+          {/* ATTACHMENT PREVIEW TRAY */}
+          {isAuthenticated && attachments.length > 0 && (
+            <div
+              style={{
+                backgroundColor: "#F1F5F9",
+                borderTop: "1px solid #E2E8F0",
+                padding: "8px 12px",
+                display: "flex",
+                flexWrap: "wrap",
+                gap: "8px",
+                maxHeight: "100px",
+                overflowY: "auto",
+              }}
+            >
+              {attachments.map((att) => (
+                <div
+                  key={att.id}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    backgroundColor: "#ffffff",
+                    border: "1px solid #CBD5E1",
+                    borderRadius: "8px",
+                    padding: "4px 8px",
+                    fontSize: "0.75rem",
+                    color: "#1E293B",
+                  }}
+                >
+                  {att.type === "pdf" ? (
+                    <FileText size={16} color="#DC2626" style={{ flexShrink: 0 }} />
+                  ) : (
+                    <div style={{ width: "22px", height: "22px", borderRadius: "4px", overflow: "hidden", flexShrink: 0 }}>
+                      <img src={att.data} alt={att.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    </div>
+                  )}
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span
+                      style={{
+                        fontWeight: "600",
+                        maxWidth: "120px",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {att.name}
+                    </span>
+                    <span style={{ fontSize: "0.68rem", color: "#64748B" }}>{formatFileSize(att.size)}</span>
+                  </div>
+                  <button
+                    onClick={() => handleRemoveAttachment(att.id)}
+                    title="Supprimer la pièce jointe"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#94A3B8",
+                      cursor: "pointer",
+                      padding: "2px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.color = "#EF4444")}
+                    onMouseLeave={(e) => (e.currentTarget.style.color = "#94A3B8")}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* CHAT INPUT FOOTER */}
           {isAuthenticated ? (
             <form
@@ -470,11 +799,44 @@ export function MedicalChatbot() {
                 gap: "8px",
               }}
             >
+              {/* HIDDEN FILE INPUT */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".pdf,image/jpeg,image/png,image/webp"
+                multiple
+                style={{ display: "none" }}
+                onChange={handleFileSelect}
+              />
+
+              {/* ATTACHMENT BUTTON */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+                title="Joindre un document PDF (max 25 Mo) ou des images (max 5)"
+                style={{
+                  backgroundColor: attachments.length > 0 ? "#e6f5f4" : "#F1F5F9",
+                  color: attachments.length > 0 ? "#0fa29b" : "#64748B",
+                  border: attachments.length > 0 ? "1px solid #0fa29b" : "1px solid #CBD5E1",
+                  borderRadius: "12px",
+                  padding: "10px",
+                  cursor: isLoading ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  transition: "all 0.2s ease",
+                }}
+              >
+                <Paperclip size={18} />
+              </button>
+
+              {/* TEXT INPUT */}
               <input
                 type="text"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                placeholder="Posez votre question médicale..."
+                placeholder={attachments.length > 0 ? "Ajouter un message accompagnant..." : "Posez votre question médicale..."}
                 disabled={isLoading}
                 style={{
                   flex: 1,
@@ -486,16 +848,18 @@ export function MedicalChatbot() {
                   backgroundColor: isLoading ? "#F1F5F9" : "#ffffff",
                 }}
               />
+
+              {/* SEND BUTTON */}
               <button
                 type="submit"
-                disabled={isLoading || !input.trim()}
+                disabled={isLoading || (!input.trim() && attachments.length === 0)}
                 style={{
-                  backgroundColor: isLoading || !input.trim() ? "#CBD5E1" : "#0fa29b",
+                  backgroundColor: isLoading || (!input.trim() && attachments.length === 0) ? "#CBD5E1" : "#0fa29b",
                   color: "white",
                   border: "none",
                   borderRadius: "12px",
                   padding: "10px 14px",
-                  cursor: isLoading || !input.trim() ? "not-allowed" : "pointer",
+                  cursor: isLoading || (!input.trim() && attachments.length === 0) ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -517,7 +881,7 @@ export function MedicalChatbot() {
                 fontWeight: "500",
               }}
             >
-              Connectez-vous pour poser vos questions.
+              Connectez-vous pour poser vos questions et analyser des documents.
             </div>
           )}
         </div>

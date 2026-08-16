@@ -1,15 +1,18 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
+import { generateMedicalResponse, type ChatAttachment } from "@/lib/ai/provider";
 
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
+  attachments?: ChatAttachment[] | undefined;
 }
 
 export interface MedicalChatPayload {
   messages: ChatMessage[];
   userId: string;
   sessionToken?: string | undefined;
+  attachments?: ChatAttachment[] | undefined;
 }
 
 export interface MedicalChatResponse {
@@ -26,6 +29,7 @@ STRICT SCOPE & DOMAIN BOUNDARIES:
    - General medical, health, clinical, and anatomical information.
    - Explanations of medical terms, lab tests (e.g., CBC, ferritin, blood sugar), symptoms, medical conditions, and prevention.
    - Usage instructions and guidance for the RASED national health platform (e.g., appointments, medical records, test results, prescriptions, doctor search, platform navigation).
+   - Medical document and clinical image analysis provided by healthcare professionals.
 
 2. OUT-OF-SCOPE TOPICS (STRICT REFUSAL REQUIRED):
    - Software development, programming, coding, debugging (e.g., React, JavaScript, Python, HTML, CSS).
@@ -49,84 +53,61 @@ STRICT MEDICAL SAFETY & CONDUCT RULES:
 5. ALWAYS advise consulting a qualified physician or healthcare professional for personal medical concerns.
 6. URGENT & EMERGENCY SYMPTOMS: For symptoms like severe chest pain, sudden dyspnea, heavy bleeding, stroke symptoms, loss of consciousness, or high fever with neck stiffness, IMMEDIATELY advise calling emergency medical services or going to the nearest hospital emergency department.
 7. LANGUAGE MATCHING: Respond in the exact language used by the user (French by default, Arabic, English, etc.).
-8. Keep answers clear, professional, structured, and concise.`;
+8. Keep answers clear, professional, structured, and concise.
+9. MULTIMODAL ATTACHMENT RULES:
+   - When a PDF document or images are attached, thoroughly analyze the contents to answer the user's medical questions.
+   - Explain clinical findings, laboratory test results, or medical reports in accessible medical terms.
+   - Do NOT invent or fabricate medical details not present in the document.
+   - If processing of an attachment failed or is illegible, inform the user: "Je n'ai pas pu accéder correctement au document joint."`;
 
-/**
- * Dynamically discovers all configured GROQ_AI<number> keys from process.env where number >= 2.
- * GROQ_AI1 is strictly excluded as it is reserved exclusively for Doctor AI enhancement.
- * Returns an array of valid, non-empty API keys sorted by their numeric index (e.g., GROQ_AI2, GROQ_AI3, GROQ_AI4, GROQ_AI5, etc.).
- */
-function getChatbotGroqKeys(): string[] {
-  const env = typeof process !== "undefined" && process.env ? process.env : {};
-  const keysMap = new Map<number, string>();
-
-  for (const [key, value] of Object.entries(env)) {
-    if (!value || typeof value !== "string" || !value.trim()) continue;
-    const match = key.match(/^GROQ_AI(\d+)$/i);
-    if (match && match[1]) {
-      const num = parseInt(match[1], 10);
-      // Exclude GROQ_AI1 (reserved for Doctor AI) and collect GROQ_AI2+
-      if (num >= 2) {
-        keysMap.set(num, value.trim());
-      }
-    }
-  }
-
-  const sortedIndices = Array.from(keysMap.keys()).sort((a, b) => a - b);
-  const keys: string[] = [];
-  for (const idx of sortedIndices) {
-    const val = keysMap.get(idx);
-    if (val) keys.push(val);
-  }
-
-  // Fallback to GROQ_API_KEY if no GROQ_AI2+ keys found
-  if (keys.length === 0 && env['GROQ_API_KEY'] && env['GROQ_API_KEY'].trim()) {
-    keys.push(env['GROQ_API_KEY'].trim());
-  }
-
-  return keys;
-}
+const MAX_PDF_SIZE = 25 * 1024 * 1024; // 25 MB
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB per image
+const MAX_IMAGES_COUNT = 5;
 
 export const sendMedicalChatMessage = createServerFn({ method: "POST" })
   .validator((data: MedicalChatPayload) => data)
   .handler(async ({ data }): Promise<MedicalChatResponse> => {
-    const { messages, userId } = data;
+    const { messages, userId, attachments } = data;
 
     // 1. Verify userId presence
     if (!userId) {
       return {
         success: false,
         status: 401,
-        error: "Accès non autorisé. Veuillez vous connecter."
+        error: "Accès non autorisé. Veuillez vous connecter.",
       };
     }
 
     // 2. Server-side Supabase authentication check
     try {
       const processEnv = typeof process !== "undefined" && process.env ? process.env : {};
-      const supabaseUrl = processEnv['VITE_SUPABASE_URL'] || (import.meta.env ? (import.meta.env['VITE_SUPABASE_URL'] as string) : '');
-      const supabaseKey = processEnv['VITE_SUPABASE_PUBLISHABLE_KEY'] || (import.meta.env ? (import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] as string) : '');
+      const supabaseUrl =
+        processEnv["VITE_SUPABASE_URL"] ||
+        (import.meta.env ? (import.meta.env["VITE_SUPABASE_URL"] as string) : "");
+      const supabaseKey =
+        processEnv["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
+        (import.meta.env ? (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string) : "");
 
       if (!supabaseUrl || !supabaseKey) {
         return {
           success: false,
           status: 500,
-          error: "Erreur de configuration serveur."
+          error: "Erreur de configuration serveur.",
         };
       }
 
       const supabase = createClient(supabaseUrl, supabaseKey);
       const { data: dbUser, error: userErr } = await supabase
-        .from('users')
-        .select('id, email, role, is_active')
-        .eq('id', userId)
+        .from("users")
+        .select("id, email, role, is_active")
+        .eq("id", userId)
         .maybeSingle();
 
       if (userErr || !dbUser || dbUser.is_active === false) {
         return {
           success: false,
           status: 401,
-          error: "Accès non autorisé. Utilisateur non authentifié ou compte inactif."
+          error: "Accès non autorisé. Utilisateur non authentifié ou compte inactif.",
         };
       }
     } catch (authErr) {
@@ -134,91 +115,81 @@ export const sendMedicalChatMessage = createServerFn({ method: "POST" })
       return {
         success: false,
         status: 401,
-        error: "Échec de l'authentification."
+        error: "Échec de l'authentification.",
       };
     }
 
-    // 3. Dynamically discover available chatbot keys (GROQ_AI2, GROQ_AI3, GROQ_AI4, GROQ_AI5...)
-    const chatbotKeys = getChatbotGroqKeys();
+    // 3. Server-side Attachment Validations
+    if (attachments && attachments.length > 0) {
+      const pdfs = attachments.filter(
+        (a) => a.type === "pdf" || a.mimeType === "application/pdf"
+      );
+      const images = attachments.filter(
+        (a) => a.type === "image" || a.mimeType.startsWith("image/")
+      );
 
-    if (chatbotKeys.length === 0) {
-      console.error("[MedicalChatbot] No chatbot Groq API keys found in server environment (GROQ_AI2+).");
-      return {
-        success: false,
-        status: 500,
-        error: "Le service d'assistance médicale est indisponible (Clés API non configurées)."
-      };
-    }
+      // Validate PDF count & size
+      if (pdfs.length > 1) {
+        return {
+          success: false,
+          status: 400,
+          error: "Un seul fichier PDF est autorisé par message.",
+        };
+      }
 
-    // 4. Sanitize messages array to send to Groq API
-    const formattedMessages = [
-      { role: "system", content: SYSTEM_PROMPT },
-      ...messages.slice(-10).map((m) => ({
-        role: m.role === "assistant" ? "assistant" : "user",
-        content: m.content.trim()
-      }))
-    ];
-
-    // 5. Query Groq API with dynamic key pool failover
-    const modelsToTry = ["llama-3.3-70b-versatile", "mixtral-8x7b-32768"];
-    let lastError = "";
-
-    for (let keyIdx = 0; keyIdx < chatbotKeys.length; keyIdx++) {
-      const currentKey = chatbotKeys[keyIdx];
-
-      for (const model of modelsToTry) {
-        try {
-          const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${currentKey}`,
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: formattedMessages,
-              temperature: 0.3,
-              max_tokens: 800
-            })
-          });
-
-          if (!response.ok) {
-            const status = response.status;
-            const errData = await response.json().catch(() => ({}));
-            const errMsg = errData.error?.message || `HTTP ${status}`;
-            lastError = errMsg;
-
-            // If rate limited (429) or server error (500, 502, 503, 504), switch to next key in key pool
-            if (status === 429 || status >= 500) {
-              console.warn(`[MedicalChatbot] Key index ${keyIdx} failed with status ${status}: ${errMsg}. Switching to next key in pool...`);
-              break; // Break model loop to advance keyIdx in outer loop
-            }
-            continue;
-          }
-
-          const resData = await response.json();
-          const replyContent = resData.choices?.[0]?.message?.content?.trim();
-
-          if (replyContent) {
-            return {
-              success: true,
-              message: {
-                role: "assistant",
-                content: replyContent
-              }
-            };
-          }
-        } catch (err: any) {
-          lastError = err.message || "Erreur réseau";
-          console.warn(`[MedicalChatbot] Network exception on key index ${keyIdx}: ${lastError}. Switching to next key in pool...`);
-          break; // Break model loop to advance keyIdx in outer loop
+      for (const pdf of pdfs) {
+        if (pdf.size > MAX_PDF_SIZE) {
+          return {
+            success: false,
+            status: 400,
+            error: "Le fichier PDF dépasse la taille maximale autorisée de 25 Mo.",
+          };
         }
       }
+
+      // Validate Images count & size
+      if (images.length > MAX_IMAGES_COUNT) {
+        return {
+          success: false,
+          status: 400,
+          error: "Vous pouvez joindre jusqu'à 5 images par message.",
+        };
+      }
+
+      for (const img of images) {
+        if (img.size > MAX_IMAGE_SIZE) {
+          return {
+            success: false,
+            status: 400,
+            error: "Une des images dépasse la taille maximale autorisée (10 Mo).",
+          };
+        }
+      }
+    }
+
+    // 4. Invoke AI Provider Abstraction (Google Gemini backend)
+    const result = await generateMedicalResponse({
+      messages: messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      })),
+      systemInstruction: SYSTEM_PROMPT,
+      attachments: attachments,
+    });
+
+    if (result.success && result.content) {
+      return {
+        success: true,
+        message: {
+          role: "assistant",
+          content: result.content,
+        },
+      };
     }
 
     return {
       success: false,
       status: 500,
-      error: `Désolé, l'assistant n'a pas pu répondre : ${lastError || "Erreur de connexion"}`
+      error: result.error || "Impossible d'obtenir une réponse de l'assistant pour le moment.",
     };
   });
