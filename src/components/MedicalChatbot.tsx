@@ -240,11 +240,19 @@ export function MedicalChatbot() {
         setMessages((prev) => [...prev, response.message!]);
         setUploadState("idle");
       } else {
-        setErrorMsg(response.error || "Impossible d'obtenir une réponse pour le moment.");
+        const errorDetail = response.error || "Impossible d'obtenir une réponse pour le moment.";
+        console.error("[RASED Gemini Chat Error]", {
+          message: errorDetail,
+          status: response.status,
+        });
+        setErrorMsg(errorDetail);
         setUploadState("error");
       }
     } catch (err: any) {
-      console.error("Medical chatbot server call failed:", err);
+      console.error("[RASED Gemini Chat Error]", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
       setErrorMsg(err.message || "Erreur de connexion au service d'assistance médicale.");
       setUploadState("error");
     } finally {

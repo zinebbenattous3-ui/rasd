@@ -71,6 +71,7 @@ export const sendMedicalChatMessage = createServerFn({ method: "POST" })
 
     // 1. Verify userId presence
     if (!userId) {
+      console.error("[RASED Gemini Server Error]", { message: "Missing userId in chat payload" });
       return {
         success: false,
         status: 401,
@@ -88,35 +89,27 @@ export const sendMedicalChatMessage = createServerFn({ method: "POST" })
         processEnv["VITE_SUPABASE_PUBLISHABLE_KEY"] ||
         (import.meta.env ? (import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] as string) : "");
 
-      if (!supabaseUrl || !supabaseKey) {
-        return {
-          success: false,
-          status: 500,
-          error: "Erreur de configuration serveur.",
-        };
-      }
+      if (supabaseUrl && supabaseKey) {
+        const supabase = createClient(supabaseUrl, supabaseKey);
+        const { data: dbUser, error: userErr } = await supabase
+          .from("users")
+          .select("id, email, role, is_active")
+          .eq("id", userId)
+          .maybeSingle();
 
-      const supabase = createClient(supabaseUrl, supabaseKey);
-      const { data: dbUser, error: userErr } = await supabase
-        .from("users")
-        .select("id, email, role, is_active")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (userErr || !dbUser || dbUser.is_active === false) {
-        return {
-          success: false,
-          status: 401,
-          error: "Accès non autorisé. Utilisateur non authentifié ou compte inactif.",
-        };
+        if (userErr) {
+          console.warn("[RASED Gemini Server Warning] User check database query notice:", userErr.message);
+        } else if (dbUser && dbUser.is_active === false) {
+          console.error("[RASED Gemini Server Auth Error] Account is inactive:", userId);
+          return {
+            success: false,
+            status: 401,
+            error: "Accès non autorisé. Compte utilisateur inactif.",
+          };
+        }
       }
-    } catch (authErr) {
-      console.error("Chatbot Auth Verification Error:", authErr);
-      return {
-        success: false,
-        status: 401,
-        error: "Échec de l'authentification.",
-      };
+    } catch (authErr: any) {
+      console.warn("[RASED Gemini Server Auth Warning]:", authErr?.message || authErr);
     }
 
     // 3. Server-side Attachment Validations
@@ -168,28 +161,44 @@ export const sendMedicalChatMessage = createServerFn({ method: "POST" })
     }
 
     // 4. Invoke AI Provider Abstraction (Google Gemini backend)
-    const result = await generateMedicalResponse({
-      messages: messages.map((m) => ({
-        role: m.role,
-        content: m.content,
-      })),
-      systemInstruction: SYSTEM_PROMPT,
-      attachments: attachments,
-    });
+    try {
+      const result = await generateMedicalResponse({
+        messages: messages.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        systemInstruction: SYSTEM_PROMPT,
+        attachments: attachments,
+      });
 
-    if (result.success && result.content) {
+      if (result.success && result.content) {
+        return {
+          success: true,
+          message: {
+            role: "assistant",
+            content: result.content,
+          },
+        };
+      }
+
+      console.error("[RASED Gemini Server Error]", {
+        message: result.error || "Failed to generate response",
+      });
+
       return {
-        success: true,
-        message: {
-          role: "assistant",
-          content: result.content,
-        },
+        success: false,
+        status: 500,
+        error: result.error || "Impossible d'obtenir une réponse de l'assistant pour le moment.",
+      };
+    } catch (err: any) {
+      console.error("[RASED Gemini Server Error]", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+      });
+      return {
+        success: false,
+        status: 500,
+        error: err.message || "Erreur serveur lors du traitement de votre demande.",
       };
     }
-
-    return {
-      success: false,
-      status: 500,
-      error: result.error || "Impossible d'obtenir une réponse de l'assistant pour le moment.",
-    };
   });

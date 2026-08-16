@@ -2,8 +2,8 @@ import { GoogleGenAI } from "@google/genai";
 import type { GenerateMedicalResponseOptions, GenerateMedicalResponseResult } from "./types";
 
 // Primary configuration for Gemini model name
-export const GEMINI_PRIMARY_MODEL = "gemini-2.5-flash";
-export const GEMINI_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
+export const GEMINI_PRIMARY_MODEL = "gemini-2.0-flash";
+export const GEMINI_FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.5-flash"];
 
 function getGeminiApiKey(): string | null {
   const env = typeof process !== "undefined" && process.env ? process.env : {};
@@ -19,8 +19,14 @@ export async function generateGeminiMedicalResponse(
   options: GenerateMedicalResponseOptions
 ): Promise<GenerateMedicalResponseResult> {
   const apiKey = getGeminiApiKey();
+  const isApiKeyConfigured = Boolean(apiKey);
+
+  console.log("[RASED] Gemini API key configured:", isApiKeyConfigured);
+
   if (!apiKey) {
-    console.error("[GeminiProvider] RASD_GEMENI environment variable is missing in server environment.");
+    console.error("[RASED Gemini Server Error]", {
+      message: "RASD_GEMENI environment variable is missing or empty in server environment.",
+    });
     return {
       success: false,
       error: "Le service d'assistance médicale est indisponible (Clé d'API non configurée).",
@@ -83,8 +89,10 @@ export async function generateGeminiMedicalResponse(
 
     // Try primary model first, fallback models if needed
     const modelsToTry = [GEMINI_PRIMARY_MODEL, ...GEMINI_FALLBACK_MODELS];
+    let lastErrorDetails: any = null;
 
     for (const modelName of modelsToTry) {
+      console.log("[RASED] Gemini model:", modelName);
       try {
         const response = await ai.models.generateContent({
           model: modelName,
@@ -104,24 +112,31 @@ export async function generateGeminiMedicalResponse(
           };
         }
       } catch (modelErr: any) {
-        console.warn(`[GeminiProvider] Model ${modelName} failed:`, modelErr?.message || modelErr);
+        lastErrorDetails = modelErr;
+        console.error("[RASED Gemini Server Error]", {
+          model: modelName,
+          message: modelErr instanceof Error ? modelErr.message : String(modelErr),
+          stack: modelErr instanceof Error ? modelErr.stack : undefined,
+          status: modelErr?.status,
+        });
       }
     }
 
-    // Contextual error message depending on whether attachments were present
-    const genericErrorMessage = hasAttachments
-      ? "Impossible d'analyser le fichier joint. Veuillez vérifier son format et réessayer."
-      : "Désolé, l'assistant n'a pas pu répondre. Veuillez réessayer dans un instant.";
-
+    const rawError = lastErrorDetails instanceof Error ? lastErrorDetails.message : String(lastErrorDetails || "Model generation failed");
     return {
       success: false,
-      error: genericErrorMessage,
+      error: hasAttachments
+        ? `Impossible d'analyser le fichier joint (${rawError}).`
+        : `Désolé, l'assistant n'a pas pu répondre (${rawError}).`,
     };
   } catch (err: any) {
-    console.error("[GeminiProvider] Exception:", err);
+    console.error("[RASED Gemini Server Error]", {
+      message: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return {
       success: false,
-      error: "Désolé, l'assistant a rencontré une erreur réseau. Veuillez réessayer.",
+      error: `Désolé, l'assistant a rencontré une erreur réseau (${err?.message || "Erreur inconnue"}).`,
     };
   }
 }
