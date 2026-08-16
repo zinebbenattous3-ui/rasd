@@ -241,7 +241,7 @@ export function MedicalChatbot() {
         setUploadState("idle");
       } else {
         const errorDetail = response.error || "Impossible d'obtenir une réponse pour le moment.";
-        console.error("[RASED Gemini Chat Error]", {
+        console.error("[RASED Gemini Error]", {
           message: errorDetail,
           status: response.status,
         });
@@ -249,7 +249,7 @@ export function MedicalChatbot() {
         setUploadState("error");
       }
     } catch (err: any) {
-      console.error("[RASED Gemini Chat Error]", {
+      console.error("[RASED Gemini Error]", {
         message: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       });

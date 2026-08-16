@@ -181,7 +181,7 @@ export const sendMedicalChatMessage = createServerFn({ method: "POST" })
         };
       }
 
-      console.error("[RASED Gemini Server Error]", {
+      console.error("[RASED Gemini Error]", {
         message: result.error || "Failed to generate response",
       });
 
@@ -191,7 +191,7 @@ export const sendMedicalChatMessage = createServerFn({ method: "POST" })
         error: result.error || "Impossible d'obtenir une réponse de l'assistant pour le moment.",
       };
     } catch (err: any) {
-      console.error("[RASED Gemini Server Error]", {
+      console.error("[RASED Gemini Error]", {
         message: err instanceof Error ? err.message : String(err),
         stack: err instanceof Error ? err.stack : undefined,
       });

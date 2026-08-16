@@ -1,9 +1,9 @@
 import { GoogleGenAI } from "@google/genai";
 import type { GenerateMedicalResponseOptions, GenerateMedicalResponseResult } from "./types";
 
-// Primary configuration for Gemini model name
-export const GEMINI_PRIMARY_MODEL = "gemini-2.0-flash";
-export const GEMINI_FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.5-flash"];
+// Server-side model configuration constant
+export const RASED_GEMINI_MODEL = "gemini-3.5-flash-lite";
+export const RASED_GEMINI_FALLBACK_MODELS = ["gemini-2.0-flash", "gemini-1.5-flash"];
 
 function getGeminiApiKey(): string | null {
   const env = typeof process !== "undefined" && process.env ? process.env : {};
@@ -24,7 +24,7 @@ export async function generateGeminiMedicalResponse(
   console.log("[RASED] Gemini API key configured:", isApiKeyConfigured);
 
   if (!apiKey) {
-    console.error("[RASED Gemini Server Error]", {
+    console.error("[RASED Gemini Error]", {
       message: "RASD_GEMENI environment variable is missing or empty in server environment.",
     });
     return {
@@ -88,7 +88,7 @@ export async function generateGeminiMedicalResponse(
     }
 
     // Try primary model first, fallback models if needed
-    const modelsToTry = [GEMINI_PRIMARY_MODEL, ...GEMINI_FALLBACK_MODELS];
+    const modelsToTry = [RASED_GEMINI_MODEL, ...RASED_GEMINI_FALLBACK_MODELS];
     let lastErrorDetails: any = null;
 
     for (const modelName of modelsToTry) {
@@ -113,7 +113,7 @@ export async function generateGeminiMedicalResponse(
         }
       } catch (modelErr: any) {
         lastErrorDetails = modelErr;
-        console.error("[RASED Gemini Server Error]", {
+        console.error("[RASED Gemini Error]", {
           model: modelName,
           message: modelErr instanceof Error ? modelErr.message : String(modelErr),
           stack: modelErr instanceof Error ? modelErr.stack : undefined,
@@ -130,7 +130,7 @@ export async function generateGeminiMedicalResponse(
         : `Désolé, l'assistant n'a pas pu répondre (${rawError}).`,
     };
   } catch (err: any) {
-    console.error("[RASED Gemini Server Error]", {
+    console.error("[RASED Gemini Error]", {
       message: err instanceof Error ? err.message : String(err),
       stack: err instanceof Error ? err.stack : undefined,
     });
